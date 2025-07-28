@@ -58,6 +58,18 @@ const analyzeDocumentSchema = Joi.object({
   }).optional()
 });
 
+const ragAnalysisSchema = Joi.object({
+  legalArea: Joi.string().max(100).optional(),
+  jurisdiction: Joi.string().max(50).default('CH'),
+  language: Joi.string().valid('de', 'en', 'fr', 'it').default('de')
+});
+
+const dsgvoCheckSchema = Joi.object({
+  text: Joi.string().min(10).max(50000).required(),
+  saveResults: Joi.boolean().default(false),
+  language: Joi.string().valid('de', 'en', 'fr', 'it').default('de')
+});
+
 const paginationSchema = Joi.object({
   page: Joi.number().integer().min(1).default(1),
   limit: Joi.number().integer().min(1).max(100).default(20),
@@ -136,6 +148,18 @@ router.get('/:documentId/analysis/:analysisId',
 
 router.delete('/:documentId/analysis/:analysisId',
   documentController.cancelAnalysis.bind(documentController)
+);
+
+// RAG-Enhanced Analysis Routes
+router.post('/:documentId/analyze-rag',
+  ValidationMiddleware.validate({ body: ragAnalysisSchema }),
+  documentController.analyzeContractWithRAG.bind(documentController)
+);
+
+// DSGVO Compliance Check (Text Input)
+router.post('/dsgvo-check',
+  ValidationMiddleware.validate({ body: dsgvoCheckSchema }),
+  documentController.checkDSGVOCompliance.bind(documentController)
 );
 
 export default router;

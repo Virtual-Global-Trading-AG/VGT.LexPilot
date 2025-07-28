@@ -24,7 +24,7 @@ export interface SearchResult {
  */
 export class PineconeVectorStore {
   private readonly logger = Logger.getInstance();
-  private client: Pinecone;
+  private client!: Pinecone; // Definitive Assignment Assertion
   private embeddingService: EmbeddingService;
   private store?: PineconeStore;
 
@@ -284,7 +284,7 @@ export class PineconeVectorStore {
       const namespaceStats = stats.namespaces?.[config.namespace];
 
       return {
-        totalVectors: namespaceStats?.vectorCount || 0,
+        totalVectors: namespaceStats?.recordCount || 0,
         dimension: stats.dimension || 0,
         indexFullness: stats.indexFullness || 0
       };

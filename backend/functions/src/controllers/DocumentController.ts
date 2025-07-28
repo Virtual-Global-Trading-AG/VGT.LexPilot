@@ -750,6 +750,151 @@ export class DocumentController extends BaseController {
     }
   }
 
+  /**
+   * RAG-Enhanced Contract Analysis
+   * POST /api/documents/:documentId/analyze-rag
+   */
+  public async analyzeContractWithRAG(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = this.getUserId(req);
+      const { documentId } = req.params;
+      const { legalArea, jurisdiction, language } = req.body;
+
+      if (!documentId) {
+        this.sendError(res, 400, 'Document ID is required');
+        return;
+      }
+
+      // Validate document ownership
+      const document = await this.firestoreService.getDocument(documentId, userId);
+      if (!document) {
+        this.sendError(res, 404, 'Document not found');
+        return;
+      }
+
+      // Download document content
+      const downloadResult = await this.storageService.generateDownloadUrl(
+        documentId,
+        document.fileName,
+        userId
+      );
+
+      const response = await fetch(downloadResult.downloadUrl);
+      if (!response.ok) {
+        this.sendError(res, 500, 'Failed to download document content');
+        return;
+      }
+
+      const content = await response.text();
+
+      // Perform RAG-enhanced analysis
+      const result = await this.analysisService.analyzeContractWithRAG(
+        content,
+        userId,
+        { legalArea, jurisdiction, language }
+      );
+
+      this.sendSuccess(res, {
+        documentId,
+        analysis: result.analysis,
+        legalContext: {
+          foundSources: result.legalContext.documents.length,
+          averageRelevance: result.legalContext.scores.length > 0 
+            ? result.legalContext.scores.reduce((a, b) => a + b, 0) / result.legalContext.scores.length 
+            : 0,
+          sources: result.legalContext.documents.map(doc => ({
+            title: doc.metadata.title,
+            source: doc.metadata.source,
+            legalArea: doc.metadata.legalArea,
+            excerpt: doc.pageContent.substring(0, 200) + '...'
+          }))
+        },
+        recommendations: result.recommendations,
+        timestamp: new Date().toISOString()
+      });
+
+      this.logger.info('RAG contract analysis completed', {
+        userId,
+        documentId,
+        legalContextItems: result.legalContext.documents.length,
+        recommendationsCount: result.recommendations.length
+      });
+
+    } catch (error) {
+      this.logger.error('RAG contract analysis failed', error as Error, {
+        userId: this.getUserId(req),
+        documentId: req.params.documentId
+      });
+      next(error);
+    }
+  }
+
+  /**
+   * DSGVO Compliance Check with Text Input
+   * POST /api/documents/dsgvo-check
+   */
+  public async checkDSGVOCompliance(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = this.getUserId(req);
+      const { text, saveResults = false, language = 'de' } = req.body;
+
+      if (!text || typeof text !== 'string') {
+        this.sendError(res, 400, 'Text content is required');
+        return;
+      }
+
+      if (text.length > 50000) {
+        this.sendError(res, 400, 'Text content too long (max 50,000 characters)');
+        return;
+      }
+
+      // Perform DSGVO compliance analysis
+      const result = await this.analysisService.analyzeDSGVOCompliance(
+        text,
+        userId,
+        { saveResults, language }
+      );
+
+      this.sendSuccess(res, {
+        complianceScore: result.complianceScore,
+        status: result.status,
+        findings: result.findings,
+        legalBasis: {
+          foundSources: result.legalBasis.documents.length,
+          sources: result.legalBasis.documents.map(doc => ({
+            title: doc.metadata.title || 'DSGVO Artikel',
+            source: doc.metadata.source || 'DSGVO',
+            excerpt: doc.pageContent.substring(0, 150) + '...'
+          }))
+        },
+        summary: {
+          compliantFindings: result.findings.filter(f => f.status === 'compliant').length,
+          nonCompliantFindings: result.findings.filter(f => f.status === 'non_compliant').length,
+          unclearFindings: result.findings.filter(f => f.status === 'unclear').length,
+          criticalIssues: result.findings
+            .filter(f => f.status === 'non_compliant')
+            .map(f => f.recommendation)
+        },
+        timestamp: new Date().toISOString()
+      });
+
+      this.logger.info('DSGVO compliance check completed', {
+        userId,
+        complianceScore: result.complianceScore,
+        status: result.status,
+        textLength: text.length,
+        saved: saveResults
+      });
+
+    } catch (error) {
+      this.logger.error('DSGVO compliance check failed', error as Error, {
+        userId: this.getUserId(req),
+        textLength: req.body.text?.length || 0
+      });
+      next(error);
+    }
+  }
+
   // ==========================================
   // PRIVATE HELPER METHODS
   // ==========================================

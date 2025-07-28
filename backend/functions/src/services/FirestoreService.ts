@@ -505,4 +505,21 @@ export class FirestoreService {
       throw new Error('Failed to search documents');
     }
   }
+
+  /**
+   * Generische Methode zum Speichern von Dokumenten in beliebigen Collections
+   */
+  async saveDocument(path: string, data: any): Promise<void> {
+    try {
+      await this.db.doc(path).set(data, { merge: true });
+      
+      this.logger.debug('Document saved successfully', {
+        path,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      this.logger.error('Failed to save document', error as Error, { path });
+      throw new Error(`Failed to save document at ${path}`);
+    }
+  }
 }

@@ -14,7 +14,6 @@ import {
 
 // Import Route Modules
 import documentRoutes from './documentRoutes';
-import { createAuthRoutes } from './authRoutes';
 
 /**
  * Zentrale API-Router-Konfiguration
@@ -350,6 +349,46 @@ export function createApiRoutes(): Router {
     (req: Request, res: Response) => {
       res.json({ message: 'Get audit logs endpoint', endpoint: req.path });
     }
+  );
+
+  // ==========================================
+  // RAG VECTOR STORE MANAGEMENT (ADMIN)
+  // ==========================================
+  
+  // Index Legal Texts for RAG
+  adminRouter.post('/legal-texts/index',
+    ValidationMiddleware.validate({
+      body: Joi.object({
+        texts: Joi.array().items(
+          Joi.object({
+            content: Joi.string().min(10).max(100000).required(),
+            title: Joi.string().min(1).max(255).required(),
+            source: Joi.string().min(1).max(100).required(),
+            jurisdiction: Joi.string().min(1).max(50).required(),
+            legalArea: Joi.string().min(1).max(100).required()
+          })
+        ).min(1).max(50).required()
+      })
+    }),
+    adminController.indexLegalTexts.bind(adminController)
+  );
+
+  // Search Legal Context (Admin Testing)
+  adminRouter.post('/legal-texts/search',
+    ValidationMiddleware.validate({
+      body: Joi.object({
+        query: Joi.string().min(3).max(1000).required(),
+        legalArea: Joi.string().max(100).optional(),
+        jurisdiction: Joi.string().max(50).optional(),
+        topK: Joi.number().integer().min(1).max(20).default(5)
+      })
+    }),
+    adminController.searchLegalContext.bind(adminController)
+  );
+
+  // Get Vector Store Statistics
+  adminRouter.get('/vector-store/stats',
+    adminController.getVectorStoreStats.bind(adminController)
   );
 
   // System Configuration

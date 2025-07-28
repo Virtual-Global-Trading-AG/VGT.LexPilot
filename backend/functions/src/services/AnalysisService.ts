@@ -7,6 +7,8 @@ import { LegalDocumentSplitter, HierarchicalChunk } from '../strategies/LegalDoc
 import { ContractAnalysisChain } from '../chains/ContractAnalysisChain';
 import { GDPRComplianceChain } from '../chains/GDPRComplianceChain';
 import { LLMFactory } from '../factories/LLMFactory';
+import { PineconeVectorStore, VectorStoreConfig, SearchResult } from '../vectorstore';
+import { websocketManager } from '../websocket';
 import { v4 as uuidv4 } from 'uuid';
 
 export interface AnalysisRequest {
@@ -52,6 +54,7 @@ export interface ProcessingProgress {
 /**
  * Service für die Integration der RAG-Pipeline mit der Dokumentenverwaltung
  * Orchestriert den gesamten Analyse-Workflow von Download bis Ergebnis-Speicherung
+ * Implementiert Schritt 1-2 aus RAG_INTEGRATION_README
  */
 export class AnalysisService {
   private readonly logger = Logger.getInstance();
@@ -60,6 +63,7 @@ export class AnalysisService {
   private readonly embeddingService: EmbeddingService;
   private readonly documentSplitter: LegalDocumentSplitter;
   private readonly llmFactory: LLMFactory;
+  private readonly vectorStore: PineconeVectorStore;
   
   // Chains für verschiedene Analyse-Typen
   private readonly contractAnalysisChain: ContractAnalysisChain;
@@ -69,6 +73,8 @@ export class AnalysisService {
   private readonly activeAnalyses = new Map<string, {
     abortController: AbortController;
     progressCallback?: (progress: ProcessingProgress) => void;
+    userId: string;
+    requestId: string;
   }>();
 
   constructor() {
@@ -77,6 +83,7 @@ export class AnalysisService {
     this.embeddingService = new EmbeddingService();
     this.documentSplitter = new LegalDocumentSplitter();
     this.llmFactory = new LLMFactory();
+    this.vectorStore = new PineconeVectorStore(this.embeddingService);
     
     // Initialize analysis chains
     this.contractAnalysisChain = new ContractAnalysisChain();
@@ -116,7 +123,9 @@ export class AnalysisService {
       // Track active analysis
       this.activeAnalyses.set(analysisId, {
         abortController,
-        progressCallback: (progress) => this.updateProgress(analysisId, progress)
+        progressCallback: (progress) => this.updateProgress(analysisId, progress),
+        userId: request.userId,
+        requestId: analysisId
       });
 
       // Start async processing
@@ -155,25 +164,25 @@ export class AnalysisService {
       await this.updateAnalysisStatus(analysisId, 'processing', 5);
 
       // 1. Download document from Firebase Storage
-      this.reportProgress('download', 10, 'Downloading document from storage');
+      await this.reportProgress('download', 10, 'Downloading document from storage', analysisId);
       const documentContent = await this.downloadDocument(request.documentId, request.userId);
       
       if (abortSignal.aborted) throw new Error('Analysis cancelled');
 
       // 2. Split document into hierarchical chunks
-      this.reportProgress('split', 25, 'Splitting document into chunks');
+      await this.reportProgress('split', 25, 'Splitting document into chunks', analysisId);
       const chunks = await this.splitDocument(documentContent, request.documentId);
       
       if (abortSignal.aborted) throw new Error('Analysis cancelled');
 
       // 3. Generate embeddings for chunks
-      this.reportProgress('embed', 45, 'Generating embeddings');
+      await this.reportProgress('embed', 45, 'Generating embeddings', analysisId);
       const embeddings = await this.generateEmbeddings(chunks, request.options?.language);
       
       if (abortSignal.aborted) throw new Error('Analysis cancelled');
 
       // 4. Perform analysis based on type
-      this.reportProgress('analyze', 70, 'Performing legal analysis');
+      await this.reportProgress('analyze', 70, 'Performing legal analysis', analysisId);
       const analysisResults = await this.performAnalysis(
         request.analysisType,
         chunks,
@@ -184,7 +193,7 @@ export class AnalysisService {
       if (abortSignal.aborted) throw new Error('Analysis cancelled');
 
       // 5. Save results
-      this.reportProgress('save', 90, 'Saving analysis results');
+      await this.reportProgress('save', 90, 'Saving analysis results', analysisId);
       const processingTime = Date.now() - startTime;
       
       await this.updateAnalysisResult(analysisId, {
@@ -501,13 +510,38 @@ export class AnalysisService {
   }
 
   /**
-   * Progress and Status Management
+   * Progress and Status Management mit WebSocket-Integration
    */
-  private reportProgress(stage: ProcessingProgress['stage'], progress: number, message: string): void {
-    const progressUpdate: ProcessingProgress = { stage, progress, message };
+  private async reportProgress(
+    stage: ProcessingProgress['stage'], 
+    progress: number, 
+    message: string,
+    analysisId?: string,
+    details?: any
+  ): Promise<void> {
+    const progressUpdate: ProcessingProgress = { stage, progress, message, details };
     
-    // In production, this would update the database and notify via WebSocket
+    // Log für Debugging
     this.logger.debug('Analysis progress', progressUpdate);
+    
+    // Sende WebSocket Update wenn analysisId verfügbar ist
+    if (analysisId) {
+      const analysis = this.activeAnalyses.get(analysisId);
+      if (analysis) {
+        try {
+          await websocketManager.sendProgressUpdate(
+            analysis.userId,
+            analysis.requestId,
+            progressUpdate
+          );
+        } catch (error) {
+          this.logger.error('Failed to send WebSocket progress update', error as Error, {
+            analysisId,
+            userId: analysis.userId
+          });
+        }
+      }
+    }
   }
 
   private async updateProgress(analysisId: string, progress: ProcessingProgress): Promise<void> {
@@ -604,6 +638,459 @@ export class AnalysisService {
   }
 
   /**
+   * Indexiert Gesetzestexte als Admin (RAG Schritt 1)
+   * Speichert Rechtsgrundlagen im Vector Store für spätere Referenzierung
+   */
+  async indexLegalTexts(
+    texts: { 
+      content: string; 
+      title: string; 
+      source: string; 
+      jurisdiction: string;
+      legalArea: string;
+    }[],
+    progressCallback?: (progress: number, status: string) => void
+  ): Promise<void> {
+    try {
+      this.logger.info('Starting legal texts indexing', { textsCount: texts.length });
+
+      const vectorConfig: VectorStoreConfig = {
+        indexName: process.env.PINECONE_LEGAL_INDEX || 'legal-texts',
+        namespace: 'legal-regulations'
+      };
+
+      let allChunks: HierarchicalChunk[] = [];
+
+      for (let i = 0; i < texts.length; i++) {
+        const text = texts[i];
+        if (!text) continue; // Skip undefined entries
+        
+        progressCallback?.(Math.round((i / texts.length) * 50), `Processing ${text.title}`);
+
+        // Teile jeden Gesetzestext in Chunks auf
+        const document = new Document({
+          pageContent: text.content,
+          metadata: {
+            title: text.title,
+            source: text.source,
+            jurisdiction: text.jurisdiction,
+            legalArea: text.legalArea,
+            type: 'legal_regulation',
+            indexed_at: new Date().toISOString()
+          }
+        });
+
+        const chunks = await this.documentSplitter.splitDocument(document);
+        
+        // Füge spezifische Metadaten für Rechtsgrundlagen hinzu
+        const enhancedChunks = chunks.map((chunk, index) => ({
+          ...chunk,
+          metadata: {
+            ...chunk.metadata,
+            id: `${text.source}-chunk-${index}`,
+            documentId: text.source,
+            chunkIndex: index,
+            legalReferences: this.extractLegalReferences(chunk.pageContent),
+            isLegalRegulation: true
+          }
+        }));
+
+        allChunks = allChunks.concat(enhancedChunks);
+      }
+
+      progressCallback?.(60, 'Storing in vector database');
+
+      // Speichere alle Chunks im Vector Store
+      await this.vectorStore.addDocuments(allChunks, vectorConfig, (progress, status) => {
+        const totalProgress = 60 + Math.round((progress / 100) * 40);
+        progressCallback?.(totalProgress, status);
+      });
+
+      this.logger.info('Legal texts indexing completed', { 
+        totalChunks: allChunks.length,
+        textsProcessed: texts.length
+      });
+
+    } catch (error) {
+      this.logger.error('Legal texts indexing failed', error as Error);
+      throw new Error(`Legal texts indexing failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Führt semantische Suche in den Rechtsgrundlagen durch (RAG Schritt 2)
+   */
+  async searchLegalContext(
+    query: string,
+    legalArea?: string,
+    jurisdiction?: string,
+    topK: number = 5
+  ): Promise<SearchResult> {
+    try {
+      const vectorConfig: VectorStoreConfig = {
+        indexName: process.env.PINECONE_LEGAL_INDEX || 'legal-texts',
+        namespace: 'legal-regulations',
+        topK,
+        scoreThreshold: 0.75
+      };
+
+      // Baue Filter für spezifische Suche
+      const filter: Record<string, any> = {
+        isLegalRegulation: true
+      };
+
+      if (legalArea) {
+        filter.legalArea = legalArea;
+      }
+
+      if (jurisdiction) {
+        filter.jurisdiction = jurisdiction;
+      }
+
+      const results = await this.vectorStore.search(query, {
+        ...vectorConfig,
+        filter
+      });
+
+      this.logger.debug('Legal context search completed', {
+        query: query.substring(0, 100),
+        resultsCount: results.documents.length,
+        averageScore: results.scores.length > 0 
+          ? results.scores.reduce((a, b) => a + b, 0) / results.scores.length 
+          : 0
+      });
+
+      return results;
+
+    } catch (error) {
+      this.logger.error('Legal context search failed', error as Error, { query });
+      throw new Error(`Legal context search failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Erweiterte Vertragsanalyse mit RAG-basierter Rechtsgrundlagen-Prüfung
+   */
+  async analyzeContractWithRAG(
+    contractContent: string,
+    userId: string,
+    options?: {
+      legalArea?: string;
+      jurisdiction?: string;
+      language?: string;
+    }
+  ): Promise<{
+    analysis: any;
+    legalContext: SearchResult;
+    recommendations: string[];
+  }> {
+    try {
+      this.logger.info('Starting RAG-enhanced contract analysis', { userId, options });
+
+      // 1. Führe normale Vertragsanalyse durch
+      const document = new Document({
+        pageContent: contractContent,
+        metadata: {
+          userId,
+          analysisType: 'contract_rag',
+          timestamp: new Date().toISOString()
+        }
+      });
+
+      const contractAnalysis = await this.contractAnalysisChain.analyze(document);
+
+      // 2. Extrahiere Rechtsthemen aus der Analyse
+      const legalTopics = this.extractLegalTopicsFromAnalysis(contractAnalysis);
+
+      // 3. Suche relevante Rechtsgrundlagen
+      const searchQueries = legalTopics.map(topic => 
+        `${topic} ${options?.legalArea || ''} ${options?.jurisdiction || 'Schweiz'}`
+      );
+
+      let allLegalContext: HierarchicalChunk[] = [];
+      let allScores: number[] = [];
+
+      for (const query of searchQueries) {
+        const contextResult = await this.searchLegalContext(
+          query,
+          options?.legalArea,
+          options?.jurisdiction || 'CH',
+          3 // 3 Ergebnisse pro Thema
+        );
+        allLegalContext = allLegalContext.concat(contextResult.documents);
+        allScores = allScores.concat(contextResult.scores);
+      }
+
+      // 4. Generiere Empfehlungen basierend auf gefundenen Rechtsgrundlagen
+      const recommendations = await this.generateLegalRecommendations(
+        contractAnalysis,
+        allLegalContext
+      );
+
+      const result = {
+        analysis: contractAnalysis,
+        legalContext: {
+          documents: allLegalContext,
+          scores: allScores,
+          totalResults: allLegalContext.length
+        },
+        recommendations
+      };
+
+      this.logger.info('RAG-enhanced contract analysis completed', {
+        userId,
+        legalContextItems: allLegalContext.length,
+        recommendationsCount: recommendations.length
+      });
+
+      return result;
+
+    } catch (error) {
+      this.logger.error('RAG contract analysis failed', error as Error, { userId });
+      throw new Error(`RAG contract analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * GDPR-Compliance Check mit Textinput (ohne File-Upload)
+   */
+  async analyzeDSGVOCompliance(
+    textContent: string,
+    userId: string,
+    options?: {
+      saveResults?: boolean;
+      language?: string;
+    }
+  ): Promise<{
+    complianceScore: number;
+    status: 'compliant' | 'partial_compliance' | 'non_compliant';
+    findings: Array<{
+      article: string;
+      requirement: string;
+      status: 'compliant' | 'non_compliant' | 'unclear';
+      recommendation: string;
+    }>;
+    legalBasis: SearchResult;
+  }> {
+    try {
+      this.logger.info('Starting DSGVO compliance analysis', { userId, contentLength: textContent.length });
+
+      // 1. Führe GDPR Analyse durch
+      const document = new Document({
+        pageContent: textContent,
+        metadata: {
+          userId,
+          analysisType: 'gdpr_text',
+          timestamp: new Date().toISOString()
+        }
+      });
+
+      const gdprAnalysis = await this.gdprComplianceChain.analyze(document);
+
+      // 2. Suche relevante DSGVO-Artikel
+      const dsgovoQueries = [
+        'DSGVO Artikel 6 Rechtmäßigkeit Verarbeitung',
+        'DSGVO Artikel 7 Einwilligung',
+        'DSGVO Artikel 13 Informationspflichten',
+        'DSGVO Artikel 17 Recht auf Löschung',
+        'DSGVO Artikel 20 Recht auf Datenübertragbarkeit'
+      ];
+
+      let legalBasis: HierarchicalChunk[] = [];
+      let scores: number[] = [];
+
+      for (const query of dsgovoQueries) {
+        const result = await this.searchLegalContext(query, 'Datenschutz', 'EU', 2);
+        legalBasis = legalBasis.concat(result.documents);
+        scores = scores.concat(result.scores);
+      }
+
+      // 3. Erstelle strukturierte Findings
+      const findings = this.createDSGVOFindings(gdprAnalysis, legalBasis);
+
+      // 4. Berechne Compliance Score
+      const complianceScore = this.calculateComplianceScore(findings);
+      const status = this.determineComplianceStatus(complianceScore);
+
+      const result = {
+        complianceScore,
+        status,
+        findings,
+        legalBasis: {
+          documents: legalBasis,
+          scores,
+          totalResults: legalBasis.length
+        }
+      };
+
+      // 5. Speichere Ergebnisse falls gewünscht
+      if (options?.saveResults) {
+        await this.saveDSGVOAnalysis(userId, textContent, result);
+      }
+
+      this.logger.info('DSGVO compliance analysis completed', {
+        userId,
+        complianceScore,
+        status,
+        findingsCount: findings.length
+      });
+
+      return result;
+
+    } catch (error) {
+      this.logger.error('DSGVO compliance analysis failed', error as Error, { userId });
+      throw new Error(`DSGVO compliance analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Hilfsmethoden für RAG-Pipeline
+   */
+  private extractLegalReferences(text: string): string[] {
+    const patterns = [
+      /Art\.?\s*\d+/gi,
+      /Artikel\s*\d+/gi,
+      /§\s*\d+/gi,
+      /OR\s*Art\.?\s*\d+/gi,
+      /ZGB\s*Art\.?\s*\d+/gi,
+      /DSGVO\s*Art\.?\s*\d+/gi
+    ];
+
+    const references: string[] = [];
+    patterns.forEach(pattern => {
+      const matches = text.match(pattern);
+      if (matches) {
+        references.push(...matches);
+      }
+    });
+
+    return [...new Set(references)]; // Entferne Duplikate
+  }
+
+  private extractLegalTopicsFromAnalysis(analysis: any): string[] {
+    const topics: string[] = [];
+    
+    if (analysis.issues) {
+      topics.push(...analysis.issues.map((issue: any) => issue.legalArea || issue.issue));
+    }
+
+    if (analysis.legalAreas) {
+      topics.push(...analysis.legalAreas);
+    }
+
+    // Fallback für verschiedene Analyse-Strukturen
+    if (typeof analysis === 'object') {
+      const text = JSON.stringify(analysis);
+      const legalTerms = [
+        'Arbeitsrecht', 'Vertragsrecht', 'Datenschutz', 'Handelsrecht',
+        'Gesellschaftsrecht', 'Immaterialgüterrecht', 'Steuerrecht'
+      ];
+      
+      legalTerms.forEach(term => {
+        if (text.includes(term)) {
+          topics.push(term);
+        }
+      });
+    }
+
+    return [...new Set(topics)]; // Entferne Duplikate
+  }
+
+  private async generateLegalRecommendations(
+    contractAnalysis: any,
+    legalContext: HierarchicalChunk[]
+  ): Promise<string[]> {
+    const recommendations: string[] = [];
+
+    // Einfache regelbasierte Empfehlungen basierend auf gefundenen Rechtsgrundlagen
+    legalContext.forEach(context => {
+      if (context.metadata.legalArea === 'Arbeitsrecht') {
+        recommendations.push('Prüfung der Arbeitsvertragsklauseln gemäß schweizer Obligationenrecht');
+      }
+      if (context.metadata.legalArea === 'Datenschutz') {
+        recommendations.push('DSGVO-Compliance-Prüfung der Datenverarbeitungsklauseln');
+      }
+    });
+
+    // Füge spezifische Empfehlungen basierend auf Contract Analysis hinzu
+    if (contractAnalysis.issues) {
+      contractAnalysis.issues.forEach((issue: any) => {
+        if (issue.severity === 'high') {
+          recommendations.push(`Dringend: ${issue.issue} - Rechtliche Überprüfung erforderlich`);
+        }
+      });
+    }
+
+    return recommendations;
+  }
+
+  private createDSGVOFindings(gdprAnalysis: any, legalBasis: HierarchicalChunk[]): Array<{
+    article: string;
+    requirement: string;
+    status: 'compliant' | 'non_compliant' | 'unclear';
+    recommendation: string;
+  }> {
+    const findings: any[] = [];
+
+    // Standard DSGVO Prüfpunkte
+    const dsgvoChecks = [
+      {
+        article: 'Art. 6 DSGVO',
+        requirement: 'Rechtmäßigkeit der Verarbeitung',
+        status: 'unclear' as const,
+        recommendation: 'Rechtsgrundlage für Datenverarbeitung explizit angeben'
+      },
+      {
+        article: 'Art. 7 DSGVO',
+        requirement: 'Bedingungen für die Einwilligung',
+        status: 'unclear' as const,
+        recommendation: 'Einwilligungserklärung überprüfen und ggf. anpassen'
+      }
+    ];
+
+    // Erweitere Findings basierend auf gefundenen Rechtsgrundlagen
+    legalBasis.forEach(basis => {
+      if (basis.pageContent.includes('Artikel 6')) {
+        findings.push({
+          article: 'Art. 6 DSGVO',
+          requirement: 'Rechtmäßigkeit der Verarbeitung',
+          status: 'compliant' as const,
+          recommendation: 'Rechtsgrundlage gemäß Artikel 6 identifiziert'
+        });
+      }
+    });
+
+    return findings.length > 0 ? findings : dsgvoChecks;
+  }
+
+  private calculateComplianceScore(findings: any[]): number {
+    if (findings.length === 0) return 0;
+
+    const compliantCount = findings.filter(f => f.status === 'compliant').length;
+    return Math.round((compliantCount / findings.length) * 100) / 100;
+  }
+
+  private determineComplianceStatus(score: number): 'compliant' | 'partial_compliance' | 'non_compliant' {
+    if (score >= 0.8) return 'compliant';
+    if (score >= 0.5) return 'partial_compliance';
+    return 'non_compliant';
+  }
+
+  private async saveDSGVOAnalysis(userId: string, content: string, analysis: any): Promise<void> {
+    try {
+      await this.firestoreService.saveDocument(`dsgvo_analyses/${userId}`, {
+        content: content.substring(0, 1000), // Speichere nur ersten 1000 Zeichen
+        analysis,
+        timestamp: new Date(),
+        userId
+      });
+    } catch (error) {
+      this.logger.error('Failed to save DSGVO analysis', error as Error, { userId });
+      // Nicht kritisch - Analyse kann trotzdem zurückgegeben werden
+    }
+  }
+
+  /**
    * Health Check
    */
   async healthCheck(): Promise<{ status: string; services: any }> {
@@ -611,7 +1098,10 @@ export class AnalysisService {
       storageService: await this.checkServiceHealth(() => Promise.resolve({ status: 'healthy' })),
       firestoreService: await this.checkServiceHealth(() => Promise.resolve({ status: 'healthy' })),
       embeddingService: await this.checkServiceHealth(() => Promise.resolve({ status: 'healthy' })),
-      llmFactory: await this.checkServiceHealth(() => Promise.resolve({ status: 'healthy' }))
+      llmFactory: await this.checkServiceHealth(() => Promise.resolve({ status: 'healthy' })),
+      vectorStore: await this.checkServiceHealth(() => 
+        this.vectorStore.healthCheck(process.env.PINECONE_LEGAL_INDEX || 'legal-texts')
+      )
     };
 
     const allHealthy = Object.values(services).every(s => s.status === 'healthy');

@@ -862,4 +862,197 @@ export class AdminController extends BaseController {
       throw new Error('Failed to retrieve system metrics');
     }
   }
+
+  /**
+   * Index Legal Texts for RAG (Admin Only)
+   * POST /api/admin/legal-texts/index
+   */
+  public async indexLegalTexts(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = this.getUserId(req);
+      const { texts } = req.body;
+
+      // Validate admin role
+      const userRecord = await getAuth().getUser(userId);
+      if (!userRecord.customClaims?.admin) {
+        this.sendError(res, 403, 'Admin access required');
+        return;
+      }
+
+      if (!texts || !Array.isArray(texts)) {
+        this.sendError(res, 400, 'Legal texts array is required');
+        return;
+      }
+
+      // Validate text format
+      for (const text of texts) {
+        if (!text.content || !text.title || !text.source) {
+          this.sendError(res, 400, 'Each text must have content, title, and source');
+          return;
+        }
+      }
+
+      // Import AnalysisService dynamically to avoid circular dependency
+      const { AnalysisService } = await import('../services/AnalysisService');
+      const analysisService = new AnalysisService();
+
+      this.logger.info('Starting legal texts indexing', {
+        userId,
+        textsCount: texts.length
+      });
+
+      let progress = 0;
+      const progressCallback = (progressPercent: number, status: string) => {
+        progress = progressPercent;
+        this.logger.info('Indexing progress', { progress, status });
+      };
+
+      await analysisService.indexLegalTexts(texts, progressCallback);
+
+      this.sendSuccess(res, {
+        message: 'Legal texts indexed successfully',
+        indexedTexts: texts.length,
+        timestamp: new Date().toISOString()
+      });
+
+      this.logger.info('Legal texts indexing completed', {
+        userId,
+        textsCount: texts.length
+      });
+
+    } catch (error) {
+      this.logger.error('Legal texts indexing failed', error as Error, {
+        userId: this.getUserId(req)
+      });
+      next(error);
+    }
+  }
+
+  /**
+   * Search Legal Context (Admin Only - for testing)
+   * POST /api/admin/legal-texts/search
+   */
+  public async searchLegalContext(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = this.getUserId(req);
+      const { query, legalArea, jurisdiction, topK = 5 } = req.body;
+
+      // Validate admin role
+      const userRecord = await getAuth().getUser(userId);
+      if (!userRecord.customClaims?.admin) {
+        this.sendError(res, 403, 'Admin access required');
+        return;
+      }
+
+      if (!query || typeof query !== 'string') {
+        this.sendError(res, 400, 'Search query is required');
+        return;
+      }
+
+      // Import AnalysisService dynamically
+      const { AnalysisService } = await import('../services/AnalysisService');
+      const analysisService = new AnalysisService();
+
+      const searchResults = await analysisService.searchLegalContext(
+        query,
+        legalArea,
+        jurisdiction,
+        topK
+      );
+
+      this.sendSuccess(res, {
+        query,
+        results: {
+          total: searchResults.totalResults,
+          returned: searchResults.documents.length,
+          averageScore: searchResults.scores.length > 0 
+            ? searchResults.scores.reduce((a, b) => a + b, 0) / searchResults.scores.length 
+            : 0,
+          documents: searchResults.documents.map((doc, index) => ({
+            id: doc.metadata.id,
+            title: doc.metadata.title,
+            source: doc.metadata.source,
+            legalArea: doc.metadata.legalArea,
+            jurisdiction: doc.metadata.jurisdiction,
+            excerpt: doc.pageContent.substring(0, 300) + '...',
+            score: searchResults.scores[index],
+            legalReferences: doc.metadata.legalReferences
+          }))
+        },
+        timestamp: new Date().toISOString()
+      });
+
+      this.logger.info('Legal context search completed', {
+        userId,
+        query: query.substring(0, 100),
+        resultsCount: searchResults.documents.length
+      });
+
+    } catch (error) {
+      this.logger.error('Legal context search failed', error as Error, {
+        userId: this.getUserId(req),
+        query: req.body.query?.substring(0, 100)
+      });
+      next(error);
+    }
+  }
+
+  /**
+   * Get Vector Store Statistics (Admin Only)
+   * GET /api/admin/vector-store/stats
+   */
+  public async getVectorStoreStats(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = this.getUserId(req);
+
+      // Validate admin role
+      const userRecord = await getAuth().getUser(userId);
+      if (!userRecord.customClaims?.admin) {
+        this.sendError(res, 403, 'Admin access required');
+        return;
+      }
+
+      // Import services dynamically
+      const { AnalysisService } = await import('../services/AnalysisService');
+      const { PineconeVectorStore } = await import('../vectorstore/PineconeVectorStore');
+      const { EmbeddingService } = await import('../services/EmbeddingService');
+
+      const embeddingService = new EmbeddingService();
+      const vectorStore = new PineconeVectorStore(embeddingService);
+
+      const indexName = process.env.PINECONE_LEGAL_INDEX || 'legal-texts';
+      const namespace = 'legal-regulations';
+
+      const [healthCheck, stats] = await Promise.all([
+        vectorStore.healthCheck(indexName),
+        vectorStore.getStats({ indexName, namespace })
+      ]);
+
+      this.sendSuccess(res, {
+        vectorStore: {
+          status: healthCheck ? 'healthy' : 'unhealthy',
+          indexName,
+          namespace,
+          stats: {
+            totalVectors: stats.totalVectors,
+            dimension: stats.dimension,
+            indexFullness: Math.round(stats.indexFullness * 100) / 100
+          }
+        },
+        timestamp: new Date().toISOString()
+      });
+
+      this.logger.info('Vector store stats retrieved', {
+        userId,
+        indexName,
+        totalVectors: stats.totalVectors
+      });
+
+    } catch (error) {
+      this.logger.error('Failed to get vector store stats', error as Error, {
+        userId: this.getUserId(req)
+      });
+      next(error);
+    }
+  }
 }

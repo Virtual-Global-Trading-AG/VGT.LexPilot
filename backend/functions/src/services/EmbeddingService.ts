@@ -253,6 +253,17 @@ export class EmbeddingService {
   }
 
   /**
+   * Gibt das OpenAI Embedding Model zurück für Vector Store Integration
+   */
+  getEmbeddingModel(): OpenAIEmbeddings {
+    const model = this.models.get('openai');
+    if (!model) {
+      throw new Error('OpenAI embedding model not initialized');
+    }
+    return model;
+  }
+
+  /**
    * Cleanup Methode zum Beenden des Services
    */
   async shutdown(): Promise<void> {
