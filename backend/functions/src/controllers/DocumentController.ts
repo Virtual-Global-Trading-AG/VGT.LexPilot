@@ -1,6 +1,15 @@
 import { Request, Response, NextFunction } from 'express';
 import { BaseController } from './BaseController';
 import { Logger } from '../utils/logger';
+import { 
+  StorageService, 
+  FirestoreService, 
+  DocumentMetadata,
+  StorageQuotaInfo,
+  PaginationOptions,
+  SortOptions,
+  DocumentFilters 
+} from '../services';
 
 interface DocumentUploadRequest {
   fileName: string;
@@ -14,6 +23,14 @@ interface DocumentUploadRequest {
 }
 
 export class DocumentController extends BaseController {
+  private readonly storageService: StorageService;
+  private readonly firestoreService: FirestoreService;
+
+  constructor() {
+    super();
+    this.storageService = new StorageService();
+    this.firestoreService = new FirestoreService();
+  }
 
   /**
    * Upload document
@@ -39,28 +56,46 @@ export class DocumentController extends BaseController {
       });
 
       // Validate file type and size
-      await this.validateFileUpload(contentType, size);
+      this.storageService.validateFileUpload(contentType, size);
 
       // Check user storage quota
-      await this.checkStorageQuota(userId, size);
+      const quotaInfo = await this.storageService.checkStorageQuota(userId, size);
+      if (quotaInfo.available < 0) {
+        this.sendError(res, 413, 'Storage quota exceeded', 
+          `Upload would exceed storage limit. Used: ${(quotaInfo.used / 1024 / 1024).toFixed(2)}MB, Limit: ${(quotaInfo.limit / 1024 / 1024).toFixed(2)}MB`);
+        return;
+      }
 
       // Generate upload URL and document ID
-      const documentId = await this.generateDocumentId();
-      const uploadUrl = await this.generateUploadUrl(documentId, fileName, contentType);
+      const documentId = this.generateDocumentId();
+      const { uploadUrl, expiresAt } = await this.storageService.generateUploadUrl(
+        documentId, 
+        fileName, 
+        contentType, 
+        userId
+      );
 
       // Create document record
-      await this.createDocumentRecord(userId, documentId, {
+      await this.firestoreService.createDocument(userId, documentId, {
         fileName,
         contentType,
         size,
-        metadata,
-        status: 'uploading'
+        uploadedAt: new Date().toISOString(),
+        status: 'uploading',
+        ...metadata
       });
 
       this.sendSuccess(res, {
         documentId,
         uploadUrl,
-        expiresIn: 3600 // 1 hour
+        expiresAt: expiresAt.toISOString(),
+        expiresIn: 3600, // 1 hour
+        quotaInfo: {
+          used: quotaInfo.used,
+          limit: quotaInfo.limit,
+          available: quotaInfo.available,
+          usagePercentage: Math.round(quotaInfo.percentage * 100)
+        }
       }, 'Upload URL generated successfully');
 
     } catch (error) {
@@ -86,7 +121,7 @@ export class DocumentController extends BaseController {
         return;
       }
 
-      const document = await this.getDocumentById(documentId, userId);
+      const document = await this.firestoreService.getDocument(documentId, userId);
       
       if (!document) {
         this.sendError(res, 404, 'Document not found');
@@ -101,7 +136,9 @@ export class DocumentController extends BaseController {
         status: document.status,
         uploadedAt: document.uploadedAt,
         processedAt: document.processedAt,
-        metadata: document.metadata,
+        category: document.category,
+        description: document.description,
+        tags: document.tags,
         analyses: document.analyses || []
       });
 
@@ -121,24 +158,26 @@ export class DocumentController extends BaseController {
   public async getDocuments(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const userId = this.getUserId(req);
-      const pagination = this.getPaginationParams(req.query);
-      const sort = this.getSortParams(req.query, ['uploadedAt', 'fileName', 'size']);
-      const { status, category } = req.query;
+      const pagination: PaginationOptions = this.getPaginationParams(req.query);
+      const sortParams = this.getSortParams(req.query, ['uploadedAt', 'fileName', 'size']);
+      const sort: SortOptions = {
+        field: sortParams.sortBy,
+        direction: sortParams.sortOrder
+      };
+      const filters: DocumentFilters = {
+        status: req.query.status as string,
+        category: req.query.category as string
+      };
 
-      const documents = await this.getUserDocuments(userId, {
-        ...pagination,
-        ...sort,
-        status: status as string,
-        category: category as string
-      });
+      const result = await this.firestoreService.getUserDocuments(userId, pagination, sort, filters);
 
       this.sendSuccess(res, {
-        documents: documents.items,
+        documents: result.items,
         pagination: {
-          page: documents.page,
-          limit: documents.limit,
-          total: documents.total,
-          totalPages: documents.totalPages
+          page: result.page,
+          limit: result.limit,
+          total: result.total,
+          totalPages: result.totalPages
         }
       }, 'Documents retrieved successfully');
 
@@ -159,7 +198,7 @@ export class DocumentController extends BaseController {
     try {
       const userId = this.getUserId(req);
       const { documentId } = req.params;
-      const { title, description, tags } = req.body;
+      const { title, description, tags, category } = req.body;
 
       if (!documentId) {
         this.sendError(res, 400, 'Missing documentId parameter');
@@ -167,18 +206,18 @@ export class DocumentController extends BaseController {
       }
 
       // Check if document exists and user has access
-      const document = await this.getDocumentById(documentId, userId);
+      const document = await this.firestoreService.getDocument(documentId, userId);
       if (!document) {
         this.sendError(res, 404, 'Document not found');
         return;
       }
 
       // Update document metadata
-      await this.updateDocumentMetadata(documentId, userId, {
-        title,
-        description,
-        tags,
-        updatedAt: new Date().toISOString()
+      await this.firestoreService.updateDocument(documentId, userId, {
+        ...(title && { fileName: title }), // Allow renaming via title
+        ...(description && { description }),
+        ...(tags && { tags }),
+        ...(category && { category })
       });
 
       this.sendSuccess(res, {
@@ -211,22 +250,25 @@ export class DocumentController extends BaseController {
       }
 
       // Check if document exists and user has access
-      const document = await this.getDocumentById(documentId, userId);
+      const document = await this.firestoreService.getDocument(documentId, userId);
       if (!document) {
         this.sendError(res, 404, 'Document not found');
         return;
       }
 
       // Check if there are active analyses
-      const activeAnalyses = await this.getActiveAnalyses(documentId);
+      const activeAnalyses = await this.firestoreService.getActiveAnalyses(documentId);
       if (activeAnalyses.length > 0) {
         this.sendError(res, 409, 'Cannot delete document with active analyses', 
           'Please stop or complete all analyses before deleting the document');
         return;
       }
 
-      // Delete document and associated data
-      await this.deleteDocumentAndData(documentId, userId);
+      // Delete document from storage and database
+      await Promise.all([
+        this.storageService.deleteDocument(documentId, document.fileName, userId),
+        this.firestoreService.deleteDocument(documentId, userId)
+      ]);
 
       this.sendSuccess(res, {
         documentId,
@@ -256,20 +298,32 @@ export class DocumentController extends BaseController {
         return;
       }
 
-      const document = await this.getDocumentById(documentId, userId);
+      const document = await this.firestoreService.getDocument(documentId, userId);
       if (!document) {
         this.sendError(res, 404, 'Document not found');
         return;
       }
 
-      // Get processed content if available
-      const content = await this.getDocumentProcessedContent(documentId);
+      // Get document content from storage
+      let content: string | null = null;
+      try {
+        const buffer = await this.storageService.getDocumentContent(documentId, document.fileName, userId);
+        content = buffer.toString('utf-8');
+      } catch (error) {
+        this.logger.warn('Failed to get document content from storage', {
+          documentId,
+          userId,
+          error: (error as Error).message
+        });
+      }
       
       this.sendSuccess(res, {
         documentId,
-        content: content || null,
+        content,
         contentType: document.contentType,
-        isProcessed: !!content
+        isProcessed: document.status === 'processed',
+        fileName: document.fileName,
+        size: document.size
       });
 
     } catch (error) {
@@ -295,20 +349,25 @@ export class DocumentController extends BaseController {
         return;
       }
 
-      const document = await this.getDocumentById(documentId, userId);
+      const document = await this.firestoreService.getDocument(documentId, userId);
       if (!document) {
         this.sendError(res, 404, 'Document not found');
         return;
       }
 
       // Generate signed download URL
-      const downloadUrl = await this.generateDownloadUrl(documentId);
+      const { downloadUrl, expiresAt } = await this.storageService.generateDownloadUrl(
+        documentId, 
+        document.fileName, 
+        userId
+      );
 
       this.sendSuccess(res, {
         downloadUrl,
         fileName: document.fileName,
         contentType: document.contentType,
         size: document.size,
+        expiresAt: expiresAt.toISOString(),
         expiresIn: 3600 // 1 hour
       });
 
@@ -322,85 +381,155 @@ export class DocumentController extends BaseController {
   }
 
   // ==========================================
+  // ADDITIONAL API METHODS
+  // ==========================================
+
+  /**
+   * Get user storage statistics
+   * GET /api/documents/stats
+   */
+  public async getStorageStats(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = this.getUserId(req);
+
+      // Get storage statistics from both services
+      const [firestoreStats, quotaInfo] = await Promise.all([
+        this.firestoreService.getUserStorageStats(userId),
+        this.storageService.checkStorageQuota(userId)
+      ]);
+
+      this.sendSuccess(res, {
+        documents: {
+          total: firestoreStats.totalDocuments,
+          byStatus: firestoreStats.documentsByStatus,
+          byCategory: firestoreStats.documentsByCategory
+        },
+        storage: {
+          used: quotaInfo.used,
+          limit: quotaInfo.limit,
+          available: quotaInfo.available,
+          usagePercentage: Math.round(quotaInfo.percentage * 100),
+          usedMB: Math.round(quotaInfo.used / 1024 / 1024 * 100) / 100,
+          limitMB: Math.round(quotaInfo.limit / 1024 / 1024 * 100) / 100
+        }
+      }, 'Storage statistics retrieved successfully');
+
+    } catch (error) {
+      this.logger.error('Get storage stats failed', error as Error, {
+        userId: this.getUserId(req)
+      });
+      next(error);
+    }
+  }
+
+  /**
+   * Search documents
+   * GET /api/documents/search?q=searchterm
+   */
+  public async searchDocuments(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = this.getUserId(req);
+      const { q: searchText } = req.query;
+
+      if (!searchText || typeof searchText !== 'string') {
+        this.sendError(res, 400, 'Missing search query parameter "q"');
+        return;
+      }
+
+      const pagination: PaginationOptions = this.getPaginationParams(req.query);
+      const filters: DocumentFilters = {
+        status: req.query.status as string,
+        category: req.query.category as string
+      };
+
+      const result = await this.firestoreService.searchDocuments(
+        userId,
+        searchText,
+        filters,
+        pagination
+      );
+
+      this.sendSuccess(res, {
+        documents: result.items,
+        pagination: {
+          page: result.page,
+          limit: result.limit,
+          total: result.total,
+          totalPages: result.totalPages
+        },
+        searchQuery: searchText
+      }, `Found ${result.total} documents matching "${searchText}"`);
+
+    } catch (error) {
+      this.logger.error('Search documents failed', error as Error, {
+        userId: this.getUserId(req),
+        query: req.query
+      });
+      next(error);
+    }
+  }
+
+  /**
+   * Update document status
+   * PATCH /api/documents/:documentId/status
+   */
+  public async updateDocumentStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = this.getUserId(req);
+      const { documentId } = req.params;
+      const { status } = req.body;
+
+      if (!documentId) {
+        this.sendError(res, 400, 'Missing documentId parameter');
+        return;
+      }
+
+      if (!status) {
+        this.sendError(res, 400, 'Missing status in request body');
+        return;
+      }
+
+      const validStatuses: DocumentMetadata['status'][] = [
+        'uploading', 'uploaded', 'processing', 'processed', 'error'
+      ];
+
+      if (!validStatuses.includes(status)) {
+        this.sendError(res, 400, 'Invalid status', 
+          `Valid statuses: ${validStatuses.join(', ')}`);
+        return;
+      }
+
+      // Check if document exists and user has access
+      const document = await this.firestoreService.getDocument(documentId, userId);
+      if (!document) {
+        this.sendError(res, 404, 'Document not found');
+        return;
+      }
+
+      // Update document status
+      await this.firestoreService.updateDocumentStatus(documentId, userId, status);
+
+      this.sendSuccess(res, {
+        documentId,
+        status,
+        message: 'Document status updated successfully'
+      });
+
+    } catch (error) {
+      this.logger.error('Update document status failed', error as Error, {
+        userId: this.getUserId(req),
+        documentId: req.params.documentId,
+        body: req.body
+      });
+      next(error);
+    }
+  }
+
+  // ==========================================
   // PRIVATE HELPER METHODS
   // ==========================================
 
-  private async validateFileUpload(contentType: string, size: number): Promise<void> {
-    const allowedTypes = [
-      'application/pdf',
-      'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'text/plain',
-      'text/csv'
-    ];
-
-    if (!allowedTypes.includes(contentType)) {
-      throw new Error(`Unsupported file type: ${contentType}`);
-    }
-
-    const maxSize = 50 * 1024 * 1024; // 50MB
-    if (size > maxSize) {
-      throw new Error(`File too large. Maximum size is ${maxSize / 1024 / 1024}MB`);
-    }
-  }
-
-  private async checkStorageQuota(userId: string, fileSize: number): Promise<void> {
-    // TODO: Implement storage quota check
-    return Promise.resolve();
-  }
-
-  private async generateDocumentId(): Promise<string> {
+  private generateDocumentId(): string {
     return `doc_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
-  }
-
-  private async generateUploadUrl(documentId: string, fileName: string, contentType: string): Promise<string> {
-    // TODO: Implement signed URL generation for Storage
-    return `https://storage.googleapis.com/upload/${documentId}`;
-  }
-
-  private async createDocumentRecord(userId: string, documentId: string, documentData: any): Promise<void> {
-    // TODO: Implement document record creation in Firestore
-    return Promise.resolve();
-  }
-
-  private async getDocumentById(documentId: string, userId: string): Promise<any> {
-    // TODO: Implement document retrieval from Firestore
-    return null;
-  }
-
-  private async getUserDocuments(userId: string, options: any): Promise<any> {
-    // TODO: Implement user documents retrieval
-    return {
-      items: [],
-      page: options.page,
-      limit: options.limit,
-      total: 0,
-      totalPages: 0
-    };
-  }
-
-  private async updateDocumentMetadata(documentId: string, userId: string, metadata: any): Promise<void> {
-    // TODO: Implement document metadata update
-    return Promise.resolve();
-  }
-
-  private async getActiveAnalyses(documentId: string): Promise<any[]> {
-    // TODO: Implement active analyses check
-    return [];
-  }
-
-  private async deleteDocumentAndData(documentId: string, userId: string): Promise<void> {
-    // TODO: Implement document and data deletion
-    return Promise.resolve();
-  }
-
-  private async getDocumentProcessedContent(documentId: string): Promise<string | null> {
-    // TODO: Implement processed content retrieval
-    return null;
-  }
-
-  private async generateDownloadUrl(documentId: string): Promise<string> {
-    // TODO: Implement signed download URL generation
-    return `https://storage.googleapis.com/download/${documentId}`;
   }
 }

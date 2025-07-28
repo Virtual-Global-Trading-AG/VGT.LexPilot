@@ -1,0 +1,105 @@
+import { Router } from 'express';
+import { DocumentController } from '../controllers/DocumentController';
+import { authMiddleware } from '../middleware/authMiddleware';
+import { ValidationMiddleware } from '../middleware/validationMiddleware';
+import { rateLimitMiddleware } from '../middleware/rateLimitMiddleware';
+import Joi from 'joi';
+
+const router = Router();
+const documentController = new DocumentController();
+
+// Apply authentication middleware to all document routes
+router.use(authMiddleware);
+
+// Apply rate limiting to document operations
+router.use(rateLimitMiddleware);
+
+// Validation schemas
+const uploadDocumentSchema = Joi.object({
+  fileName: Joi.string().min(1).max(255).required()
+    .pattern(/^[a-zA-Z0-9._\-\s]+\.(pdf|docx|doc|txt|md|csv)$/i)
+    .messages({
+      'string.pattern.base': 'File name must have a valid extension (pdf, docx, doc, txt, md, csv)'
+    }),
+  contentType: Joi.string().valid(
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'text/plain',
+    'text/markdown',
+    'text/csv'
+  ).required(),
+  size: Joi.number().min(1).max(52428800).required(), // Max 50MB
+  metadata: Joi.object({
+    category: Joi.string().valid('contract', 'legal_document', 'policy', 'other'),
+    description: Joi.string().max(1000),
+    tags: Joi.array().items(Joi.string().max(50)).max(10)
+  }).optional()
+});
+
+const updateDocumentSchema = Joi.object({
+  title: Joi.string().min(1).max(255).optional(),
+  description: Joi.string().max(1000).optional(),
+  tags: Joi.array().items(Joi.string().max(50)).max(10).optional(),
+  category: Joi.string().valid('contract', 'legal_document', 'policy', 'other').optional()
+}).min(1); // At least one field required
+
+const updateStatusSchema = Joi.object({
+  status: Joi.string().valid('uploading', 'uploaded', 'processing', 'processed', 'error').required()
+});
+
+const searchSchema = Joi.object({
+  q: Joi.string().min(1).max(255).required(),
+  status: Joi.string().valid('uploading', 'uploaded', 'processing', 'processed', 'error').optional(),
+  category: Joi.string().valid('contract', 'legal_document', 'policy', 'other').optional(),
+  page: Joi.number().min(1).default(1).optional(),
+  limit: Joi.number().min(1).max(100).default(10).optional()
+});
+
+// Document CRUD routes
+router.post('/', 
+  ValidationMiddleware.validate({ body: uploadDocumentSchema }),
+  documentController.uploadDocument.bind(documentController)
+);
+
+router.get('/', 
+  documentController.getDocuments.bind(documentController)
+);
+
+router.get('/search',
+  ValidationMiddleware.validate({ query: searchSchema }),
+  documentController.searchDocuments.bind(documentController)
+);
+
+router.get('/stats',
+  documentController.getStorageStats.bind(documentController)
+);
+
+router.get('/:documentId', 
+  documentController.getDocument.bind(documentController)
+);
+
+router.put('/:documentId',
+  ValidationMiddleware.validate({ body: updateDocumentSchema }),
+  documentController.updateDocument.bind(documentController)
+);
+
+router.patch('/:documentId/status',
+  ValidationMiddleware.validate({ body: updateStatusSchema }),
+  documentController.updateDocumentStatus.bind(documentController)
+);
+
+router.delete('/:documentId', 
+  documentController.deleteDocument.bind(documentController)
+);
+
+// Document content routes
+router.get('/:documentId/content', 
+  documentController.getDocumentContent.bind(documentController)
+);
+
+router.get('/:documentId/download', 
+  documentController.downloadDocument.bind(documentController)
+);
+
+export default router;
