@@ -1,4 +1,4 @@
-import { ThemeToggle } from "@/components/theme-toggle";
+import { Sidebar } from './sidebar';
 
 export default function MainLayout({
   children,
@@ -6,22 +6,16 @@ export default function MainLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b border-border">
-        <div className="flex h-16 items-center justify-between px-6">
-          <div className="flex items-center space-x-4">
-            <h1 className="text-xl font-semibold text-foreground">
-              LexPilot AI
-            </h1>
-          </div>
-          <div className="flex items-center space-x-4">
-            <ThemeToggle />
-          </div>
-        </div>
-      </header>
-      <main className="container mx-auto px-6 py-8">
-        {children}
-      </main>
+    <div className="flex h-screen bg-background">
+      {/* Sidebar */}
+      <Sidebar />
+      
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <main className="flex-1 overflow-y-auto p-6">
+          {children}
+        </main>
+      </div>
     </div>
   );
 }
