@@ -1,3 +1,5 @@
+"use client"
+
 import MainLayout from '@/components/layouts/main-layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -6,6 +8,8 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { useAuthStore } from '@/lib/stores/authStore';
+import { useState } from 'react';
 import {
   User,
   CreditCard,
@@ -14,6 +18,8 @@ import {
   CheckCircle,
   Crown,
   Zap,
+  LogOut,
+  Trash2,
 } from 'lucide-react';
 
 const subscriptionPlans = [
@@ -82,6 +88,42 @@ const notificationSettings = [
 ];
 
 export default function SettingsPage() {
+  const { userProfile, signOut, loading } = useAuthStore();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  const handleSignOut = async () => {
+    setIsLoggingOut(true);
+    try {
+      await signOut();
+    } catch (error) {
+      console.error('Error signing out:', error);
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
+
+  const getInitials = () => {
+    if (userProfile?.displayName) {
+      return userProfile.displayName.split(' ').map(n => n[0]).join('').toUpperCase();
+    }
+    if (userProfile?.firstName && userProfile?.lastName) {
+      return `${userProfile.firstName[0]}${userProfile.lastName[0]}`.toUpperCase();
+    }
+    if (userProfile?.email) {
+      return userProfile.email[0]?.toUpperCase() || 'U';
+    }
+    return 'U';
+  };
+
+  const getDisplayName = () => {
+    if (userProfile?.displayName) return userProfile.displayName;
+    if (userProfile?.firstName && userProfile?.lastName) {
+      return `${userProfile.firstName} ${userProfile.lastName}`;
+    }
+    if (userProfile?.firstName) return userProfile.firstName;
+    return 'Benutzer';
+  };
+
   return (
     <MainLayout>
       <div className="space-y-6">
@@ -122,8 +164,8 @@ export default function SettingsPage() {
               <CardContent className="space-y-6">
                 <div className="flex items-center space-x-6">
                   <Avatar className="h-20 w-20">
-                    <AvatarImage src="/avatars/user.jpg" alt="User" />
-                    <AvatarFallback className="text-lg">MM</AvatarFallback>
+                    <AvatarImage src={userProfile?.photoURL} alt="User" />
+                    <AvatarFallback className="text-lg">{getInitials()}</AvatarFallback>
                   </Avatar>
                   <div className="space-y-2">
                     <Button variant="outline">Foto ändern</Button>
@@ -136,19 +178,19 @@ export default function SettingsPage() {
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="firstName">Vorname</Label>
-                    <Input id="firstName" defaultValue="Max" />
+                    <Input id="firstName" defaultValue={userProfile?.firstName || ''} />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="lastName">Nachname</Label>
-                    <Input id="lastName" defaultValue="Mustermann" />
+                    <Input id="lastName" defaultValue={userProfile?.lastName || ''} />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="email">E-Mail</Label>
-                    <Input id="email" type="email" defaultValue="max.mustermann@example.com" />
+                    <Input id="email" type="email" defaultValue={userProfile?.email || ''} />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="company">Unternehmen</Label>
-                    <Input id="company" defaultValue="Muster GmbH" />
+                    <Input id="company" defaultValue={userProfile?.company || ''} />
                   </div>
                 </div>
 
@@ -294,6 +336,51 @@ export default function SettingsPage() {
                       </div>
                     </div>
                     <Button variant="outline">Einrichten</Button>
+                  </div>
+                </div>
+
+                <div className="border-t pt-6">
+                  <h3 className="font-medium mb-4">Konto-Aktionen</h3>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between p-4 rounded-lg border border-red-200 bg-red-50 dark:bg-red-950 dark:border-red-800">
+                      <div>
+                        <div className="font-medium text-red-900 dark:text-red-100">Abmelden</div>
+                        <div className="text-sm text-red-700 dark:text-red-300">
+                          Melden Sie sich von Ihrem Konto ab
+                        </div>
+                      </div>
+                      <Button 
+                        variant="outline" 
+                        onClick={handleSignOut}
+                        disabled={isLoggingOut}
+                        className="border-red-300 text-red-700 hover:bg-red-100 dark:border-red-700 dark:text-red-300 dark:hover:bg-red-900"
+                      >
+                        {isLoggingOut ? (
+                          <>Wird abgemeldet...</>
+                        ) : (
+                          <>
+                            <LogOut className="w-4 h-4 mr-2" />
+                            Abmelden
+                          </>
+                        )}
+                      </Button>
+                    </div>
+
+                    <div className="flex items-center justify-between p-4 rounded-lg border border-red-200 bg-red-50 dark:bg-red-950 dark:border-red-800">
+                      <div>
+                        <div className="font-medium text-red-900 dark:text-red-100">Konto löschen</div>
+                        <div className="text-sm text-red-700 dark:text-red-300">
+                          Konto und alle Daten dauerhaft löschen
+                        </div>
+                      </div>
+                      <Button 
+                        variant="outline"
+                        className="border-red-300 text-red-700 hover:bg-red-100 dark:border-red-700 dark:text-red-300 dark:hover:bg-red-900"
+                      >
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        Konto löschen
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </CardContent>

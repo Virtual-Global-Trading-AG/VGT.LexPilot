@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { useAuthStore } from '@/lib/stores/authStore';
 import {
   BarChart3,
   FileText,
@@ -59,6 +60,29 @@ interface SidebarProps {
 export function Sidebar({ className }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const pathname = usePathname();
+  const { userProfile } = useAuthStore();
+
+  const getInitials = () => {
+    if (userProfile?.displayName) {
+      return userProfile.displayName.split(' ').map(n => n[0]).join('').toUpperCase();
+    }
+    if (userProfile?.firstName && userProfile?.lastName) {
+      return `${userProfile.firstName[0]}${userProfile.lastName[0]}`.toUpperCase();
+    }
+    if (userProfile?.email) {
+      return userProfile.email[0]?.toUpperCase() || 'U';
+    }
+    return 'U';
+  };
+
+  const getDisplayName = () => {
+    if (userProfile?.displayName) return userProfile.displayName;
+    if (userProfile?.firstName && userProfile?.lastName) {
+      return `${userProfile.firstName} ${userProfile.lastName}`;
+    }
+    if (userProfile?.firstName) return userProfile.firstName;
+    return 'Benutzer';
+  };
 
   return (
     <div
@@ -135,16 +159,16 @@ export function Sidebar({ className }: SidebarProps) {
       <div className="border-t border-border p-4">
         <div className="flex items-center space-x-3">
           <Avatar className="h-8 w-8">
-            <AvatarImage src="/avatars/user.jpg" alt="User" />
-            <AvatarFallback>MM</AvatarFallback>
+            <AvatarImage src={userProfile?.photoURL} alt="User" />
+            <AvatarFallback>{getInitials()}</AvatarFallback>
           </Avatar>
           {!collapsed && (
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-foreground truncate">
-                Max Mustermann
+                {getDisplayName()}
               </p>
               <p className="text-xs text-muted-foreground truncate">
-                max.mustermann@example.com
+                {userProfile?.email || 'Keine E-Mail'}
               </p>
             </div>
           )}
