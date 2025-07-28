@@ -72,7 +72,7 @@ Das Backend-Setup ist erfolgreich implementiert mit:
 - ✅ Regionales Deployment (europe-west6)
 - ✅ Alle Dependencies installiert und Build erfolgreich
 
-### 1.2 Frontend-Grundstruktur (Next.js 14)
+### 1.1 Frontend-Grundstruktur (Next.js 14)
 Projektstruktur
 
 frontend/src/
@@ -100,7 +100,7 @@ TODO:
 - [x] React Query für Server State Management
 - [x] WebSocket Client Setup (socket.io-client)
 
-## ✅ Schritt 1.2 ABGESCHLOSSEN!
+## ✅ Schritt 1.1 ABGESCHLOSSEN!
 
 Das Frontend-Setup ist erfolgreich implementiert mit:
 - ✅ Next.js 15.4.4 mit App Router und TypeScript Strict Mode
@@ -389,23 +389,10 @@ credentials.json
   // Multi-Language Embeddings für DACH Region
   class EmbeddingService {
     private models = {
-      // Primär: Multilingual E5 für DACH-Sprachen
-      multilingual: new HuggingFaceInferenceEmbeddings({
-        apiKey: process.env.HUGGINGFACE_API_KEY,
-        model: "intfloat/multilingual-e5-large", // 1024 dims, 94 Sprachen
-      }),
-      
-      // Fallback: OpenAI für Englisch/allgemeine Texte
       openai: new OpenAIEmbeddings({
         openAIApiKey: process.env.OPENAI_API_KEY,
-        modelName: "text-embedding-3-small", // 1536 dims, günstiger
+        modelName: "text-embedding-3-large"
       }),
-      
-      // Spezialisiert: Legal-BERT für Rechtstexte
-      legal: new HuggingFaceInferenceEmbeddings({
-        apiKey: process.env.HUGGINGFACE_API_KEY,
-        model: "nlpaueb/legal-bert-base-uncased", // 768 dims
-      })
     };
     
     async embedDocument(text: string, type: DocumentType): Promise<number[]> {
@@ -422,28 +409,20 @@ credentials.json
   class LLMFactory {
     createAnalysisLLM(): ChatOpenAI {
       return new ChatOpenAI({
-        modelName: "gpt-4-turbo-preview",
-        temperature: 0.1, // Niedrig für faktische Genauigkeit
+        modelName: process.env.OPENAI_API_MODELL,
+        temperature: 0.1,
         maxTokens: 4000,
         modelKwargs: {
-          response_format: { type: "json_object" } // Für strukturierte Outputs
+          response_format: { type: "json_object" }
         }
       });
     }
     
     createGenerationLLM(): ChatOpenAI {
       return new ChatOpenAI({
-        modelName: "gpt-3.5-turbo-1106", // Günstiger für Generation
+        modelName: process.env.OPENAI_API_MODELL // Günstiger für Generation
         temperature: 0.3,
         maxTokens: 2000
-      });
-    }
-    
-    createLocalLLM(): Ollama {
-      // Für sensitive Daten - lokales Modell
-      return new Ollama({
-        baseUrl: "http://localhost:11434",
-        model: "mixtral:8x7b", // Gute Performance für Deutsch
       });
     }
   }
@@ -1147,7 +1126,7 @@ Diese erweiterte TODO-Liste bietet dir nun:
 3. **Umfassende .gitignore** Konfiguration
 4. **Detaillierte LangChain Implementation** mit:
    - Spezifischen Embedding-Modellen (Multilingual E5, Legal-BERT)
-   - LLM-Auswahl (GPT-4, GPT-3.5, Ollama für lokale Verarbeitung)
+   - LLM-Auswahl (GPT-4.1)
    - Hierarchische TextSplitter für Rechtstexte
    - Multi-Agent System mit LangGraph
    - Hybrid Retrieval mit BM25 und Semantic Search
@@ -1183,9 +1162,7 @@ Legal-BERT - Spezialisiert für Rechtstexte
 
 LLM-Strategie:
 
-GPT-4 Turbo - Für kritische Analysen (Temperatur 0.1)
-GPT-3.5 Turbo - Für Generation und einfache Tasks
-Mixtral 8x7B (Ollama) - Lokale Option für sensitive Daten
+GPT-4.1 Turbo - Für kritische Analysen (Temperatur 0.1)
 
 Text-Splitting:
 
