@@ -14,6 +14,7 @@ import {
 
 // Import Route Modules
 import documentRoutes from './documentRoutes';
+import { createAuthRoutes } from './authRoutes';
 
 /**
  * Zentrale API-Router-Konfiguration
@@ -32,66 +33,11 @@ export function createApiRoutes(): Router {
   // ROUTE MODULES
   // ==========================================
   
+  // Authentication routes (no auth required by default)
+  router.use('/auth', createAuthRoutes());
+  
   // Document routes (with Firebase Storage integration)
   router.use('/documents', documentRoutes);
-
-  // ==========================================
-  // AUTHENTICATION ROUTES
-  // ==========================================
-  const authRouter = Router();
-  
-  // Rate Limiting für Auth-Endpunkte
-  authRouter.use(RateLimitMiddleware.authLimiter);
-
-  // Login/Logout - no auth required
-  authRouter.post('/login', 
-    ValidationMiddleware.validate({
-      body: Joi.object({
-        email: Joi.string().email().required(),
-        password: Joi.string().min(6).required()
-      })
-    }),
-    (req: Request, res: Response) => {
-      // TODO: Implementiere echte Login-Logik
-      res.json({ message: 'Login endpoint', endpoint: req.path });
-    }
-  );
-  
-  authRouter.post('/logout',
-    AuthMiddleware.authenticate,
-    (req: Request, res: Response) => {
-      // TODO: Implementiere echte Logout-Logik
-      res.json({ message: 'Logout endpoint', endpoint: req.path });
-    }
-  );
-
-  // Token Refresh
-  authRouter.post('/refresh',
-    ValidationMiddleware.validate({
-      body: Joi.object({
-        refreshToken: Joi.string().required()
-      })
-    }),
-    (req: Request, res: Response) => {
-      // TODO: Implementiere echte Refresh-Logik
-      res.json({ message: 'Refresh endpoint', endpoint: req.path });
-    }
-  );
-
-  // Password Reset
-  authRouter.post('/reset-password',
-    ValidationMiddleware.validate({
-      body: Joi.object({
-        email: Joi.string().email().required()
-      })
-    }),
-    (req: Request, res: Response) => {
-      // TODO: Implementiere echte Reset-Logik
-      res.json({ message: 'Reset password endpoint', endpoint: req.path });
-    }
-  );
-
-  router.use('/auth', authRouter);
 
   // ==========================================
   // USER ROUTES
@@ -549,20 +495,6 @@ export function createApiRoutes(): Router {
 /**
  * Exportiere individuelle Router für modulare Verwendung
  */
-export const createAuthRoutes = (): Router => {
-  const router = Router();
-  
-  const placeholderController = (req: Request, res: Response) => {
-    res.json({ message: 'Auth placeholder', endpoint: req.path });
-  };
-  
-  router.post('/login', placeholderController);
-  router.post('/logout', placeholderController);
-  router.post('/refresh', placeholderController);
-
-  return router;
-};
-
 export const createUserRoutes = (): Router => {
   const router = Router();
   

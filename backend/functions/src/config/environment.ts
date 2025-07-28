@@ -10,6 +10,7 @@ const envSchema = z.object({
   FIREBASE_PROJECT_ID: z.string().min(1),
   FIREBASE_PRIVATE_KEY: z.string().min(1),
   FIREBASE_CLIENT_EMAIL: z.string().email(),
+  FIREBASE_API_KEY: z.string().min(1),
   
   // OpenAI
   OPENAI_API_KEY: z.string().min(1),
@@ -88,6 +89,7 @@ export const config = {
     projectId: env.FIREBASE_PROJECT_ID,
     privateKey: env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
     clientEmail: env.FIREBASE_CLIENT_EMAIL,
+    apiKey: env.FIREBASE_API_KEY,
   },
   
   // OpenAI Config
