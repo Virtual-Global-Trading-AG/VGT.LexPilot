@@ -5,15 +5,17 @@ import { RateLimitMiddleware, rateLimitMiddleware } from '../middleware/rateLimi
 import { ValidationMiddleware, validationMiddleware } from '../middleware/validationMiddleware';
 
 // Import Controllers
-import { 
-  UserController, 
-  DocumentController, 
-  AnalysisController, 
-  AdminController 
+import {
+  UserController,
+  DocumentController,
+  AnalysisController,
+  AdminController
 } from '../controllers';
 
 // Import Route Modules
 import documentRoutes from './documentRoutes';
+import createAuthRoutes from './authRoutes';
+import adminRoutes from './adminRoutes';
 
 /**
  * Zentrale API-Router-Konfiguration
@@ -31,94 +33,27 @@ export function createApiRoutes(): Router {
   // ==========================================
   // ROUTE MODULES
   // ==========================================
-  
+
   // Document routes (with Firebase Storage integration)
   router.use('/documents', documentRoutes);
 
-  // ==========================================
-  // USER ROUTES
-  // ==========================================
-  const userRouter = Router();
-  
-  // Authentication required for all user routes
-  userRouter.use(AuthMiddleware.authenticate);
-  userRouter.use(RateLimitMiddleware.apiLimiter);
+  // Authentication routes (no auth required by default)
+  router.use('/auth', createAuthRoutes());
 
-  // Profile Management
-  userRouter.get('/profile', userController.getProfile.bind(userController));
-  
-  userRouter.put('/profile', 
-    ValidationMiddleware.validators.updateProfile,
-    userController.updateProfile.bind(userController)
-  );
-  
-  userRouter.delete('/profile', 
-    ValidationMiddleware.validate({
-      body: Joi.object({
-        confirmPassword: Joi.string().required()
-      })
-    }),
-    userController.deleteAccount.bind(userController)
-  );
+  // User routes (authentication required)
+  router.use('/users', createUserRoutes());
 
-  // User Statistics
-  userRouter.get('/stats', userController.getStats.bind(userController));
-  
-  userRouter.get('/usage', (req: Request, res: Response) => {
-    res.json({ message: 'Get usage endpoint', endpoint: req.path });
-  });
+  // Admin routes (authentication and admin required)
+  router.use('/admin', adminRoutes);
 
-  // Notifications
-  userRouter.get('/notifications', 
-    ValidationMiddleware.validate({
-      query: ValidationMiddleware.schemas.pagination
-    }),
-    userController.getNotifications.bind(userController)
-  );
-  
-  userRouter.put('/notifications/:notificationId/read', 
-    ValidationMiddleware.validate({
-      params: Joi.object({
-        notificationId: ValidationMiddleware.schemas.id
-      })
-    }),
-    userController.markNotificationRead.bind(userController)
-  );
-  
-  userRouter.delete('/notifications/:notificationId', 
-    ValidationMiddleware.validate({
-      params: Joi.object({
-        notificationId: ValidationMiddleware.schemas.id
-      })
-    }),
-    (req: Request, res: Response) => {
-      res.json({ message: 'Delete notification endpoint', endpoint: req.path });
-    }
-  );
 
-  // Preferences
-  userRouter.put('/preferences', 
-    ValidationMiddleware.validate({
-      body: Joi.object({
-        language: Joi.string().valid('de', 'en', 'fr', 'it').optional(),
-        timezone: Joi.string().optional(),
-        notifications: Joi.object({
-          email: Joi.boolean().optional(),
-          push: Joi.boolean().optional(),
-          sms: Joi.boolean().optional()
-        }).optional()
-      })
-    }),
-    userController.updatePreferences.bind(userController)
-  );
 
-  router.use('/users', userRouter);
 
   // ==========================================
   // ANALYSIS ROUTES
   // ==========================================
   const analysisRouter = Router();
-  
+
   // Authentication required for all analysis routes
   analysisRouter.use(AuthMiddleware.authenticate);
 
@@ -126,7 +61,7 @@ export function createApiRoutes(): Router {
   analysisRouter.use((req, res, next) => {
     const user = (req as any).user;
     const isPremium = user?.customClaims?.premium || user?.role === 'admin';
-    
+
     if (isPremium) {
       return RateLimitMiddleware.premiumAnalysisLimiter(req, res, next);
     } else {
@@ -135,14 +70,14 @@ export function createApiRoutes(): Router {
   });
 
   // Analysis Management
-  analysisRouter.get('/', 
+  analysisRouter.get('/',
     ValidationMiddleware.validate({
       query: ValidationMiddleware.schemas.pagination
     }),
     analysisController.getAnalyses.bind(analysisController)
   );
-  
-  analysisRouter.get('/:analysisId', 
+
+  analysisRouter.get('/:analysisId',
     ValidationMiddleware.validate({
       params: Joi.object({
         analysisId: ValidationMiddleware.schemas.id
@@ -150,13 +85,13 @@ export function createApiRoutes(): Router {
     }),
     analysisController.getAnalysis.bind(analysisController)
   );
-  
-  analysisRouter.post('/', 
+
+  analysisRouter.post('/',
     ValidationMiddleware.validators.analyzeDocument,
     analysisController.createAnalysis.bind(analysisController)
   );
-  
-  analysisRouter.delete('/:analysisId', 
+
+  analysisRouter.delete('/:analysisId',
     ValidationMiddleware.validate({
       params: Joi.object({
         analysisId: ValidationMiddleware.schemas.id
@@ -166,7 +101,7 @@ export function createApiRoutes(): Router {
   );
 
   // Analysis Operations
-  analysisRouter.post('/:analysisId/start', 
+  analysisRouter.post('/:analysisId/start',
     ValidationMiddleware.validate({
       params: Joi.object({
         analysisId: ValidationMiddleware.schemas.id
@@ -174,8 +109,8 @@ export function createApiRoutes(): Router {
     }),
     analysisController.startAnalysisOperation.bind(analysisController)
   );
-  
-  analysisRouter.post('/:analysisId/stop', 
+
+  analysisRouter.post('/:analysisId/stop',
     ValidationMiddleware.validate({
       params: Joi.object({
         analysisId: ValidationMiddleware.schemas.id
@@ -183,8 +118,8 @@ export function createApiRoutes(): Router {
     }),
     analysisController.stopAnalysisOperation.bind(analysisController)
   );
-  
-  analysisRouter.get('/:analysisId/results', 
+
+  analysisRouter.get('/:analysisId/results',
     ValidationMiddleware.validate({
       params: Joi.object({
         analysisId: ValidationMiddleware.schemas.id
@@ -192,8 +127,8 @@ export function createApiRoutes(): Router {
     }),
     analysisController.getAnalysisResults.bind(analysisController)
   );
-  
-  analysisRouter.get('/:analysisId/export', 
+
+  analysisRouter.get('/:analysisId/export',
     ValidationMiddleware.validate({
       params: Joi.object({
         analysisId: ValidationMiddleware.schemas.id
@@ -208,218 +143,10 @@ export function createApiRoutes(): Router {
   router.use('/analysis', analysisRouter);
 
   // ==========================================
-  // ADMIN ROUTES
-  // ==========================================
-  const adminRouter = Router();
-  
-  // Admin authentication required
-  adminRouter.use(AuthMiddleware.authenticate);
-  adminRouter.use(AuthMiddleware.requireAdmin);
-  adminRouter.use(RateLimitMiddleware.adminLimiter);
-
-  // System Management
-  adminRouter.get('/stats', adminController.getStats.bind(adminController));
-  
-  adminRouter.get('/health', (req: Request, res: Response) => {
-    res.json({ 
-      status: 'healthy',
-      timestamp: new Date().toISOString(),
-      uptime: process.uptime(),
-      version: process.env.npm_package_version || '1.0.0'
-    });
-  });
-  
-  adminRouter.get('/metrics', 
-    ValidationMiddleware.validate({
-      query: Joi.object({
-        from: Joi.date().iso().optional(),
-        to: Joi.date().iso().optional(),
-        granularity: Joi.string().valid('hour', 'day', 'week', 'month').default('day')
-      })
-    }),
-    (req: Request, res: Response) => {
-      res.json({ message: 'Get system metrics endpoint', endpoint: req.path });
-    }
-  );
-
-  // User Management
-  adminRouter.get('/users', 
-    ValidationMiddleware.validate({
-      query: Joi.object({
-        ...ValidationMiddleware.schemas.pagination,
-        status: Joi.string().valid('active', 'suspended', 'banned').optional(),
-        role: Joi.string().valid('user', 'premium', 'admin').optional()
-      })
-    }),
-    adminController.getUsers.bind(adminController)
-  );
-  
-  adminRouter.get('/users/:userId', 
-    ValidationMiddleware.validate({
-      params: Joi.object({
-        userId: ValidationMiddleware.schemas.id
-      })
-    }),
-    adminController.getUserById.bind(adminController)
-  );
-  
-  adminRouter.put('/users/:userId', 
-    ValidationMiddleware.validate({
-      params: Joi.object({
-        userId: ValidationMiddleware.schemas.id
-      }),
-      body: ValidationMiddleware.schemas.adminUserUpdate
-    }),
-    adminController.updateUser.bind(adminController)
-  );
-  
-  adminRouter.delete('/users/:userId', 
-    ValidationMiddleware.validate({
-      params: Joi.object({
-        userId: ValidationMiddleware.schemas.id
-      })
-    }),
-    adminController.deleteUser.bind(adminController)
-  );
-  
-  adminRouter.post('/users/:userId/suspend', 
-    ValidationMiddleware.validate({
-      params: Joi.object({
-        userId: ValidationMiddleware.schemas.id
-      }),
-      body: Joi.object({
-        reason: Joi.string().required(),
-        duration: Joi.number().integer().positive().optional()
-      })
-    }),
-    (req: Request, res: Response) => {
-      res.json({ message: 'Suspend user endpoint', endpoint: req.path });
-    }
-  );
-  
-  adminRouter.post('/users/:userId/unsuspend', 
-    ValidationMiddleware.validate({
-      params: Joi.object({
-        userId: ValidationMiddleware.schemas.id
-      })
-    }),
-    (req: Request, res: Response) => {
-      res.json({ message: 'Unsuspend user endpoint', endpoint: req.path });
-    }
-  );
-
-  // Analytics
-  adminRouter.get('/analytics/usage', 
-    ValidationMiddleware.validate({
-      query: Joi.object({
-        from: Joi.date().iso().optional(),
-        to: Joi.date().iso().optional(),
-        groupBy: Joi.string().valid('user', 'feature', 'time').default('time')
-      })
-    }),
-    (req: Request, res: Response) => {
-      res.json({ message: 'Get usage analytics endpoint', endpoint: req.path });
-    }
-  );
-  
-  adminRouter.get('/analytics/performance', 
-    ValidationMiddleware.validate({
-      query: Joi.object({
-        from: Joi.date().iso().optional(),
-        to: Joi.date().iso().optional(),
-        metric: Joi.string().valid('response_time', 'error_rate', 'throughput').optional()
-      })
-    }),
-    (req: Request, res: Response) => {
-      res.json({ message: 'Get performance analytics endpoint', endpoint: req.path });
-    }
-  );
-
-  // Audit Logs
-  adminRouter.get('/audit-logs', 
-    ValidationMiddleware.validate({
-      query: Joi.object({
-        ...ValidationMiddleware.schemas.pagination,
-        action: Joi.string().optional(),
-        userId: ValidationMiddleware.schemas.id.optional(),
-        from: Joi.date().iso().optional(),
-        to: Joi.date().iso().optional()
-      })
-    }),
-    (req: Request, res: Response) => {
-      res.json({ message: 'Get audit logs endpoint', endpoint: req.path });
-    }
-  );
-
-  // ==========================================
-  // RAG VECTOR STORE MANAGEMENT (ADMIN)
-  // ==========================================
-  
-  // Index Legal Texts for RAG
-  adminRouter.post('/legal-texts/index',
-    ValidationMiddleware.validate({
-      body: Joi.object({
-        texts: Joi.array().items(
-          Joi.object({
-            content: Joi.string().min(10).max(100000).required(),
-            title: Joi.string().min(1).max(255).required(),
-            source: Joi.string().min(1).max(100).required(),
-            jurisdiction: Joi.string().min(1).max(50).required(),
-            legalArea: Joi.string().min(1).max(100).required()
-          })
-        ).min(1).max(50).required()
-      })
-    }),
-    adminController.indexLegalTexts.bind(adminController)
-  );
-
-  // Search Legal Context (Admin Testing)
-  adminRouter.post('/legal-texts/search',
-    ValidationMiddleware.validate({
-      body: Joi.object({
-        query: Joi.string().min(3).max(1000).required(),
-        legalArea: Joi.string().max(100).optional(),
-        jurisdiction: Joi.string().max(50).optional(),
-        topK: Joi.number().integer().min(1).max(20).default(5)
-      })
-    }),
-    adminController.searchLegalContext.bind(adminController)
-  );
-
-  // Get Vector Store Statistics
-  adminRouter.get('/vector-store/stats',
-    adminController.getVectorStoreStats.bind(adminController)
-  );
-
-  // System Configuration
-  adminRouter.get('/config', (req: Request, res: Response) => {
-    res.json({ message: 'Get system config endpoint', endpoint: req.path });
-  });
-  
-  adminRouter.put('/config', 
-    ValidationMiddleware.validate({
-      body: Joi.object({
-        rateLimits: Joi.object().optional(),
-        features: Joi.object().optional(),
-        maintenance: Joi.object({
-          enabled: Joi.boolean().optional(),
-          message: Joi.string().optional(),
-          scheduledAt: Joi.date().iso().optional()
-        }).optional()
-      })
-    }),
-    (req: Request, res: Response) => {
-      res.json({ message: 'Update system config endpoint', endpoint: req.path });
-    }
-  );
-
-  router.use('/admin', adminRouter);
-
-  // ==========================================
   // PREMIUM ROUTES
   // ==========================================
   const premiumRouter = Router();
-  
+
   // Premium authentication required
   premiumRouter.use(AuthMiddleware.authenticate);
   premiumRouter.use(AuthMiddleware.requirePremium);
@@ -429,8 +156,8 @@ export function createApiRoutes(): Router {
   premiumRouter.get('/features', (req: Request, res: Response) => {
     res.json({ message: 'Get premium features endpoint', endpoint: req.path });
   });
-  
-  premiumRouter.get('/analytics', 
+
+  premiumRouter.get('/analytics',
     ValidationMiddleware.validate({
       query: Joi.object({
         from: Joi.date().iso().optional(),
@@ -444,7 +171,7 @@ export function createApiRoutes(): Router {
   );
 
   // Advanced Analysis
-  premiumRouter.post('/analysis/advanced', 
+  premiumRouter.post('/analysis/advanced',
     ValidationMiddleware.validate({
       body: Joi.object({
         documentIds: Joi.array().items(ValidationMiddleware.schemas.id).required(),
@@ -460,8 +187,8 @@ export function createApiRoutes(): Router {
       res.json({ message: 'Create advanced analysis endpoint', endpoint: req.path });
     }
   );
-  
-  premiumRouter.get('/analysis/batch', 
+
+  premiumRouter.get('/analysis/batch',
     ValidationMiddleware.validate({
       query: Joi.object({
         ...ValidationMiddleware.schemas.pagination,
@@ -478,7 +205,7 @@ export function createApiRoutes(): Router {
   // ==========================================
   // HEALTH CHECK & SYSTEM ROUTES
   // ==========================================
-  
+
   // Public health check (no auth required)
   router.get('/health', (req, res) => {
     res.json({
@@ -510,7 +237,7 @@ export function createApiRoutes(): Router {
   // ==========================================
   // ERROR HANDLING
   // ==========================================
-  
+
   // 404 Handler für unbekannte Routen
   router.use('*', (req, res) => {
     res.status(404).json({
@@ -533,7 +260,7 @@ export function createApiRoutes(): Router {
  */
 export const createUserRoutes = (): Router => {
   const router = Router();
-  
+
   const placeholderController = (req: Request, res: Response) => {
     res.json({ message: 'User placeholder', endpoint: req.path });
   };
@@ -547,7 +274,7 @@ export const createUserRoutes = (): Router => {
 
 export const createDocumentRoutes = (): Router => {
   const router = Router();
-  
+
   const placeholderController = (req: Request, res: Response) => {
     res.json({ message: 'Document placeholder', endpoint: req.path });
   };
@@ -561,7 +288,7 @@ export const createDocumentRoutes = (): Router => {
 
 export const createAnalysisRoutes = (): Router => {
   const router = Router();
-  
+
   const placeholderController = (req: Request, res: Response) => {
     res.json({ message: 'Analysis placeholder', endpoint: req.path });
   };
@@ -569,20 +296,6 @@ export const createAnalysisRoutes = (): Router => {
   router.get('/', placeholderController);
   router.post('/', placeholderController);
   router.get('/:analysisId', placeholderController);
-
-  return router;
-};
-
-export const createAdminRoutes = (): Router => {
-  const router = Router();
-  
-  const placeholderController = (req: Request, res: Response) => {
-    res.json({ message: 'Admin placeholder', endpoint: req.path });
-  };
-
-  router.get('/stats', placeholderController);
-  router.get('/users', placeholderController);
-  router.get('/health', placeholderController);
 
   return router;
 };

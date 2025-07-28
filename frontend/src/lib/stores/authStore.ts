@@ -1,9 +1,6 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
-import { User } from 'firebase/auth';
-import { onAuthStateChanged } from 'firebase/auth';
-import { auth } from '../firebase/config';
-import AuthService from '../firebase/auth';
+import AuthService from '../api/auth';
 
 export interface UserProfile {
   uid: string;
@@ -24,14 +21,15 @@ export interface UserProfile {
 
 interface AuthState {
   // State
-  user: User | null;
+  user: UserProfile | null;
   userProfile: UserProfile | null;
   loading: boolean;
   error: string | null;
   isAuthenticated: boolean;
+  accessToken: string | null;
 
   // Actions
-  setUser: (user: User | null) => void;
+  setUser: (user: UserProfile | null) => void;
   setUserProfile: (profile: UserProfile | null) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
@@ -48,9 +46,11 @@ interface AuthState {
   }) => Promise<boolean>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<boolean>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<boolean>;
   
   // Utility
-  initialize: () => void;
+  initialize: () => Promise<void>;
+  refreshAuth: () => Promise<boolean>;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -61,10 +61,12 @@ export const useAuthStore = create<AuthState>()(
     loading: true,
     error: null,
     isAuthenticated: false,
+    accessToken: null,
 
     // Actions
     setUser: (user) => set({ 
       user, 
+      userProfile: user, // In API mode, user and userProfile are the same
       isAuthenticated: !!user,
       loading: false 
     }),
@@ -84,13 +86,31 @@ export const useAuthStore = create<AuthState>()(
       try {
         const result = await AuthService.signIn({ email, password });
         
-        if (result.error) {
-          set({ error: result.error, loading: false });
+        if (!result.success) {
+          set({ error: result.error || 'Login failed', loading: false });
           return false;
         }
 
-        // User will be set by the auth state listener
-        return true;
+        if (result.user && result.tokens) {
+          set({ 
+            user: {
+              ...result.user,
+              role: (result.user.role as 'user' | 'premium' | 'admin') || 'user'
+            },
+            userProfile: {
+              ...result.user,
+              role: (result.user.role as 'user' | 'premium' | 'admin') || 'user'
+            },
+            isAuthenticated: true,
+            accessToken: result.tokens.idToken,
+            loading: false,
+            error: null
+          });
+          return true;
+        }
+
+        set({ error: 'Invalid response from server', loading: false });
+        return false;
       } catch (error) {
         set({ 
           error: 'Ein unerwarteter Fehler ist aufgetreten.', 
@@ -106,12 +126,13 @@ export const useAuthStore = create<AuthState>()(
       try {
         const result = await AuthService.register(data);
         
-        if (result.error) {
-          set({ error: result.error, loading: false });
+        if (!result.success) {
+          set({ error: result.error || 'Registration failed', loading: false });
           return false;
         }
 
-        // User will be set by the auth state listener
+        // After registration, user needs to verify email before signing in
+        set({ loading: false, error: null });
         return true;
       } catch (error) {
         set({ 
@@ -131,6 +152,7 @@ export const useAuthStore = create<AuthState>()(
           user: null, 
           userProfile: null, 
           isAuthenticated: false, 
+          accessToken: null,
           loading: false 
         });
       } catch (error) {
@@ -149,7 +171,7 @@ export const useAuthStore = create<AuthState>()(
         set({ loading: false });
         
         if (!result.success) {
-          set({ error: result.error });
+          set({ error: result.error || 'Password reset failed' });
           return false;
         }
         
@@ -163,73 +185,150 @@ export const useAuthStore = create<AuthState>()(
       }
     },
 
-    // Initialize auth state listener
-    initialize: () => {
-      if (typeof window === 'undefined') return;
+    changePassword: async (currentPassword, newPassword) => {
+      set({ loading: true, error: null });
+      
+      try {
+        const result = await AuthService.changePassword(currentPassword, newPassword);
+        set({ loading: false });
+        
+        if (!result.success) {
+          set({ error: result.error || 'Password change failed' });
+          return false;
+        }
+        
+        return true;
+      } catch (error) {
+        set({ 
+          error: 'Fehler beim Ändern des Passworts.', 
+          loading: false 
+        });
+        return false;
+      }
+    },
 
-      const unsubscribe = onAuthStateChanged(auth, async (user) => {
-        if (user) {
-          // Get user profile from backend
-          try {
-            const idToken = await user.getIdToken();
-            const response = await fetch('/api/auth/me', {
-              headers: {
-                'Authorization': `Bearer ${idToken}`,
-                'Content-Type': 'application/json',
-              },
-            });
+    // Refresh authentication state
+    refreshAuth: async () => {
+      const state = get();
+      if (!state.isAuthenticated) {
+        return false;
+      }
 
-            if (response.ok) {
-              const data = await response.json();
+      try {
+        const result = await AuthService.getCurrentUser();
+        
+        if (result.success && result.user) {
+          set({ 
+            user: {
+              ...result.user,
+              role: (result.user.role as 'user' | 'premium' | 'admin') || 'user'
+            },
+            userProfile: {
+              ...result.user,
+              role: (result.user.role as 'user' | 'premium' | 'admin') || 'user'
+            },
+            isAuthenticated: true,
+            accessToken: AuthService.getAccessToken()
+          });
+          return true;
+        } else {
+          // Token might be expired, try to refresh
+          const refreshResult = await AuthService.refreshTokens();
+          if (refreshResult.success) {
+            const userResult = await AuthService.getCurrentUser();
+            if (userResult.success && userResult.user) {
               set({ 
-                user,
-                userProfile: data.user?.profile,
-                isAuthenticated: true,
-                loading: false 
-              });
-            } else {
-              // Fallback to basic user info
-              set({ 
-                user,
+                user: {
+                  ...userResult.user,
+                  role: (userResult.user.role as 'user' | 'premium' | 'admin') || 'user'
+                },
                 userProfile: {
-                  uid: user.uid,
-                  email: user.email!,
-                  displayName: user.displayName || undefined,
-                  emailVerified: user.emailVerified,
-                  photoURL: user.photoURL || undefined,
+                  ...userResult.user,
+                  role: (userResult.user.role as 'user' | 'premium' | 'admin') || 'user'
                 },
                 isAuthenticated: true,
-                loading: false 
+                accessToken: AuthService.getAccessToken()
               });
+              return true;
             }
-          } catch (error) {
-            console.error('Error fetching user profile:', error);
-            // Fallback to basic user info
-            set({ 
-              user,
-              userProfile: {
-                uid: user.uid,
-                email: user.email!,
-                displayName: user.displayName || undefined,
-                emailVerified: user.emailVerified,
-                photoURL: user.photoURL || undefined,
-              },
-              isAuthenticated: true,
-              loading: false 
-            });
           }
-        } else {
+          
+          // Refresh failed, logout user
           set({ 
             user: null, 
             userProfile: null, 
             isAuthenticated: false, 
-            loading: false 
+            accessToken: null
           });
+          return false;
         }
-      });
+      } catch (error) {
+        console.error('Error refreshing auth:', error);
+        return false;
+      }
+    },
 
-      // Return cleanup function
-      return unsubscribe;
+    // Initialize auth state from stored tokens
+    initialize: async () => {
+      if (typeof window === 'undefined') return;
+
+      set({ loading: true });
+
+      try {
+        // Check if we have stored tokens
+        if (AuthService.isAuthenticated()) {
+          // Try to get current user with stored token
+          const result = await AuthService.getCurrentUser();
+          
+          if (result.success && result.user) {
+            set({ 
+              user: {
+                ...result.user,
+                role: (result.user.role as 'user' | 'premium' | 'admin') || 'user'
+              },
+              userProfile: {
+                ...result.user,
+                role: (result.user.role as 'user' | 'premium' | 'admin') || 'user'
+              },
+              isAuthenticated: true,
+              accessToken: AuthService.getAccessToken(),
+              loading: false 
+            });
+          } else {
+            // Token might be expired, try to refresh
+            const refreshResult = await AuthService.refreshTokens();
+            if (refreshResult.success) {
+              const userResult = await AuthService.getCurrentUser();
+              if (userResult.success && userResult.user) {
+                set({ 
+                  user: {
+                    ...userResult.user,
+                    role: (userResult.user.role as 'user' | 'premium' | 'admin') || 'user'
+                  },
+                  userProfile: {
+                    ...userResult.user,
+                    role: (userResult.user.role as 'user' | 'premium' | 'admin') || 'user'
+                  },
+                  isAuthenticated: true,
+                  accessToken: AuthService.getAccessToken(),
+                  loading: false 
+                });
+              } else {
+                set({ loading: false });
+              }
+            } else {
+              // Refresh failed, clear everything
+              AuthService.logout();
+              set({ loading: false });
+            }
+          }
+        } else {
+          set({ loading: false });
+        }
+      } catch (error) {
+        console.error('Error initializing auth:', error);
+        set({ loading: false });
+      }
     },
   }))
 );

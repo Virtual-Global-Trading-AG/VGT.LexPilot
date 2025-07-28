@@ -77,7 +77,7 @@ NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
 NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id
 
 # Backend API Configuration
-NEXT_PUBLIC_API_URL=http://localhost:5001/vgt-lexpilot/us-central1/api
+NEXT_PUBLIC_API_URL=localhost:
 ```
 
 ### 2. Firebase Setup
