@@ -33,9 +33,6 @@ export function createApiRoutes(): Router {
   // ROUTE MODULES
   // ==========================================
   
-  // Authentication routes (no auth required by default)
-  router.use('/auth', createAuthRoutes());
-  
   // Document routes (with Firebase Storage integration)
   router.use('/documents', documentRoutes);
 
