@@ -391,7 +391,7 @@ credentials.json
     private models = {
       openai: new OpenAIEmbeddings({
         openAIApiKey: process.env.OPENAI_API_KEY,
-        modelName: "text-embedding-3-large"
+        modelName: process.env.OPENAI_API_EMBEDDINGS_MODELL
       }),
     };
     
@@ -1042,7 +1042,7 @@ credentials.json
       
       try {
         const embeddings = await openai.embeddings.create({
-          model: "text-embedding-3-small",
+          model: process.env.OPENAI_API_EMBEDDINGS_MODELL,
           input: batch.map(item => item.text)
         });
         
@@ -1156,9 +1156,7 @@ Singleton Pattern für Logger und Services
 🤖 Detaillierte LangChain/RAG Implementation
 Embedding-Modelle:
 
-Multilingual E5 Large (HuggingFace) - Primär für DACH-Sprachen
-OpenAI text-embedding-3-small - Kosten-effizient als Fallback
-Legal-BERT - Spezialisiert für Rechtstexte
+OpenAI process.env.OPENAI_API_EMBEDDINGS_MODELL - Kosten-effizient als Fallback
 
 LLM-Strategie:
 

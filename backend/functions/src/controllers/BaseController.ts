@@ -88,7 +88,7 @@ export abstract class BaseController {
    */
   protected asyncHandler(fn: (req: Request, res: Response, next: Function) => Promise<void>) {
     return (req: Request, res: Response, next: Function) => {
-      Promise.resolve(fn(req, res, next)).catch(next);
+      Promise.resolve(fn(req, res, next)).catch((err) => next(err));
     };
   }
 }

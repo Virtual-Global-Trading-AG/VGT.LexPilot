@@ -13,7 +13,6 @@ interface DocumentAnalysisRequest {
 }
 
 export class AnalysisController extends BaseController {
-  private logger = Logger.getInstance();
 
   /**
    * Start document analysis
@@ -128,6 +127,13 @@ export class AnalysisController extends BaseController {
       const { analysisId } = req.params;
       const { format = 'json' } = req.query;
 
+      if (!analysisId) {
+        res.status(400).json({
+          error: 'Missing analysisId parameter'
+        });
+        return;
+      }
+
       const analysis = await this.getAnalysisById(analysisId, userId);
       
       if (!analysis) {
@@ -184,6 +190,13 @@ export class AnalysisController extends BaseController {
     try {
       const userId = this.getUserId(req);
       const { analysisId } = req.params;
+
+      if (!analysisId) {
+        res.status(400).json({
+          error: 'Missing analysisId parameter'
+        });
+        return;
+      }
 
       const analysis = await this.getAnalysisById(analysisId, userId);
       
