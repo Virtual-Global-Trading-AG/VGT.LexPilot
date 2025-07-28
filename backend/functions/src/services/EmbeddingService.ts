@@ -1,7 +1,7 @@
 import { OpenAIEmbeddings } from '@langchain/openai';
 import { Document } from 'langchain/document';
-import { Logger } from '../utils/Logger';
-import { EnvironmentConfig } from '../config/environment';
+import { Logger } from '../utils/logger';
+import { env } from '../config/environment';
 
 export enum DocumentType {
   CONTRACT = 'contract',
@@ -45,8 +45,8 @@ export class EmbeddingService {
   private initializeModels(): void {
     // Standard OpenAI Embedding Model
     this.models.set('openai', new OpenAIEmbeddings({
-      openAIApiKey: EnvironmentConfig.OPENAI_API_KEY,
-      modelName: EnvironmentConfig.OPENAI_EMBEDDINGS_MODEL || 'text-embedding-3-small',
+      openAIApiKey: env.OPENAI_API_KEY,
+      modelName: env.OPENAI_EMBEDDINGS_MODEL || 'text-embedding-3-small',
       dimensions: 1536, // Standard dimension for text-embedding-3-small
       maxRetries: 3,
       timeout: 30000
@@ -54,7 +54,7 @@ export class EmbeddingService {
 
     // Kleineres, günstigeres Model für einfache Texte
     this.models.set('openai-small', new OpenAIEmbeddings({
-      openAIApiKey: EnvironmentConfig.OPENAI_API_KEY,
+      openAIApiKey: env.OPENAI_API_KEY,
       modelName: 'text-embedding-3-small',
       dimensions: 512, // Reduzierte Dimensionen für bessere Performance
       maxRetries: 3,
@@ -63,7 +63,7 @@ export class EmbeddingService {
 
     // Größeres Model für komplexe juristische Texte
     this.models.set('openai-large', new OpenAIEmbeddings({
-      openAIApiKey: EnvironmentConfig.OPENAI_API_KEY,
+      openAIApiKey: env.OPENAI_API_KEY,
       modelName: 'text-embedding-3-large',
       dimensions: 3072, // Volle Dimensionen für beste Qualität
       maxRetries: 3,
@@ -94,8 +94,7 @@ export class EmbeddingService {
       return await this.getEmbeddingBatched(text, metadata);
       
     } catch (error) {
-      this.logger.error('Error creating embedding', {
-        error: error instanceof Error ? error.message : String(error),
+      this.logger.error('Error creating embedding', error instanceof Error ? error : new Error(String(error)), {
         documentType: type,
         textLength: text.length
       });
@@ -203,7 +202,12 @@ export class EmbeddingService {
         const embeddings = await model.embedDocuments(texts);
         
         items.forEach((item, index) => {
-          item.resolve(embeddings[index]);
+          const embedding = embeddings[index];
+          if (embedding) {
+            item.resolve(embedding);
+          } else {
+            item.reject(new Error(`No embedding received for index ${index}`));
+          }
         });
       }
 
@@ -214,8 +218,7 @@ export class EmbeddingService {
       });
 
     } catch (error) {
-      this.logger.error('Error processing embedding batch', {
-        error: error instanceof Error ? error.message : String(error),
+      this.logger.error('Error processing embedding batch', error instanceof Error ? error : new Error(String(error)), {
         batchSize: batch.length
       });
       
