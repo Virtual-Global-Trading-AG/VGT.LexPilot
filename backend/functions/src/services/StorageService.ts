@@ -27,7 +27,7 @@ export interface StorageQuotaInfo {
 export class StorageService {
   private readonly logger = Logger.getInstance();
   private readonly storage: Storage;
-  private readonly bucket: admin.storage.Bucket;
+  private readonly bucket: any; // Firebase admin bucket type
 
   constructor() {
     // Initialize Firebase Admin if not already done

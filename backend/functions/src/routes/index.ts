@@ -12,6 +12,9 @@ import {
   AdminController 
 } from '../controllers';
 
+// Import Route Modules
+import documentRoutes from './documentRoutes';
+
 /**
  * Zentrale API-Router-Konfiguration
  * Integriert alle Middleware-Komponenten und Controller
@@ -24,6 +27,13 @@ export function createApiRoutes(): Router {
   const documentController = new DocumentController();
   const analysisController = new AnalysisController();
   const adminController = new AdminController();
+
+  // ==========================================
+  // ROUTE MODULES
+  // ==========================================
+  
+  // Document routes (with Firebase Storage integration)
+  router.use('/documents', documentRoutes);
 
   // ==========================================
   // AUTHENTICATION ROUTES
@@ -161,70 +171,6 @@ export function createApiRoutes(): Router {
   );
 
   router.use('/users', userRouter);
-
-  // ==========================================
-  // DOCUMENT ROUTES
-  // ==========================================
-  const documentRouter = Router();
-  
-  // Authentication required for all document routes
-  documentRouter.use(AuthMiddleware.authenticate);
-  documentRouter.use(RateLimitMiddleware.apiLimiter);
-
-  // Document Management
-  documentRouter.get('/', 
-    ValidationMiddleware.validate({
-      query: ValidationMiddleware.schemas.pagination
-    }),
-    documentController.getDocuments.bind(documentController)
-  );
-  
-  documentRouter.get('/:documentId', 
-    ValidationMiddleware.validators.getDocument,
-    documentController.getDocument.bind(documentController)
-  );
-  
-  documentRouter.post('/', 
-    RateLimitMiddleware.uploadLimiter,
-    ValidationMiddleware.validators.uploadDocument,
-    documentController.uploadDocument.bind(documentController)
-  );
-  
-  documentRouter.put('/:documentId', 
-    ValidationMiddleware.validate({
-      params: Joi.object({
-        documentId: ValidationMiddleware.schemas.id
-      }),
-      body: Joi.object({
-        title: Joi.string().min(1).max(200).optional(),
-        description: Joi.string().max(1000).optional(),
-        tags: Joi.array().items(Joi.string()).optional()
-      })
-    }),
-    documentController.updateDocument.bind(documentController)
-  );
-  
-  documentRouter.delete('/:documentId', 
-    ValidationMiddleware.validate({
-      params: Joi.object({
-        documentId: ValidationMiddleware.schemas.id
-      })
-    }),
-    documentController.deleteDocument.bind(documentController)
-  );
-
-  // Document Content
-  documentRouter.get('/:documentId/content', 
-    ValidationMiddleware.validators.getDocument,
-    documentController.getDocumentContent.bind(documentController)
-  );
-  
-  documentRouter.get('/:documentId/download', 
-    ValidationMiddleware.validators.getDocument,
-    documentController.downloadDocument.bind(documentController)
-  );
-
-  router.use('/documents', documentRouter);
 
   // ==========================================
   // ANALYSIS ROUTES
