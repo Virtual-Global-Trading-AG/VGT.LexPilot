@@ -75,8 +75,8 @@ Das Backend-Setup ist erfolgreich implementiert mit:
 ### 1.2 Frontend-Grundstruktur (Next.js 14)
 Projektstruktur
 
-frontend/
-├── app/                 # App Router
+frontend/src/
+├── app/                # App Router
 │   ├── (auth)/         # Auth-geschützte Routes
 │   ├── (public)/       # Öffentliche Routes
 │   └── api/            # API Routes
@@ -92,8 +92,8 @@ frontend/
 
 TODO:
 
-- [] Next.js (neuste Version) mit App Router initialisieren
-- [] Tailwind CSS 4 konfigurieren
+- [x] Next.js (neuste Version) mit App Router initialisieren
+- [x] Tailwind CSS 4 konfigurieren
 - [] Shadcn UI installieren und Theme anpassen
 - [] TypeScript Strict Mode aktivieren
 - [] Zustand oder Redux Toolkit für State Management
