@@ -17,7 +17,7 @@ export class DocumentController extends BaseController {
 
   /**
    * Upload document
-   * POST /api/documents/upload
+   * POST /api/documents/
    */
   public async uploadDocument(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
@@ -93,7 +93,7 @@ export class DocumentController extends BaseController {
         return;
       }
 
-      res.json({
+      this.sendSuccess(res, {
         documentId,
         fileName: document.fileName,
         contentType: document.contentType,
@@ -118,7 +118,7 @@ export class DocumentController extends BaseController {
    * List user documents
    * GET /api/documents
    */
-  public async listDocuments(req: Request, res: Response, next: NextFunction): Promise<void> {
+  public async getDocuments(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const userId = this.getUserId(req);
       const pagination = this.getPaginationParams(req.query);
@@ -132,7 +132,7 @@ export class DocumentController extends BaseController {
         category: category as string
       });
 
-      res.json({
+      this.sendSuccess(res, {
         documents: documents.items,
         pagination: {
           page: documents.page,
@@ -140,12 +140,57 @@ export class DocumentController extends BaseController {
           total: documents.total,
           totalPages: documents.totalPages
         }
-      });
+      }, 'Documents retrieved successfully');
 
     } catch (error) {
       this.logger.error('List documents failed', error as Error, {
         userId: this.getUserId(req),
         query: req.query
+      });
+      next(error);
+    }
+  }
+
+  /**
+   * Update document metadata
+   * PUT /api/documents/:documentId
+   */
+  public async updateDocument(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = this.getUserId(req);
+      const { documentId } = req.params;
+      const { title, description, tags } = req.body;
+
+      if (!documentId) {
+        this.sendError(res, 400, 'Missing documentId parameter');
+        return;
+      }
+
+      // Check if document exists and user has access
+      const document = await this.getDocumentById(documentId, userId);
+      if (!document) {
+        this.sendError(res, 404, 'Document not found');
+        return;
+      }
+
+      // Update document metadata
+      await this.updateDocumentMetadata(documentId, userId, {
+        title,
+        description,
+        tags,
+        updatedAt: new Date().toISOString()
+      });
+
+      this.sendSuccess(res, {
+        documentId,
+        message: 'Document updated successfully'
+      });
+
+    } catch (error) {
+      this.logger.error('Update document failed', error as Error, {
+        userId: this.getUserId(req),
+        documentId: req.params.documentId,
+        body: req.body
       });
       next(error);
     }
@@ -165,28 +210,70 @@ export class DocumentController extends BaseController {
         return;
       }
 
+      // Check if document exists and user has access
       const document = await this.getDocumentById(documentId, userId);
-      
       if (!document) {
         this.sendError(res, 404, 'Document not found');
         return;
       }
 
-      // Check if document has active analyses
+      // Check if there are active analyses
       const activeAnalyses = await this.getActiveAnalyses(documentId);
       if (activeAnalyses.length > 0) {
         this.sendError(res, 409, 'Cannot delete document with active analyses', 
-          'Please cancel or wait for analyses to complete');
+          'Please stop or complete all analyses before deleting the document');
         return;
       }
 
       // Delete document and associated data
       await this.deleteDocumentAndData(documentId, userId);
 
-      this.sendSuccess(res, { documentId }, 'Document deleted successfully');
+      this.sendSuccess(res, {
+        documentId,
+        message: 'Document deleted successfully'
+      });
 
     } catch (error) {
       this.logger.error('Delete document failed', error as Error, {
+        userId: this.getUserId(req),
+        documentId: req.params.documentId
+      });
+      next(error);
+    }
+  }
+
+  /**
+   * Get document content
+   * GET /api/documents/:documentId/content
+   */
+  public async getDocumentContent(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = this.getUserId(req);
+      const { documentId } = req.params;
+
+      if (!documentId) {
+        this.sendError(res, 400, 'Missing documentId parameter');
+        return;
+      }
+
+      const document = await this.getDocumentById(documentId, userId);
+      if (!document) {
+        this.sendError(res, 404, 'Document not found');
+        return;
+      }
+
+      // Get processed content if available
+      const content = await this.getDocumentProcessedContent(documentId);
+      
+      this.sendSuccess(res, {
+        documentId,
+        content: content || null,
+        contentType: document.contentType,
+        isProcessed: !!content
+      });
+
+    } catch (error) {
+      this.logger.error('Get document content failed', error as Error, {
         userId: this.getUserId(req),
         documentId: req.params.documentId
       });
@@ -209,16 +296,15 @@ export class DocumentController extends BaseController {
       }
 
       const document = await this.getDocumentById(documentId, userId);
-      
       if (!document) {
         this.sendError(res, 404, 'Document not found');
         return;
       }
 
-      // Generate download URL
+      // Generate signed download URL
       const downloadUrl = await this.generateDownloadUrl(documentId);
 
-      res.json({
+      this.sendSuccess(res, {
         downloadUrl,
         fileName: document.fileName,
         contentType: document.contentType,
@@ -235,14 +321,17 @@ export class DocumentController extends BaseController {
     }
   }
 
-  // Private helper methods
+  // ==========================================
+  // PRIVATE HELPER METHODS
+  // ==========================================
+
   private async validateFileUpload(contentType: string, size: number): Promise<void> {
     const allowedTypes = [
       'application/pdf',
       'application/msword',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       'text/plain',
-      'text/html'
+      'text/csv'
     ];
 
     if (!allowedTypes.includes(contentType)) {
@@ -290,6 +379,11 @@ export class DocumentController extends BaseController {
     };
   }
 
+  private async updateDocumentMetadata(documentId: string, userId: string, metadata: any): Promise<void> {
+    // TODO: Implement document metadata update
+    return Promise.resolve();
+  }
+
   private async getActiveAnalyses(documentId: string): Promise<any[]> {
     // TODO: Implement active analyses check
     return [];
@@ -298,6 +392,11 @@ export class DocumentController extends BaseController {
   private async deleteDocumentAndData(documentId: string, userId: string): Promise<void> {
     // TODO: Implement document and data deletion
     return Promise.resolve();
+  }
+
+  private async getDocumentProcessedContent(documentId: string): Promise<string | null> {
+    // TODO: Implement processed content retrieval
+    return null;
   }
 
   private async generateDownloadUrl(documentId: string): Promise<string> {

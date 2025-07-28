@@ -46,8 +46,87 @@ export class AdminController extends BaseController {
   private db = getFirestore();
 
   /**
-   * Admin middleware - verify admin role
+   * Get system statistics
+   * GET /api/admin/stats
    */
+  public async getStats(req: Request, res: Response, next: NextFunction): Promise<void> {
+    return this.getSystemStats(req, res, next);
+  }
+
+  /**
+   * Get system health
+   * GET /api/admin/health
+   */
+  public async getHealth(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const adminId = this.getUserId(req);
+      this.logger.info('Admin health check requested', { adminId });
+
+      const health = await this.checkSystemHealth();
+
+      this.sendSuccess(res, {
+        status: health.status,
+        checks: health.checks,
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime()
+      });
+
+    } catch (error) {
+      this.logger.error('Get system health failed', error as Error, {
+        adminId: this.getUserId(req)
+      });
+      next(error);
+    }
+  }
+
+  /**
+   * Get system metrics
+   * GET /api/admin/metrics
+   */
+  public async getMetrics(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const adminId = this.getUserId(req);
+      const { from, to, granularity = 'day' } = req.query;
+
+      this.logger.info('Admin metrics requested', { 
+        adminId, 
+        from, 
+        to, 
+        granularity 
+      });
+
+      const metrics = await this.getSystemMetrics({
+        from: from ? new Date(from as string) : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+        to: to ? new Date(to as string) : new Date(),
+        granularity: granularity as string
+      });
+
+      this.sendSuccess(res, { metrics });
+
+    } catch (error) {
+      this.logger.error('Get system metrics failed', error as Error, {
+        adminId: this.getUserId(req),
+        query: req.query
+      });
+      next(error);
+    }
+  }
+
+  /**
+   * Get all users
+   * GET /api/admin/users
+   */
+  public async getUsers(req: Request, res: Response, next: NextFunction): Promise<void> {
+    return this.listUsers(req, res, next);
+  }
+
+  /**
+   * Get user by ID
+   * GET /api/admin/users/:userId
+   */
+  public async getUserById(req: Request, res: Response, next: NextFunction): Promise<void> {
+    return this.getUserDetails(req, res, next);
+  }
   static requireAdmin = (req: Request, res: Response, next: NextFunction): void => {
     try {
       const user = (req as any).user;
@@ -622,5 +701,165 @@ export class AdminController extends BaseController {
     batch.delete(this.db.collection('users').doc(userId));
 
     await batch.commit();
+  }
+
+  private async checkSystemHealth(): Promise<{status: 'healthy' | 'degraded' | 'unhealthy', checks: any[]}> {
+    const checks = [];
+    let overallStatus: 'healthy' | 'degraded' | 'unhealthy' = 'healthy';
+
+    try {
+      // Database connectivity check
+      const dbStart = Date.now();
+      await this.db.collection('health').limit(1).get();
+      const dbTime = Date.now() - dbStart;
+      
+      checks.push({
+        name: 'database',
+        status: dbTime < 1000 ? 'healthy' : 'degraded',
+        responseTime: `${dbTime}ms`,
+        message: dbTime < 1000 ? 'Database responding normally' : 'Database response slow'
+      });
+
+      if (dbTime >= 1000) overallStatus = 'degraded';
+
+      // Auth service check
+      try {
+        const authStart = Date.now();
+        await getAuth().listUsers(1);
+        const authTime = Date.now() - authStart;
+        
+        checks.push({
+          name: 'auth',
+          status: authTime < 500 ? 'healthy' : 'degraded',
+          responseTime: `${authTime}ms`,
+          message: authTime < 500 ? 'Auth service responding normally' : 'Auth service response slow'
+        });
+
+        if (authTime >= 500) overallStatus = 'degraded';
+      } catch (error) {
+        checks.push({
+          name: 'auth',
+          status: 'unhealthy',
+          responseTime: 'N/A',
+          message: 'Auth service error: ' + (error as Error).message
+        });
+        overallStatus = 'unhealthy';
+      }
+
+      // Memory usage check
+      const memUsage = process.memoryUsage();
+      const memUsagePercent = (memUsage.heapUsed / memUsage.heapTotal) * 100;
+      
+      checks.push({
+        name: 'memory',
+        status: memUsagePercent < 80 ? 'healthy' : memUsagePercent < 95 ? 'degraded' : 'unhealthy',
+        usage: `${Math.round(memUsagePercent)}%`,
+        message: `Memory usage: ${Math.round(memUsage.heapUsed / 1024 / 1024)}MB / ${Math.round(memUsage.heapTotal / 1024 / 1024)}MB`
+      });
+
+      if (memUsagePercent >= 95) overallStatus = 'unhealthy';
+      else if (memUsagePercent >= 80) overallStatus = 'degraded';
+
+      return { status: overallStatus, checks };
+
+    } catch (error) {
+      this.logger.error('System health check failed', error as Error);
+      return {
+        status: 'unhealthy',
+        checks: [{
+          name: 'system',
+          status: 'unhealthy',
+          message: 'Health check failed: ' + (error as Error).message
+        }]
+      };
+    }
+  }
+
+  private async getSystemMetrics(options: {
+    from: Date;
+    to: Date;
+    granularity: string;
+  }): Promise<any> {
+    const { from, to, granularity } = options;
+
+    try {
+      // TODO: Implement actual metrics collection based on granularity
+      // This is a placeholder implementation
+      
+      const timeDiff = to.getTime() - from.getTime();
+      const timePoints = granularity === 'hour' ? 
+        Math.ceil(timeDiff / (1000 * 60 * 60)) : 
+        Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
+
+      const metrics = {
+        timeseries: [] as any[],
+        summary: {
+          period: {
+            from: from.toISOString(),
+            to: to.toISOString(),
+            granularity
+          },
+          users: {
+            active: 0,
+            newSignups: 0,
+            retention: 0
+          },
+          documents: {
+            uploaded: 0,
+            totalSize: 0,
+            averageSize: 0
+          },
+          analyses: {
+            started: 0,
+            completed: 0,
+            failed: 0,
+            averageTime: 0
+          },
+          costs: {
+            total: 0,
+            perUser: 0,
+            perAnalysis: 0
+          },
+          performance: {
+            averageResponseTime: 0,
+            errorRate: 0,
+            uptime: 99.9
+          }
+        }
+      };
+
+      // Generate time series data points
+      for (let i = 0; i < Math.min(timePoints, 100); i++) {
+        const timestamp = new Date(from.getTime() + (i * timeDiff / timePoints));
+        
+        metrics.timeseries.push({
+          timestamp: timestamp.toISOString(),
+          users: {
+            active: Math.floor(Math.random() * 100),
+            newSignups: Math.floor(Math.random() * 10)
+          },
+          documents: {
+            uploaded: Math.floor(Math.random() * 50),
+            totalSize: Math.floor(Math.random() * 1000000)
+          },
+          analyses: {
+            started: Math.floor(Math.random() * 20),
+            completed: Math.floor(Math.random() * 18),
+            failed: Math.floor(Math.random() * 2)
+          },
+          costs: Math.random() * 100,
+          performance: {
+            responseTime: 100 + Math.random() * 200,
+            errorRate: Math.random() * 0.05
+          }
+        });
+      }
+
+      return metrics;
+
+    } catch (error) {
+      this.logger.error('Get system metrics failed', error as Error, { options });
+      throw new Error('Failed to retrieve system metrics');
+    }
   }
 }

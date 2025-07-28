@@ -4,12 +4,26 @@ import { AuthMiddleware, authenticate, requireAdmin, requirePremium } from '../m
 import { RateLimitMiddleware, rateLimitMiddleware } from '../middleware/rateLimitMiddleware';
 import { ValidationMiddleware, validationMiddleware } from '../middleware/validationMiddleware';
 
+// Import Controllers
+import { 
+  UserController, 
+  DocumentController, 
+  AnalysisController, 
+  AdminController 
+} from '../controllers';
+
 /**
  * Zentrale API-Router-Konfiguration
  * Integriert alle Middleware-Komponenten und Controller
  */
 export function createApiRoutes(): Router {
   const router = Router();
+
+  // Controller Instanzen erstellen
+  const userController = new UserController();
+  const documentController = new DocumentController();
+  const analysisController = new AnalysisController();
+  const adminController = new AdminController();
 
   // ==========================================
   // AUTHENTICATION ROUTES
@@ -79,15 +93,11 @@ export function createApiRoutes(): Router {
   userRouter.use(RateLimitMiddleware.apiLimiter);
 
   // Profile Management
-  userRouter.get('/profile', (req: Request, res: Response) => {
-    res.json({ message: 'Get profile endpoint', endpoint: req.path });
-  });
+  userRouter.get('/profile', userController.getProfile.bind(userController));
   
   userRouter.put('/profile', 
     ValidationMiddleware.validators.updateProfile,
-    (req: Request, res: Response) => {
-      res.json({ message: 'Update profile endpoint', endpoint: req.path });
-    }
+    userController.updateProfile.bind(userController)
   );
   
   userRouter.delete('/profile', 
@@ -96,15 +106,11 @@ export function createApiRoutes(): Router {
         confirmPassword: Joi.string().required()
       })
     }),
-    (req: Request, res: Response) => {
-      res.json({ message: 'Delete profile endpoint', endpoint: req.path });
-    }
+    userController.deleteAccount.bind(userController)
   );
 
   // User Statistics
-  userRouter.get('/stats', (req: Request, res: Response) => {
-    res.json({ message: 'Get stats endpoint', endpoint: req.path });
-  });
+  userRouter.get('/stats', userController.getStats.bind(userController));
   
   userRouter.get('/usage', (req: Request, res: Response) => {
     res.json({ message: 'Get usage endpoint', endpoint: req.path });
@@ -115,9 +121,7 @@ export function createApiRoutes(): Router {
     ValidationMiddleware.validate({
       query: ValidationMiddleware.schemas.pagination
     }),
-    (req: Request, res: Response) => {
-      res.json({ message: 'Get notifications endpoint', endpoint: req.path });
-    }
+    userController.getNotifications.bind(userController)
   );
   
   userRouter.put('/notifications/:notificationId/read', 
@@ -126,9 +130,7 @@ export function createApiRoutes(): Router {
         notificationId: ValidationMiddleware.schemas.id
       })
     }),
-    (req: Request, res: Response) => {
-      res.json({ message: 'Mark notification read endpoint', endpoint: req.path });
-    }
+    userController.markNotificationRead.bind(userController)
   );
   
   userRouter.delete('/notifications/:notificationId', 
@@ -155,9 +157,7 @@ export function createApiRoutes(): Router {
         }).optional()
       })
     }),
-    (req: Request, res: Response) => {
-      res.json({ message: 'Update preferences endpoint', endpoint: req.path });
-    }
+    userController.updatePreferences.bind(userController)
   );
 
   router.use('/users', userRouter);
@@ -176,24 +176,18 @@ export function createApiRoutes(): Router {
     ValidationMiddleware.validate({
       query: ValidationMiddleware.schemas.pagination
     }),
-    (req: Request, res: Response) => {
-      res.json({ message: 'Get documents endpoint', endpoint: req.path });
-    }
+    documentController.getDocuments.bind(documentController)
   );
   
   documentRouter.get('/:documentId', 
     ValidationMiddleware.validators.getDocument,
-    (req: Request, res: Response) => {
-      res.json({ message: 'Get document endpoint', endpoint: req.path });
-    }
+    documentController.getDocument.bind(documentController)
   );
   
   documentRouter.post('/', 
     RateLimitMiddleware.uploadLimiter,
     ValidationMiddleware.validators.uploadDocument,
-    (req: Request, res: Response) => {
-      res.json({ message: 'Upload document endpoint', endpoint: req.path });
-    }
+    documentController.uploadDocument.bind(documentController)
   );
   
   documentRouter.put('/:documentId', 
@@ -207,9 +201,7 @@ export function createApiRoutes(): Router {
         tags: Joi.array().items(Joi.string()).optional()
       })
     }),
-    (req: Request, res: Response) => {
-      res.json({ message: 'Update document endpoint', endpoint: req.path });
-    }
+    documentController.updateDocument.bind(documentController)
   );
   
   documentRouter.delete('/:documentId', 
@@ -218,24 +210,18 @@ export function createApiRoutes(): Router {
         documentId: ValidationMiddleware.schemas.id
       })
     }),
-    (req: Request, res: Response) => {
-      res.json({ message: 'Delete document endpoint', endpoint: req.path });
-    }
+    documentController.deleteDocument.bind(documentController)
   );
 
   // Document Content
   documentRouter.get('/:documentId/content', 
     ValidationMiddleware.validators.getDocument,
-    (req: Request, res: Response) => {
-      res.json({ message: 'Get document content endpoint', endpoint: req.path });
-    }
+    documentController.getDocumentContent.bind(documentController)
   );
   
   documentRouter.get('/:documentId/download', 
     ValidationMiddleware.validators.getDocument,
-    (req: Request, res: Response) => {
-      res.json({ message: 'Download document endpoint', endpoint: req.path });
-    }
+    documentController.downloadDocument.bind(documentController)
   );
 
   router.use('/documents', documentRouter);
@@ -265,9 +251,7 @@ export function createApiRoutes(): Router {
     ValidationMiddleware.validate({
       query: ValidationMiddleware.schemas.pagination
     }),
-    (req: Request, res: Response) => {
-      res.json({ message: 'Get analyses endpoint', endpoint: req.path });
-    }
+    analysisController.getAnalyses.bind(analysisController)
   );
   
   analysisRouter.get('/:analysisId', 
@@ -276,16 +260,12 @@ export function createApiRoutes(): Router {
         analysisId: ValidationMiddleware.schemas.id
       })
     }),
-    (req: Request, res: Response) => {
-      res.json({ message: 'Get analysis endpoint', endpoint: req.path });
-    }
+    analysisController.getAnalysis.bind(analysisController)
   );
   
   analysisRouter.post('/', 
     ValidationMiddleware.validators.analyzeDocument,
-    (req: Request, res: Response) => {
-      res.json({ message: 'Create analysis endpoint', endpoint: req.path });
-    }
+    analysisController.createAnalysis.bind(analysisController)
   );
   
   analysisRouter.delete('/:analysisId', 
@@ -294,9 +274,7 @@ export function createApiRoutes(): Router {
         analysisId: ValidationMiddleware.schemas.id
       })
     }),
-    (req: Request, res: Response) => {
-      res.json({ message: 'Delete analysis endpoint', endpoint: req.path });
-    }
+    analysisController.deleteAnalysis.bind(analysisController)
   );
 
   // Analysis Operations
@@ -306,9 +284,7 @@ export function createApiRoutes(): Router {
         analysisId: ValidationMiddleware.schemas.id
       })
     }),
-    (req: Request, res: Response) => {
-      res.json({ message: 'Start analysis endpoint', endpoint: req.path });
-    }
+    analysisController.startAnalysisOperation.bind(analysisController)
   );
   
   analysisRouter.post('/:analysisId/stop', 
@@ -317,9 +293,7 @@ export function createApiRoutes(): Router {
         analysisId: ValidationMiddleware.schemas.id
       })
     }),
-    (req: Request, res: Response) => {
-      res.json({ message: 'Stop analysis endpoint', endpoint: req.path });
-    }
+    analysisController.stopAnalysisOperation.bind(analysisController)
   );
   
   analysisRouter.get('/:analysisId/results', 
@@ -328,9 +302,7 @@ export function createApiRoutes(): Router {
         analysisId: ValidationMiddleware.schemas.id
       })
     }),
-    (req: Request, res: Response) => {
-      res.json({ message: 'Get analysis results endpoint', endpoint: req.path });
-    }
+    analysisController.getAnalysisResults.bind(analysisController)
   );
   
   analysisRouter.get('/:analysisId/export', 
@@ -342,9 +314,7 @@ export function createApiRoutes(): Router {
         format: Joi.string().valid('pdf', 'docx', 'json').default('pdf')
       })
     }),
-    (req: Request, res: Response) => {
-      res.json({ message: 'Export analysis endpoint', endpoint: req.path });
-    }
+    analysisController.exportAnalysis.bind(analysisController)
   );
 
   router.use('/analysis', analysisRouter);
@@ -360,12 +330,15 @@ export function createApiRoutes(): Router {
   adminRouter.use(RateLimitMiddleware.adminLimiter);
 
   // System Management
-  adminRouter.get('/stats', (req: Request, res: Response) => {
-    res.json({ message: 'Get system stats endpoint', endpoint: req.path });
-  });
+  adminRouter.get('/stats', adminController.getStats.bind(adminController));
   
   adminRouter.get('/health', (req: Request, res: Response) => {
-    res.json({ message: 'Get system health endpoint', endpoint: req.path });
+    res.json({ 
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      version: process.env.npm_package_version || '1.0.0'
+    });
   });
   
   adminRouter.get('/metrics', 
@@ -390,9 +363,7 @@ export function createApiRoutes(): Router {
         role: Joi.string().valid('user', 'premium', 'admin').optional()
       })
     }),
-    (req: Request, res: Response) => {
-      res.json({ message: 'Get users endpoint', endpoint: req.path });
-    }
+    adminController.getUsers.bind(adminController)
   );
   
   adminRouter.get('/users/:userId', 
@@ -401,9 +372,7 @@ export function createApiRoutes(): Router {
         userId: ValidationMiddleware.schemas.id
       })
     }),
-    (req: Request, res: Response) => {
-      res.json({ message: 'Get user endpoint', endpoint: req.path });
-    }
+    adminController.getUserById.bind(adminController)
   );
   
   adminRouter.put('/users/:userId', 
@@ -413,9 +382,7 @@ export function createApiRoutes(): Router {
       }),
       body: ValidationMiddleware.schemas.adminUserUpdate
     }),
-    (req: Request, res: Response) => {
-      res.json({ message: 'Update user endpoint', endpoint: req.path });
-    }
+    adminController.updateUser.bind(adminController)
   );
   
   adminRouter.delete('/users/:userId', 
@@ -424,9 +391,7 @@ export function createApiRoutes(): Router {
         userId: ValidationMiddleware.schemas.id
       })
     }),
-    (req: Request, res: Response) => {
-      res.json({ message: 'Delete user endpoint', endpoint: req.path });
-    }
+    adminController.deleteUser.bind(adminController)
   );
   
   adminRouter.post('/users/:userId/suspend', 
@@ -710,20 +675,3 @@ export const createAdminRoutes = (): Router => {
 
 // Default Export
 export default createApiRoutes;
-
-// ==========================================
-// TODO: ECHTE IMPORTS AKTIVIEREN
-// ==========================================
-/*
-Sobald die Middleware und Controller korrekt exportiert sind, aktiviere diese Imports:
-
-import { AuthMiddleware, authenticate, requireAdmin, requirePremium } from '../middleware/authMiddleware';
-import { RateLimitMiddleware, rateLimitMiddleware } from '../middleware/rateLimitMiddleware';
-import { ValidationMiddleware, validationMiddleware } from '../middleware/validationMiddleware';
-import { UserController } from '../controllers/UserController';
-import { AdminController } from '../controllers/AdminController';
-import { DocumentController } from '../controllers/DocumentController';
-import { AnalysisController } from '../controllers/AnalysisController';
-
-Dann ersetze die Placeholder-Funktionen durch die echten Middleware und Controller.
-*/

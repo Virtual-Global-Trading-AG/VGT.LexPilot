@@ -67,8 +67,7 @@ export class ExpressApp {
         const allowedOrigins = [
           'http://localhost:3000',
           'http://localhost:3001',
-          'https://lexilot.app',
-          'https://app.lexilot.ch'
+          'https://vgt-lex-pilot.vercel.app/'
         ];
 
         // Entwicklung: Erlaube alle Origins
@@ -150,10 +149,11 @@ export class ExpressApp {
   }
 
   private initializeRoutes(): void {
-    // API Routes werden hier registriert
-    // this.app.use('/api/v1/documents', documentRoutes);
-    // this.app.use('/api/v1/analysis', analysisRoutes);
-    // this.app.use('/api/v1/users', userRoutes);
+    // Import der API Routes
+    const { createApiRoutes } = require('./routes');
+    
+    // API Routes registrieren
+    this.app.use('/api/v1', createApiRoutes());
 
     // Placeholder Route
     this.app.get('/api/v1/ping', (req, res) => {
