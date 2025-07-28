@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { Logger } from '../utils/logger';
 import { BaseController } from './BaseController';
+import { AnalysisService } from '../services/AnalysisService';
 
 interface DocumentAnalysisRequest {
   documentId: string;
@@ -13,6 +14,12 @@ interface DocumentAnalysisRequest {
 }
 
 export class AnalysisController extends BaseController {
+  private readonly analysisService: AnalysisService;
+
+  constructor() {
+    super();
+    this.analysisService = new AnalysisService();
+  }
 
   /**
    * Create new analysis
@@ -178,7 +185,7 @@ export class AnalysisController extends BaseController {
     }
   }
 
-  /**
+    /**
    * Start document analysis
    * POST /api/analysis/start
    */
@@ -189,10 +196,7 @@ export class AnalysisController extends BaseController {
 
       // Validate request
       if (!documentId || !analysisType) {
-        res.status(400).json({
-          error: 'Missing required fields',
-          message: 'documentId and analysisType are required'
-        });
+        this.sendError(res, 400, 'Missing required fields', 'documentId and analysisType are required');
         return;
       }
 
@@ -203,22 +207,18 @@ export class AnalysisController extends BaseController {
         options
       });
 
-      // Check if user has access to document
-      await this.checkDocumentAccess(userId, documentId);
-
-      // Check rate limits
-      await this.checkRateLimit(userId, 'analysis');
-
-      // Check user budget/credits
-      await this.checkUserBudget(userId);
-
-      // Start analysis process
-      const analysisId = await this.initiateAnalysis(
-        userId,
+      // Start analysis using the integrated service
+      const analysisId = await this.analysisService.startAnalysis({
         documentId,
+        userId,
         analysisType,
-        options
-      );
+        options: {
+          priority: options?.priority || 'normal',
+          notifyByEmail: options?.notifyByEmail || false,
+          detailedReport: options?.detailedReport || true,
+          language: 'de' // Default to German for Swiss legal documents
+        }
+      });
 
       res.status(202).json({
         success: true,
@@ -246,19 +246,14 @@ export class AnalysisController extends BaseController {
       const { analysisId } = req.params;
 
       if (!analysisId) {
-        res.status(400).json({
-          error: 'Missing analysisId parameter'
-        });
+        this.sendError(res, 400, 'Analysis ID is required');
         return;
       }
 
-      const analysis = await this.getAnalysisById(analysisId, userId);
+      const analysis = await this.analysisService.getAnalysisResult(analysisId, userId);
       
       if (!analysis) {
-        res.status(404).json({
-          error: 'Analysis not found',
-          message: 'Analysis not found or access denied'
-        });
+        this.sendError(res, 404, 'Analysis not found');
         return;
       }
 
@@ -346,7 +341,7 @@ export class AnalysisController extends BaseController {
     }
   }
 
-  /**
+    /**
    * Cancel analysis
    * DELETE /api/analysis/:analysisId
    */
@@ -356,31 +351,23 @@ export class AnalysisController extends BaseController {
       const { analysisId } = req.params;
 
       if (!analysisId) {
-        res.status(400).json({
-          error: 'Missing analysisId parameter'
-        });
+        this.sendError(res, 400, 'Analysis ID is required');
         return;
       }
 
-      const analysis = await this.getAnalysisById(analysisId, userId);
+      const analysis = await this.analysisService.getAnalysisResult(analysisId, userId);
       
       if (!analysis) {
-        res.status(404).json({
-          error: 'Analysis not found',
-          message: 'Analysis not found or access denied'
-        });
+        this.sendError(res, 404, 'Analysis not found');
         return;
       }
 
       if (analysis.status === 'completed' || analysis.status === 'cancelled') {
-        res.status(409).json({
-          error: 'Cannot cancel analysis',
-          message: `Analysis is already ${analysis.status}`
-        });
+        this.sendError(res, 400, 'Cannot cancel completed or already cancelled analysis');
         return;
       }
 
-      await this.cancelAnalysisProcess(analysisId);
+      await this.analysisService.cancelAnalysis(analysisId, userId);
 
       res.json({
         success: true,
@@ -413,22 +400,21 @@ export class AnalysisController extends BaseController {
         sortOrder = 'desc' 
       } = req.query;
 
-      const analyses = await this.getUserAnalyses(userId, {
+      const analyses = await this.analysisService.listUserAnalyses(userId, {
         status: status as string,
         type: type as string,
         page: parseInt(page as string),
-        limit: parseInt(limit as string),
-        sortBy: sortBy as string,
-        sortOrder: sortOrder as 'asc' | 'desc'
+        limit: parseInt(limit as string)
       });
 
       res.json({
-        analyses: analyses.items,
+        success: true,
+        data: analyses,
         pagination: {
           page: analyses.page,
           limit: analyses.limit,
           total: analyses.total,
-          totalPages: analyses.totalPages
+          totalPages: Math.ceil(analyses.total / analyses.limit)
         }
       });
 

@@ -4,6 +4,7 @@ import { Logger } from '../utils/logger';
 import { 
   StorageService, 
   FirestoreService, 
+  AnalysisService,
   DocumentMetadata,
   StorageQuotaInfo,
   PaginationOptions,
@@ -25,11 +26,13 @@ interface DocumentUploadRequest {
 export class DocumentController extends BaseController {
   private readonly storageService: StorageService;
   private readonly firestoreService: FirestoreService;
+  private readonly analysisService: AnalysisService;
 
   constructor() {
     super();
     this.storageService = new StorageService();
     this.firestoreService = new FirestoreService();
+    this.analysisService = new AnalysisService();
   }
 
   /**
@@ -520,6 +523,228 @@ export class DocumentController extends BaseController {
         userId: this.getUserId(req),
         documentId: req.params.documentId,
         body: req.body
+      });
+      next(error);
+    }
+  }
+
+  /**
+   * Start document analysis
+   * POST /api/documents/:documentId/analyze
+   */
+  public async analyzeDocument(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = this.getUserId(req);
+      const { documentId } = req.params;
+      const { analysisType, options } = req.body;
+
+      // Validate request
+      if (!documentId) {
+        this.sendError(res, 400, 'Document ID is required');
+        return;
+      }
+
+      if (!analysisType || !['gdpr', 'contract_risk', 'legal_review'].includes(analysisType)) {
+        this.sendError(res, 400, 'Valid analysis type is required', 
+          'Supported types: gdpr, contract_risk, legal_review');
+        return;
+      }
+
+      // Check if document exists
+      const document = await this.firestoreService.getDocument(documentId, userId);
+      if (!document) {
+        this.sendError(res, 404, 'Document not found');
+        return;
+      }
+
+      // Check if document is processed
+      if (document.status !== 'uploaded' && document.status !== 'processed') {
+        this.sendError(res, 400, 'Document must be uploaded before analysis');
+        return;
+      }
+
+      this.logger.info('Starting document analysis', {
+        userId,
+        documentId,
+        analysisType,
+        options
+      });
+
+      // Start analysis
+      const analysisId = await this.analysisService.startAnalysis({
+        documentId,
+        userId,
+        analysisType,
+        options: {
+          priority: options?.priority || 'normal',
+          notifyByEmail: options?.notifyByEmail || false,
+          detailedReport: options?.detailedReport || true,
+          language: options?.language || 'de'
+        }
+      });
+
+      this.sendSuccess(res, {
+        analysisId,
+        documentId,
+        analysisType,
+        status: 'started',
+        message: 'Document analysis started successfully'
+      });
+
+      // Set status code manually
+      res.status(202);
+
+    } catch (error) {
+      this.logger.error('Document analysis start failed', error as Error, {
+        userId: this.getUserId(req),
+        documentId: req.params.documentId,
+        body: req.body
+      });
+      next(error);
+    }
+  }
+
+  /**
+   * Get document analysis results
+   * GET /api/documents/:documentId/analysis/:analysisId
+   */
+  public async getAnalysisResults(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = this.getUserId(req);
+      const { documentId, analysisId } = req.params;
+
+      // Validate request
+      if (!documentId || !analysisId) {
+        this.sendError(res, 400, 'Document ID and Analysis ID are required');
+        return;
+      }
+
+      // Get analysis results
+      const analysis = await this.analysisService.getAnalysisResult(analysisId, userId);
+      if (!analysis) {
+        this.sendError(res, 404, 'Analysis not found');
+        return;
+      }
+
+      // Check if analysis belongs to the document
+      if (analysis.documentId !== documentId) {
+        this.sendError(res, 400, 'Analysis does not belong to this document');
+        return;
+      }
+
+      this.sendSuccess(res, {
+        analysisId: analysis.analysisId,
+        documentId: analysis.documentId,
+        analysisType: analysis.analysisType,
+        status: analysis.status,
+        progress: analysis.progress,
+        results: analysis.results,
+        createdAt: analysis.createdAt,
+        updatedAt: analysis.updatedAt,
+        processingTimeMs: analysis.processingTimeMs
+      });
+
+    } catch (error) {
+      this.logger.error('Get analysis results failed', error as Error, {
+        userId: this.getUserId(req),
+        documentId: req.params.documentId,
+        analysisId: req.params.analysisId
+      });
+      next(error);
+    }
+  }
+
+  /**
+   * List document analyses
+   * GET /api/documents/:documentId/analyses
+   */
+  public async getDocumentAnalyses(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = this.getUserId(req);
+      const { documentId } = req.params;
+      const { status, type, page = 1, limit = 20 } = req.query;
+
+      // Validate request
+      if (!documentId) {
+        this.sendError(res, 400, 'Document ID is required');
+        return;
+      }
+
+      // Check if document exists
+      const document = await this.firestoreService.getDocument(documentId, userId);
+      if (!document) {
+        this.sendError(res, 404, 'Document not found');
+        return;
+      }
+
+      // Get analyses for this document
+      const analyses = await this.analysisService.listUserAnalyses(userId, {
+        status: status as string,
+        type: type as string,
+        page: parseInt(page as string),
+        limit: parseInt(limit as string)
+      });
+
+      // Filter by documentId (in production, this would be done in the query)
+      const filteredAnalyses = {
+        ...analyses,
+        items: analyses.items.filter(analysis => analysis.documentId === documentId)
+      };
+
+      this.sendSuccess(res, filteredAnalyses);
+
+    } catch (error) {
+      this.logger.error('Get document analyses failed', error as Error, {
+        userId: this.getUserId(req),
+        documentId: req.params.documentId,
+        query: req.query
+      });
+      next(error);
+    }
+  }
+
+  /**
+   * Cancel document analysis
+   * DELETE /api/documents/:documentId/analysis/:analysisId
+   */
+  public async cancelAnalysis(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = this.getUserId(req);
+      const { documentId, analysisId } = req.params;
+
+      // Validate request
+      if (!documentId || !analysisId) {
+        this.sendError(res, 400, 'Document ID and Analysis ID are required');
+        return;
+      }
+
+      // Get analysis to verify ownership
+      const analysis = await this.analysisService.getAnalysisResult(analysisId, userId);
+      if (!analysis) {
+        this.sendError(res, 404, 'Analysis not found');
+        return;
+      }
+
+      if (analysis.documentId !== documentId) {
+        this.sendError(res, 400, 'Analysis does not belong to this document');
+        return;
+      }
+
+      // Cancel analysis
+      await this.analysisService.cancelAnalysis(analysisId, userId);
+
+      this.sendSuccess(res, {
+        analysisId,
+        documentId,
+        status: 'cancelled',
+        message: 'Analysis cancelled successfully'
+      });
+
+    } catch (error) {
+      this.logger.error('Cancel analysis failed', error as Error, {
+        userId: this.getUserId(req),
+        documentId: req.params.documentId,
+        analysisId: req.params.analysisId
       });
       next(error);
     }

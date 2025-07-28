@@ -48,6 +48,23 @@ const updateStatusSchema = Joi.object({
   status: Joi.string().valid('uploading', 'uploaded', 'processing', 'processed', 'error').required()
 });
 
+const analyzeDocumentSchema = Joi.object({
+  analysisType: Joi.string().valid('gdpr', 'contract_risk', 'legal_review').required(),
+  options: Joi.object({
+    priority: Joi.string().valid('low', 'normal', 'high').default('normal'),
+    notifyByEmail: Joi.boolean().default(false),
+    detailedReport: Joi.boolean().default(true),
+    language: Joi.string().valid('de', 'en', 'fr', 'it').default('de')
+  }).optional()
+});
+
+const paginationSchema = Joi.object({
+  page: Joi.number().integer().min(1).default(1),
+  limit: Joi.number().integer().min(1).max(100).default(20),
+  status: Joi.string().valid('pending', 'processing', 'completed', 'failed', 'cancelled').optional(),
+  type: Joi.string().valid('gdpr', 'contract_risk', 'legal_review').optional()
+});
+
 const searchSchema = Joi.object({
   q: Joi.string().min(1).max(255).required(),
   status: Joi.string().valid('uploading', 'uploaded', 'processing', 'processed', 'error').optional(),
@@ -100,6 +117,25 @@ router.get('/:documentId/content',
 
 router.get('/:documentId/download', 
   documentController.downloadDocument.bind(documentController)
+);
+
+// Document analysis routes
+router.post('/:documentId/analyze',
+  ValidationMiddleware.validate({ body: analyzeDocumentSchema }),
+  documentController.analyzeDocument.bind(documentController)
+);
+
+router.get('/:documentId/analyses',
+  ValidationMiddleware.validate({ query: paginationSchema }),
+  documentController.getDocumentAnalyses.bind(documentController)
+);
+
+router.get('/:documentId/analysis/:analysisId',
+  documentController.getAnalysisResults.bind(documentController)
+);
+
+router.delete('/:documentId/analysis/:analysisId',
+  documentController.cancelAnalysis.bind(documentController)
 );
 
 export default router;

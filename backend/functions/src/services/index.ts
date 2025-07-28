@@ -1,6 +1,8 @@
-// Service exports for centralized import management
+// Service Exports
 export { StorageService } from './StorageService';
 export { FirestoreService } from './FirestoreService';
+export { EmbeddingService } from './EmbeddingService';
+export { AnalysisService } from './AnalysisService';
 export { FirebaseInitializer, ensureFirebaseInitialized } from './FirebaseInitializer';
 
 // Re-export types for convenience
