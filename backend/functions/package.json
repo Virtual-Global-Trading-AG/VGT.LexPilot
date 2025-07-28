@@ -16,7 +16,13 @@
     "test:integration": "npm run build && node lib/test-setup.js",
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix",
-    "format": "prettier --write src/**/*.ts"
+    "format": "prettier --write src/**/*.ts",
+    "setup:env": "./setup-firebase-env.sh",
+    "setup:firebase": "firebase functions:config:get",
+    "setup:complete": "npm run setup:env && npm run build && npm run deploy",
+    "dev": "npm run build:watch",
+    "predeploy": "npm run lint && npm run test && npm run build",
+    "postdeploy": "npm run logs"
   },
   "engines": {
     "node": "18"
