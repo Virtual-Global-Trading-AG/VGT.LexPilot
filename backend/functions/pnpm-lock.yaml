@@ -10,16 +10,16 @@ importers:
     dependencies:
       '@langchain/community':
         specifier: ^0.0.38
-        version: 0.0.38(@pinecone-database/pinecone@6.1.2)(encoding@0.1.13)(firebase-admin@12.7.0(encoding@0.1.13))(jsonwebtoken@9.0.2)(lodash@4.17.21)(openai@4.104.0(encoding@0.1.13)(zod@3.25.76))
+        version: 0.0.38(@pinecone-database/pinecone@5.1.2)(encoding@0.1.13)(firebase-admin@12.7.0(encoding@0.1.13))(jsonwebtoken@9.0.2)(lodash@4.17.21)(openai@4.104.0(encoding@0.1.13)(zod@3.25.76))
       '@langchain/openai':
         specifier: ^0.0.19
         version: 0.0.19(encoding@0.1.13)
       '@langchain/pinecone':
         specifier: ^0.2.0
-        version: 0.2.0(@langchain/core@0.2.36(openai@4.104.0(encoding@0.1.13)(zod@3.25.76)))(@pinecone-database/pinecone@6.1.2)
+        version: 0.2.0(@langchain/core@0.2.36(openai@4.104.0(encoding@0.1.13)(zod@3.25.76)))(@pinecone-database/pinecone@5.1.2)
       '@pinecone-database/pinecone':
-        specifier: ^6.1.2
-        version: 6.1.2
+        specifier: ^5.1.2
+        version: 5.1.2
       '@types/joi':
         specifier: ^17.2.2
         version: 17.2.3
@@ -49,7 +49,7 @@ importers:
         version: 17.13.3
       langchain:
         specifier: ^0.1.25
-        version: 0.1.37(@google-cloud/storage@7.16.0(encoding@0.1.13))(@pinecone-database/pinecone@6.1.2)(encoding@0.1.13)(fast-xml-parser@4.5.3)(firebase-admin@12.7.0(encoding@0.1.13))(ignore@5.3.2)(jsonwebtoken@9.0.2)(lodash@4.17.21)(mammoth@1.9.1)(openai@4.104.0(encoding@0.1.13)(zod@3.25.76))(pdf-parse@1.1.1)
+        version: 0.1.37(@google-cloud/storage@7.16.0(encoding@0.1.13))(@pinecone-database/pinecone@5.1.2)(encoding@0.1.13)(fast-xml-parser@4.5.3)(firebase-admin@12.7.0(encoding@0.1.13))(ignore@5.3.2)(jsonwebtoken@9.0.2)(lodash@4.17.21)(mammoth@1.9.1)(openai@4.104.0(encoding@0.1.13)(zod@3.25.76))(pdf-parse@1.1.1)
       mammoth:
         specifier: ^1.6.0
         version: 1.9.1
@@ -1089,8 +1089,8 @@ packages:
     resolution: {integrity: sha512-3giAOQvZiH5F9bMlMiv8+GSPMeqg0dbaeo58/0SlA9sxSqZhnUtxzX9/2FzyhS9sWQf5S0GJE0AKBrFqjpeYcg==}
     engines: {node: '>=8.0.0'}
 
-  '@pinecone-database/pinecone@6.1.2':
-    resolution: {integrity: sha512-ydIlbtgIIHFgBL08sPzua5ckmOgtjgDz8xg21CnP1fqnnEgDmOlnfd10MRKU+fvFRhDlh4Md37SwZDr0d4cBqg==}
+  '@pinecone-database/pinecone@5.1.2':
+    resolution: {integrity: sha512-z7737KUA1hXwd508q1+o4bnRxj0NpMmzA2beyaFm7Y+EC2TYLT5ABuYsn/qhiwiEsYp8v1qS596eBhhvgNagig==}
     engines: {node: '>=18.0.0'}
 
   '@pkgr/core@0.2.9':
@@ -4205,7 +4205,7 @@ snapshots:
   '@js-sdsl/ordered-map@4.4.2':
     optional: true
 
-  '@langchain/community@0.0.38(@pinecone-database/pinecone@6.1.2)(encoding@0.1.13)(firebase-admin@12.7.0(encoding@0.1.13))(jsonwebtoken@9.0.2)(lodash@4.17.21)(openai@4.104.0(encoding@0.1.13)(zod@3.25.76))':
+  '@langchain/community@0.0.38(@pinecone-database/pinecone@5.1.2)(encoding@0.1.13)(firebase-admin@12.7.0(encoding@0.1.13))(jsonwebtoken@9.0.2)(lodash@4.17.21)(openai@4.104.0(encoding@0.1.13)(zod@3.25.76))':
     dependencies:
       '@langchain/core': 0.1.63(openai@4.104.0(encoding@0.1.13)(zod@3.25.76))
       '@langchain/openai': 0.0.19(encoding@0.1.13)
@@ -4214,7 +4214,7 @@ snapshots:
       uuid: 9.0.1
       zod: 3.25.76
     optionalDependencies:
-      '@pinecone-database/pinecone': 6.1.2
+      '@pinecone-database/pinecone': 5.1.2
       firebase-admin: 12.7.0(encoding@0.1.13)
       jsonwebtoken: 9.0.2
       lodash: 4.17.21
@@ -4222,7 +4222,7 @@ snapshots:
       - encoding
       - openai
 
-  '@langchain/community@0.0.57(@pinecone-database/pinecone@6.1.2)(encoding@0.1.13)(firebase-admin@12.7.0(encoding@0.1.13))(jsonwebtoken@9.0.2)(lodash@4.17.21)(openai@4.104.0(encoding@0.1.13)(zod@3.25.76))':
+  '@langchain/community@0.0.57(@pinecone-database/pinecone@5.1.2)(encoding@0.1.13)(firebase-admin@12.7.0(encoding@0.1.13))(jsonwebtoken@9.0.2)(lodash@4.17.21)(openai@4.104.0(encoding@0.1.13)(zod@3.25.76))':
     dependencies:
       '@langchain/core': 0.1.63(openai@4.104.0(encoding@0.1.13)(zod@3.25.76))
       '@langchain/openai': 0.0.34(encoding@0.1.13)
@@ -4233,7 +4233,7 @@ snapshots:
       zod: 3.25.76
       zod-to-json-schema: 3.24.6(zod@3.25.76)
     optionalDependencies:
-      '@pinecone-database/pinecone': 6.1.2
+      '@pinecone-database/pinecone': 5.1.2
       firebase-admin: 12.7.0(encoding@0.1.13)
       jsonwebtoken: 9.0.2
       lodash: 4.17.21
@@ -4296,10 +4296,10 @@ snapshots:
       - encoding
       - ws
 
-  '@langchain/pinecone@0.2.0(@langchain/core@0.2.36(openai@4.104.0(encoding@0.1.13)(zod@3.25.76)))(@pinecone-database/pinecone@6.1.2)':
+  '@langchain/pinecone@0.2.0(@langchain/core@0.2.36(openai@4.104.0(encoding@0.1.13)(zod@3.25.76)))(@pinecone-database/pinecone@5.1.2)':
     dependencies:
       '@langchain/core': 0.2.36(openai@4.104.0(encoding@0.1.13)(zod@3.25.76))
-      '@pinecone-database/pinecone': 6.1.2
+      '@pinecone-database/pinecone': 5.1.2
       flat: 5.0.2
       uuid: 10.0.0
 
@@ -4325,7 +4325,7 @@ snapshots:
   '@opentelemetry/api@1.9.0':
     optional: true
 
-  '@pinecone-database/pinecone@6.1.2': {}
+  '@pinecone-database/pinecone@5.1.2': {}
 
   '@pkgr/core@0.2.9': {}
 
@@ -6164,10 +6164,10 @@ snapshots:
 
   ky@0.33.3: {}
 
-  langchain@0.1.37(@google-cloud/storage@7.16.0(encoding@0.1.13))(@pinecone-database/pinecone@6.1.2)(encoding@0.1.13)(fast-xml-parser@4.5.3)(firebase-admin@12.7.0(encoding@0.1.13))(ignore@5.3.2)(jsonwebtoken@9.0.2)(lodash@4.17.21)(mammoth@1.9.1)(openai@4.104.0(encoding@0.1.13)(zod@3.25.76))(pdf-parse@1.1.1):
+  langchain@0.1.37(@google-cloud/storage@7.16.0(encoding@0.1.13))(@pinecone-database/pinecone@5.1.2)(encoding@0.1.13)(fast-xml-parser@4.5.3)(firebase-admin@12.7.0(encoding@0.1.13))(ignore@5.3.2)(jsonwebtoken@9.0.2)(lodash@4.17.21)(mammoth@1.9.1)(openai@4.104.0(encoding@0.1.13)(zod@3.25.76))(pdf-parse@1.1.1):
     dependencies:
       '@anthropic-ai/sdk': 0.9.1(encoding@0.1.13)
-      '@langchain/community': 0.0.57(@pinecone-database/pinecone@6.1.2)(encoding@0.1.13)(firebase-admin@12.7.0(encoding@0.1.13))(jsonwebtoken@9.0.2)(lodash@4.17.21)(openai@4.104.0(encoding@0.1.13)(zod@3.25.76))
+      '@langchain/community': 0.0.57(@pinecone-database/pinecone@5.1.2)(encoding@0.1.13)(firebase-admin@12.7.0(encoding@0.1.13))(jsonwebtoken@9.0.2)(lodash@4.17.21)(openai@4.104.0(encoding@0.1.13)(zod@3.25.76))
       '@langchain/core': 0.1.63(openai@4.104.0(encoding@0.1.13)(zod@3.25.76))
       '@langchain/openai': 0.0.34(encoding@0.1.13)
       '@langchain/textsplitters': 0.0.3(openai@4.104.0(encoding@0.1.13)(zod@3.25.76))
@@ -6186,7 +6186,7 @@ snapshots:
       zod-to-json-schema: 3.24.6(zod@3.25.76)
     optionalDependencies:
       '@google-cloud/storage': 7.16.0(encoding@0.1.13)
-      '@pinecone-database/pinecone': 6.1.2
+      '@pinecone-database/pinecone': 5.1.2
       fast-xml-parser: 4.5.3
       ignore: 5.3.2
       mammoth: 1.9.1
