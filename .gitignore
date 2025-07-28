@@ -46,9 +46,12 @@ database-debug.log
 pubsub-debug.log
 
 # Functions
+backend/functions/lib/
+backend/functions/node_modules/
 functions/lib/
 functions/node_modules/
 functions/.env
+backend/functions/.env
 
 # Logs
 logs/

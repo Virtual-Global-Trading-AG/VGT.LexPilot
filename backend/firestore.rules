@@ -1,0 +1,129 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Users Collection - Benutzer können nur ihre eigenen Daten lesen/schreiben
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      
+      // User Statistics Subcollection
+      match /statistics/{statId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      
+      // User Settings Subcollection
+      match /settings/{settingId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+    
+    // Documents Collection - Benutzer können nur ihre eigenen Dokumente verwalten
+    match /documents/{documentId} {
+      allow read, write: if request.auth != null && 
+        request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && 
+        request.auth.uid == request.resource.data.userId;
+        
+      // Document Analyses Subcollection
+      match /analyses/{analysisId} {
+        allow read, write: if request.auth != null && 
+          request.auth.uid == get(/databases/$(database)/documents/documents/$(documentId)).data.userId;
+      }
+      
+      // Document Versions Subcollection
+      match /versions/{versionId} {
+        allow read, write: if request.auth != null && 
+          request.auth.uid == get(/databases/$(database)/documents/documents/$(documentId)).data.userId;
+      }
+    }
+    
+    // Templates Collection - Öffentlich lesbar, aber nur Admin schreibbar
+    match /templates/{templateId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && 
+        request.auth.token.admin == true;
+    }
+    
+    // Legal Database Collection - Öffentlich lesbar für authentifizierte Benutzer
+    match /legal_database/{legalDocId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && 
+        request.auth.token.admin == true;
+        
+      // Legal Annotations Subcollection
+      match /annotations/{annotationId} {
+        allow read: if request.auth != null;
+        allow create: if request.auth != null;
+        allow update, delete: if request.auth != null && 
+          (request.auth.uid == resource.data.createdBy || 
+           request.auth.token.admin == true);
+      }
+    }
+    
+    // Usage Tracking Collection - Benutzer können nur ihre eigenen Daten lesen
+    match /usage/{usageId} {
+      allow read: if request.auth != null && 
+        request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null;
+      // Keine direkten Updates - nur durch Cloud Functions
+    }
+    
+    // Billing Collection - Benutzer können nur ihre eigenen Billing-Daten lesen
+    match /billing/{userId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      // Nur Cloud Functions können schreiben
+    }
+    
+    // System Collections - Nur Admin Zugriff
+    match /system/{document=**} {
+      allow read, write: if request.auth != null && 
+        request.auth.token.admin == true;
+    }
+    
+    // Analytics Collection - Nur Cloud Functions schreiben, Admin lesen
+    match /analytics/{document=**} {
+      allow read: if request.auth != null && 
+        request.auth.token.admin == true;
+      // Nur Cloud Functions können schreiben
+    }
+    
+    // Notifications Collection - Benutzer können ihre eigenen Benachrichtigungen verwalten
+    match /notifications/{notificationId} {
+      allow read, write: if request.auth != null && 
+        request.auth.uid == resource.data.userId;
+    }
+    
+    // Shared Documents Collection - Geteilte Dokumente
+    match /shared_documents/{shareId} {
+      allow read: if request.auth != null && 
+        (request.auth.uid in resource.data.sharedWith || 
+         request.auth.uid == resource.data.ownerId);
+      allow write: if request.auth != null && 
+        request.auth.uid == resource.data.ownerId;
+    }
+    
+    // Audit Logs - Nur lesbar für Admins
+    match /audit_logs/{logId} {
+      allow read: if request.auth != null && 
+        request.auth.token.admin == true;
+      // Nur Cloud Functions können schreiben
+    }
+  }
+  
+  // Helper Functions
+  function isAuthenticated() {
+    return request.auth != null;
+  }
+  
+  function isOwner(userId) {
+    return request.auth.uid == userId;
+  }
+  
+  function isAdmin() {
+    return request.auth.token.admin == true;
+  }
+  
+  function hasRole(role) {
+    return request.auth.token.role == role;
+  }
+}

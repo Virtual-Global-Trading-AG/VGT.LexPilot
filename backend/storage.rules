@@ -1,0 +1,103 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Documents Upload Path - Benutzer können nur ihre eigenen Dokumente hochladen
+    match /documents/{userId}/{allPaths=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      
+      // File Size Limits (50MB max)
+      allow write: if request.resource.size < 50 * 1024 * 1024;
+      
+      // Allowed File Types
+      allow write: if request.resource.contentType.matches(
+        '.*\\/(pdf|msword|vnd\\.openxmlformats-officedocument\\.wordprocessingml\\.document|plain|markdown)$'
+      );
+    }
+    
+    // Temporary Upload Path - für File Processing
+    match /temp/{userId}/{allPaths=**} {
+      allow write: if request.auth != null && request.auth.uid == userId;
+      allow read: if request.auth != null && request.auth.uid == userId;
+      
+      // Automatisches Löschen nach 24h durch Cloud Functions
+      // File Size Limits (100MB max für temp)
+      allow write: if request.resource.size < 100 * 1024 * 1024;
+    }
+    
+    // Public Templates - Lesbar für alle authentifizierten Benutzer
+    match /templates/{allPaths=**} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.token.admin == true;
+    }
+    
+    // User Profile Images
+    match /profiles/{userId}/{allPaths=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      
+      // Nur Bilder erlaubt
+      allow write: if request.resource.contentType.matches('image/.*');
+      
+      // Max 5MB für Profilbilder
+      allow write: if request.resource.size < 5 * 1024 * 1024;
+    }
+    
+    // Legal Database Files - Nur Admin Upload, public read
+    match /legal_database/{allPaths=**} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.token.admin == true;
+    }
+    
+    // Export Files - Temporäre Downloads
+    match /exports/{userId}/{allPaths=**} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      // Nur Cloud Functions können schreiben
+    }
+    
+    // Backup Files - Nur Admin Zugriff
+    match /backups/{allPaths=**} {
+      allow read, write: if request.auth != null && request.auth.token.admin == true;
+    }
+    
+    // System Files - Nur Admin Zugriff
+    match /system/{allPaths=**} {
+      allow read, write: if request.auth != null && request.auth.token.admin == true;
+    }
+    
+    // Shared Files - Geteilte Dokumente
+    match /shared/{shareId}/{allPaths=**} {
+      // Zugriff basierend auf Firestore shared_documents Collection
+      allow read: if request.auth != null && 
+        existsAfter(/databases/(default)/documents/shared_documents/$(shareId)) &&
+        (request.auth.uid in get(/databases/(default)/documents/shared_documents/$(shareId)).data.sharedWith ||
+         request.auth.uid == get(/databases/(default)/documents/shared_documents/$(shareId)).data.ownerId);
+    }
+  }
+  
+  // Helper Functions für komplexere Regeln
+  function isAuthenticated() {
+    return request.auth != null;
+  }
+  
+  function isOwner(userId) {
+    return request.auth.uid == userId;
+  }
+  
+  function isAdmin() {
+    return request.auth.token.admin == true;
+  }
+  
+  function isValidFileType() {
+    return request.resource.contentType.matches(
+      '.*\\/(pdf|msword|vnd\\.openxmlformats-officedocument\\.wordprocessingml\\.document|plain|markdown)$'
+    );
+  }
+  
+  function isValidImageType() {
+    return request.resource.contentType.matches('image/.*');
+  }
+  
+  function isUnderSizeLimit(maxSizeMB) {
+    return request.resource.size < maxSizeMB * 1024 * 1024;
+  }
+}
