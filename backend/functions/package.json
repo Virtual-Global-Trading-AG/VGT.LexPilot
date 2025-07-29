@@ -25,7 +25,7 @@
     "postdeploy": "npm run logs"
   },
   "engines": {
-    "node": "18"
+    "node": "22"
   },
   "dependencies": {
     "@langchain/community": "^0.0.38",
@@ -43,6 +43,7 @@
     "joi": "^17.13.3",
     "langchain": "^0.1.25",
     "mammoth": "^1.6.0",
+    "module-alias": "^2.2.3",
     "multer": "^1.4.5-lts.1",
     "pdf-parse": "^1.1.1",
     "pinecone-client": "^1.1.0",
@@ -58,8 +59,9 @@
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/jest": "^29.5.8",
+    "@types/module-alias": "^2.0.4",
     "@types/multer": "^1.4.11",
-    "@types/node": "^20.10.0",
+    "@types/node": "^22.10.0",
     "@types/uuid": "^9.0.7",
     "@typescript-eslint/eslint-plugin": "^6.13.1",
     "@typescript-eslint/parser": "^6.13.1",
@@ -71,6 +73,24 @@
     "prettier": "^3.1.0",
     "ts-jest": "^29.1.1",
     "typescript": "^5.3.2"
+  },
+  "_moduleAliases": {
+    "@": "./lib",
+    "@config": "./lib/config",
+    "@controllers": "./lib/controllers",
+    "@services": "./lib/services",
+    "@repositories": "./lib/repositories",
+    "@models": "./lib/models",
+    "@utils": "./lib/utils",
+    "@middleware": "./lib/middleware",
+    "@factories": "./lib/factories",
+    "@strategies": "./lib/strategies",
+    "@observers": "./lib/observers",
+    "@decorators": "./lib/decorators",
+    "@chains": "./lib/chains",
+    "@agents": "./lib/agents",
+    "@vectorstore": "./lib/vectorstore",
+    "@websocket": "./lib/websocket"
   },
   "private": true
 }

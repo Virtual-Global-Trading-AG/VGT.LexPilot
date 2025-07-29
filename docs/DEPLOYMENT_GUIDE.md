@@ -38,17 +38,17 @@ Bearbeiten Sie die `.env`-Datei mit Ihren spezifischen Werten:
 #### Firebase-Konfiguration
 ```env
 # Firebase Project ID von der Firebase Console
-FIREBASE_PROJECT_ID=ihr-firebase-projekt-id
+PROJECT_ID=ihr-firebase-projekt-id
 
 # Firebase Service Account (von Firebase Console > Projekteinstellungen > Dienstkonten)
-FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nIhr Private Key\n-----END PRIVATE KEY-----\n"
-FIREBASE_CLIENT_EMAIL=firebase-adminsdk-xxxxx@ihr-projekt.iam.gserviceaccount.com
+PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nIhr Private Key\n-----END PRIVATE KEY-----\n"
+CLIENT_EMAIL=firebase-adminsdk-xxxxx@ihr-projekt.iam.gserviceaccount.com
 
 # Firebase Storage Bucket
-FIREBASE_STORAGE_BUCKET=ihr-projekt.appspot.com
+STORAGE_BUCKET=ihr-projekt.appspot.com
 ```
 
-**Wichtig:** Der `FIREBASE_PRIVATE_KEY` muss korrekt escapt sein. Ersetzen Sie Zeilenumbrüche durch `\n`.
+**Wichtig:** Der `PRIVATE_KEY` muss korrekt escapt sein. Ersetzen Sie Zeilenumbrüche durch `\n`.
 
 #### OpenAI-Konfiguration
 ```env
@@ -195,7 +195,7 @@ Aktualisieren Sie die Frontend-Konfiguration mit der deployed Function URL:
 ```env
 # frontend/.env.local
 NEXT_PUBLIC_API_BASE_URL=https://europe-west6-ihr-projekt.cloudfunctions.net/api
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=ihr-firebase-projekt-id
+NEXT_PUBLIC_PROJECT_ID=ihr-firebase-projekt-id
 ```
 
 ### 2. CORS konfigurieren

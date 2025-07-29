@@ -64,7 +64,7 @@ firebase deploy --only functions
 ### Minimum-Konfiguration für Funktionsfähigkeit:
 1. **OPENAI_API_KEY**: Von https://platform.openai.com/api-keys
 2. **PINECONE_API_KEY**: Von https://app.pinecone.io/
-3. **FIREBASE_PROJECT_ID**: Ihr Firebase-Projekt
+3. **PROJECT_ID**: Ihr Firebase-Projekt
 4. **JWT_SECRET**: Generiert mit `openssl rand -hex 32`
 5. **ENCRYPTION_KEY**: Generiert mit `openssl rand -hex 32`
 
@@ -78,10 +78,10 @@ firebase deploy --only functions
 
 ### Firebase Configuration
 ```env
-FIREBASE_PROJECT_ID=ihr-firebase-projekt-id
-FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
-FIREBASE_CLIENT_EMAIL=firebase-adminsdk-xxxxx@ihr-projekt.iam.gserviceaccount.com
-FIREBASE_STORAGE_BUCKET=ihr-projekt.appspot.com
+PROJECT_ID=ihr-firebase-projekt-id
+PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+CLIENT_EMAIL=firebase-adminsdk-xxxxx@ihr-projekt.iam.gserviceaccount.com
+STORAGE_BUCKET=ihr-projekt.appspot.com
 ```
 
 ### OpenAI Configuration

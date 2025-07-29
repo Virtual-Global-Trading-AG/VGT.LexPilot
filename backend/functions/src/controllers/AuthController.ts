@@ -446,7 +446,7 @@ export class AuthController extends BaseController {
   }> {
     try {
       const response = await fetch(
-        `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${process.env.FIREBASE_API_KEY}`,
+        `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${process.env.API_KEY}`,
         {
           method: 'POST',
           headers: {
@@ -497,7 +497,7 @@ export class AuthController extends BaseController {
   }> {
     try {
       const response = await fetch(
-        `https://securetoken.googleapis.com/v1/token?key=${process.env.FIREBASE_API_KEY}`,
+        `https://securetoken.googleapis.com/v1/token?key=${process.env.API_KEY}`,
         {
           method: 'POST',
           headers: {

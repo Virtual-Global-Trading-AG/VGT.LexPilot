@@ -159,9 +159,9 @@ Aktualisieren Sie Ihre `.env.local`:
 NEXT_PUBLIC_API_URL=http://localhost:5001/your-project/us-central1/api
 
 # Firebase (für Firestore Real-time Updates)
-NEXT_PUBLIC_FIREBASE_API_KEY=your-api-key
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=your-project
+NEXT_PUBLIC_API_KEY=your-api-key
+NEXT_PUBLIC_AUTH_DOMAIN=your-project.firebaseapp.com
+NEXT_PUBLIC_PROJECT_ID=your-project
 ```
 
 ### 2. Komponenten-Updates

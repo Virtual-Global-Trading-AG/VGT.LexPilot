@@ -35,7 +35,7 @@
       "@chains/*": ["./src/chains/*"],
       "@agents/*": ["./src/agents/*"],
       "@vectorstore/*": ["./src/vectorstore/*"],
-      "@websocket/*": ["./src/websocket/*"]
+      "@websocket/*": ["./src/websocket/*"],
     }
   },
   "compileOnSave": true,

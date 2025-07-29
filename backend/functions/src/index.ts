@@ -1,3 +1,4 @@
+import 'module-alias/register';
 import { createExpressApp } from './app';
 import * as functions from 'firebase-functions';
 import { initializeApp } from 'firebase-admin/app';

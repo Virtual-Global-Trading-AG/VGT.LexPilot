@@ -35,7 +35,7 @@ export class StorageService {
       admin.initializeApp({
         credential: admin.credential.cert({
           projectId: config.firebase.projectId,
-          privateKey: config.firebase.privateKey.replace(/\\n/g, '\n'),
+          privateKey: config.firebase.privateKey?.replace(/\\n/g, '\n'),
           clientEmail: config.firebase.clientEmail,
         }),
         storageBucket: `${config.firebase.projectId}.appspot.com`

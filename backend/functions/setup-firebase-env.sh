@@ -120,15 +120,15 @@ setup_pinecone_config() {
 setup_firebase_config() {
     print_step "Firebase Konfiguration..."
     
-    local project_id=$(get_env_var "FIREBASE_PROJECT_ID")
-    local private_key=$(get_env_var "FIREBASE_PRIVATE_KEY")
-    local client_email=$(get_env_var "FIREBASE_CLIENT_EMAIL")
-    local storage_bucket=$(get_env_var "FIREBASE_STORAGE_BUCKET")
+    local project_id=$(get_env_var "PROJECT_ID")
+    local private_key=$(get_env_var "PRIVATE_KEY")
+    local client_email=$(get_env_var "CLIENT_EMAIL")
+    local storage_bucket=$(get_env_var "STORAGE_BUCKET")
     
-    set_firebase_config "firebase.project_id" "FIREBASE_PROJECT_ID" "$project_id"
-    set_firebase_config "firebase.private_key" "FIREBASE_PRIVATE_KEY" "$private_key"
-    set_firebase_config "firebase.client_email" "FIREBASE_CLIENT_EMAIL" "$client_email"
-    set_firebase_config "firebase.storage_bucket" "FIREBASE_STORAGE_BUCKET" "$storage_bucket"
+    set_firebase_config "firebase.project_id" "PROJECT_ID" "$project_id"
+    set_firebase_config "firebase.private_key" "PRIVATE_KEY" "$private_key"
+    set_firebase_config "firebase.client_email" "CLIENT_EMAIL" "$client_email"
+    set_firebase_config "firebase.storage_bucket" "STORAGE_BUCKET" "$storage_bucket"
 }
 
 setup_security_config() {
@@ -184,7 +184,7 @@ validate_required_vars() {
     local required_vars=(
         "OPENAI_API_KEY"
         "PINECONE_API_KEY"
-        "FIREBASE_PROJECT_ID"
+        "PROJECT_ID"
         "JWT_SECRET"
         "ENCRYPTION_KEY"
     )

@@ -126,9 +126,9 @@ await fetch(`/api/documents/${documentId}/status`, {
 
 ```env
 # Firebase
-FIREBASE_PROJECT_ID=your-project-id
-FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n..."
-FIREBASE_CLIENT_EMAIL=firebase-adminsdk-xxxxx@your-project.iam.gserviceaccount.com
+PROJECT_ID=your-project-id
+PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n..."
+CLIENT_EMAIL=firebase-adminsdk-xxxxx@your-project.iam.gserviceaccount.com
 
 # Dokumenten-Limits
 MAX_FILE_SIZE_MB=50

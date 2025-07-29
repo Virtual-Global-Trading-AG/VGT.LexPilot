@@ -33,7 +33,7 @@
       "port": 8080
     },
     "pubsub": {
-      "port": 8085
+      "port": 8086
     },
     "storage": {
       "port": 9199
@@ -41,6 +41,12 @@
     "ui": {
       "enabled": true,
       "port": 4000
+    },
+    "hub": {
+      "port": 4402
+    },
+    "logging": {
+      "port": 4502
     },
     "singleProjectMode": true
   }

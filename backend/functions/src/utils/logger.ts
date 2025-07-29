@@ -1,4 +1,4 @@
-import winston from 'winston';
+import * as winston from 'winston';
 
 export interface ILogger {
   debug(message: string, meta?: any): void;

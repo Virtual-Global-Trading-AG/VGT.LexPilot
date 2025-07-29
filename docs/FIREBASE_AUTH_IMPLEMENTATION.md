@@ -101,10 +101,10 @@ Die folgenden Environment-Variablen sind erforderlich:
 
 ```env
 # Firebase Configuration
-FIREBASE_PROJECT_ID=your-project-id
-FIREBASE_PRIVATE_KEY=your-private-key
-FIREBASE_CLIENT_EMAIL=your-client-email
-FIREBASE_API_KEY=your-web-api-key
+PROJECT_ID=your-project-id
+PRIVATE_KEY=your-private-key
+CLIENT_EMAIL=your-client-email
+API_KEY=your-web-api-key
 
 # Security
 JWT_SECRET=your-jwt-secret

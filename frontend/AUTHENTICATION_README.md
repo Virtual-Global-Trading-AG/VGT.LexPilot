@@ -69,12 +69,12 @@ Erstellen Sie eine `.env.local` Datei basierend auf `.env.local.example`:
 
 ```bash
 # Firebase Configuration
-NEXT_PUBLIC_FIREBASE_API_KEY=your_api_key_here
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_project_id.firebaseapp.com
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_project_id
-NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your_project_id.appspot.com
-NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
-NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id
+NEXT_PUBLIC_API_KEY=your_api_key_here
+NEXT_PUBLIC_AUTH_DOMAIN=your_project_id.firebaseapp.com
+NEXT_PUBLIC_PROJECT_ID=your_project_id
+NEXT_PUBLIC_STORAGE_BUCKET=your_project_id.appspot.com
+NEXT_PUBLIC_MESSAGING_SENDER_ID=your_sender_id
+NEXT_PUBLIC_APP_ID=your_app_id
 
 # Backend API Configuration
 NEXT_PUBLIC_API_URL=localhost:
