@@ -29,6 +29,7 @@ if (getApps().length === 0) {
         clientEmail: config.firebase.clientEmail!,
       }),
       projectId: config.firebase.projectId,
+      storageBucket: config.firebase.storageBucket,
     });
     console.log('✅ Firebase Admin initialized with Service Account (container)');
   } else {
