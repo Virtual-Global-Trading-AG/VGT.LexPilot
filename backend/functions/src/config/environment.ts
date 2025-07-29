@@ -6,11 +6,15 @@ dotenvConfig();
 
 // Zod Schema für Environment-Validierung
 const envSchema = z.object({
-  // Firebase (optional für lokale Entwicklung)
-  PROJECT_ID: z.string().min(1).optional(),
-  PRIVATE_KEY: z.string().min(1).optional(),
-  CLIENT_EMAIL: z.string().email().optional(),
-  API_KEY: z.string().min(1).optional(),
+  // Firebase (required für lokale Entwicklung)
+  PROJECT_ID: z.string().min(1),
+  PRIVATE_KEY: z.string().min(1),
+  CLIENT_EMAIL: z.string().email(),
+  API_KEY: z.string().min(1),
+  STORAGE_BUCKET: z.string().min(1),
+  AUTH_DOMAIN: z.string().optional(),
+  APP_ID: z.string().optional(),
+  MESSAGING_SENDER_ID: z.string().optional(),
   
   // OpenAI
   OPENAI_API_KEY: z.string().min(1),
@@ -87,9 +91,13 @@ export const config = {
   firebase: {
     type: 'service_account',
     projectId: env.PROJECT_ID,
-    privateKey: env.PRIVATE_KEY?.replace(/\\n/g, '\n'),
+    privateKey: env.PRIVATE_KEY.replace(/\\n/g, '\n'),
     clientEmail: env.CLIENT_EMAIL,
     apiKey: env.API_KEY,
+    storageBucket: env.STORAGE_BUCKET,
+    authDomain: env.AUTH_DOMAIN,
+    appId: env.APP_ID,
+    messagingSenderId: env.MESSAGING_SENDER_ID,
   },
   
   // OpenAI Config
