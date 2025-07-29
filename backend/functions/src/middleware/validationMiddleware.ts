@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import * as Joi from 'joi';
+import Joi from 'joi';
 import { Logger } from '@/utils/logger';
 
 export interface ValidationOptions {

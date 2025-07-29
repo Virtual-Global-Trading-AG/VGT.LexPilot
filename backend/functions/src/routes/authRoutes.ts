@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import * as Joi from 'joi';
+import Joi from 'joi';
 import { AuthController } from '../controllers/AuthController';
 import { AuthMiddleware } from '../middleware/authMiddleware';
 import { RateLimitMiddleware } from '../middleware/rateLimitMiddleware';
@@ -21,18 +21,18 @@ export function createAuthRoutes(): Router {
    * POST /api/auth/login
    */
   router.post('/login',
-    ValidationMiddleware.validate({
-      body: Joi.object({
-        email: Joi.string().email().required().messages({
-          'string.email': 'Please provide a valid email address',
-          'any.required': 'Email is required'
-        }),
-        password: Joi.string().min(6).required().messages({
-          'string.min': 'Password must be at least 6 characters long',
-          'any.required': 'Password is required'
-        })
-      })
-    }),
+    // ValidationMiddleware.validate({
+    //   body: Joi.object({
+    //     email: Joi.string().email().required().messages({
+    //       'string.email': 'Please provide a valid email address',
+    //       'any.required': 'Email is required'
+    //     }),
+    //     password: Joi.string().min(6).required().messages({
+    //       'string.min': 'Password must be at least 6 characters long',
+    //       'any.required': 'Password is required'
+    //     })
+    //   })
+    // }),
     authController.login.bind(authController)
   );
 
