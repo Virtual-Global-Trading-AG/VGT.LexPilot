@@ -8,7 +8,7 @@
     }
   ],
   "env": {
-    "NEXT_PUBLIC_API_URL": "@api-base-url"
+    "NEXT_PUBLIC_API_URL": "@NEXT_PUBLIC_API_URL"
   },
   "regions": ["fra1"],
   "functions": {
