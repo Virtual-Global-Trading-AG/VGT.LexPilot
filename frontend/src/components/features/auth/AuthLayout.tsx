@@ -132,8 +132,8 @@ export function AuthLayout({ children, title, subtitle }: AuthLayoutProps) {
               transition={{ delay: 1 }}
             >
               <p className="text-sm text-blue-100 italic">
-                "LexPilot hat unsere Rechtsdokumentanalyse revolutioniert. 
-                Die Präzision und Geschwindigkeit der KI-Analyse ist beeindruckend."
+                &ldquo;LexPilot hat unsere Rechtsdokumentanalyse revolutioniert. 
+                Die Präzision und Geschwindigkeit der KI-Analyse ist beeindruckend.&rdquo;
               </p>
               <p className="text-xs text-blue-200 mt-2">
                 — Dr. Sarah Müller, Rechtsanwältin

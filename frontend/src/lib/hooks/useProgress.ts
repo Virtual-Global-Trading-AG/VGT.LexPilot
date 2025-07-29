@@ -9,7 +9,7 @@ export interface ProgressUpdate {
   data: {
     progress?: number;
     message?: string;
-    result?: any;
+    result?: unknown;
     error?: string;
   };
   timestamp: Date;
@@ -20,7 +20,7 @@ export function useAnalysisProgress(requestId?: string) {
   const [message, setMessage] = useState('');
   const [isComplete, setIsComplete] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<unknown>(null);
   
   const user = useAuthStore(state => state.user);
   const userId = user?.uid;
@@ -91,7 +91,7 @@ export function useAnalysisProgress(requestId?: string) {
 }
 
 export function useAnalysisHistory() {
-  const [analyses, setAnalyses] = useState<any[]>([]);
+  const [analyses, setAnalyses] = useState<unknown[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   

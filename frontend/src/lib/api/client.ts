@@ -1,7 +1,7 @@
 // API Client helper für authentifizierte Requests
 import AuthService from './auth';
 
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;
   message?: string;
@@ -18,7 +18,7 @@ class ApiClient {
   /**
    * Make authenticated API request
    */
-  async request<T = any>(
+  async request<T = unknown>(
     endpoint: string,
     options: RequestInit = {}
   ): Promise<ApiResponse<T>> {
@@ -75,14 +75,14 @@ class ApiClient {
   /**
    * GET request
    */
-  async get<T = any>(endpoint: string): Promise<ApiResponse<T>> {
+  async get<T = unknown>(endpoint: string): Promise<ApiResponse<T>> {
     return this.request<T>(endpoint, { method: 'GET' });
   }
 
   /**
    * POST request
    */
-  async post<T = any>(endpoint: string, data?: any): Promise<ApiResponse<T>> {
+  async post<T = unknown>(endpoint: string, data?: unknown): Promise<ApiResponse<T>> {
     return this.request<T>(endpoint, {
       method: 'POST',
       body: data ? JSON.stringify(data) : undefined,
@@ -92,7 +92,7 @@ class ApiClient {
   /**
    * PUT request
    */
-  async put<T = any>(endpoint: string, data?: any): Promise<ApiResponse<T>> {
+  async put<T = unknown>(endpoint: string, data?: unknown): Promise<ApiResponse<T>> {
     return this.request<T>(endpoint, {
       method: 'PUT',
       body: data ? JSON.stringify(data) : undefined,
@@ -102,14 +102,14 @@ class ApiClient {
   /**
    * DELETE request
    */
-  async delete<T = any>(endpoint: string): Promise<ApiResponse<T>> {
+  async delete<T = unknown>(endpoint: string): Promise<ApiResponse<T>> {
     return this.request<T>(endpoint, { method: 'DELETE' });
   }
 
   /**
    * Upload file with progress
    */
-  async uploadFile<T = any>(
+  async uploadFile<T = unknown>(
     endpoint: string, 
     file: File,
     onProgress?: (progress: number) => void
