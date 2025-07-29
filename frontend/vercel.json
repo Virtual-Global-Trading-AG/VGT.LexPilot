@@ -8,7 +8,7 @@
     }
   ],
   "env": {
-    "NEXT_PUBLIC_API_URL": "@NEXT_PUBLIC_API_URL"
+    "NEXT_PUBLIC_API_URL": "https://us-central1-lexpilot-8450c.cloudfunctions.net/api"
   },
   "regions": ["fra1"],
   "functions": {
