@@ -131,36 +131,26 @@ export class ExpressApp {
       next();
     });
 
-    // Health Check
-    this.app.get('/health', (req, res) => {
-      res.status(200).json({
-        status: 'healthy',
-        timestamp: new Date().toISOString(),
-        version: process.env.npm_package_version || '1.0.0',
-        environment: config.monitoring.analyticsEnabled ? 'development' : 'production'
-      });
-    });
-
     // API Version Header
-    this.app.use(`/api/${config.firebase.projectId || 'v1'}`, (req, res, next) => {
-      res.setHeader('API-Version', config.firebase.projectId || 'v1');
+    this.app.use(`/v1`, (req, res, next) => {
+      res.setHeader('API-Version', 'v1');
       next();
     });
   }
 
   private initializeRoutes(): void {
-    // Temporär: Einfache Routes ohne komplexe Joi-Validierung
-    const { createApiRoutes } = require('./routes');
-    this.app.use('/api/v1', createApiRoutes());
-
-    // Einfache Ping Route für Tests
-    this.app.get('/api/v1/ping', (req, res) => {
+    // Einfache Ping Route für Tests (VOR den anderen Routen definieren)
+    this.app.get('/v1/ping', (req, res) => {
       res.json({
         message: 'LexPilot Backend API is running!',
         timestamp: new Date().toISOString(),
         requestId: req.requestId
       });
     });
+
+    // Aktiviere API Routes ohne komplexe Validierung (direkt unter Root mounten)
+    const { createApiRoutes } = require('./routes');
+    this.app.use('/', createApiRoutes());
 
     // 404 Handler für unbekannte Routes
     this.app.use('*', (req, res) => {
