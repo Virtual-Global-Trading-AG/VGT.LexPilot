@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import Joi from 'joi';
+import * as Joi from 'joi';
 import { AuthController } from '../controllers/AuthController';
 import { AuthMiddleware } from '../middleware/authMiddleware';
 import { RateLimitMiddleware } from '../middleware/rateLimitMiddleware';

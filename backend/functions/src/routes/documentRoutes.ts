@@ -3,7 +3,7 @@ import { DocumentController } from '../controllers/DocumentController';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { ValidationMiddleware } from '../middleware/validationMiddleware';
 import { rateLimitMiddleware } from '../middleware/rateLimitMiddleware';
-import Joi from 'joi';
+import * as Joi from 'joi';
 
 const router = Router();
 const documentController = new DocumentController();

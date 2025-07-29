@@ -1,10 +1,12 @@
 import 'module-alias/register';
 import { createExpressApp } from './app';
 import * as functions from 'firebase-functions';
-import { initializeApp } from 'firebase-admin/app';
+import { initializeApp, getApps } from 'firebase-admin/app';
 
-// Initialize Firebase Admin
-initializeApp();
+// Initialize Firebase Admin only if not already initialized
+if (getApps().length === 0) {
+  initializeApp();
+}
 
 // Create Express App
 const createApp = async () => {

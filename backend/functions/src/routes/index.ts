@@ -1,5 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import Joi from 'joi';
+import * as Joi from 'joi';
 import { AuthMiddleware, authenticate, requireAdmin, requirePremium } from '../middleware/authMiddleware';
 import { RateLimitMiddleware, rateLimitMiddleware } from '../middleware/rateLimitMiddleware';
 import { ValidationMiddleware, validationMiddleware } from '../middleware/validationMiddleware';

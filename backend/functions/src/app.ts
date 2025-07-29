@@ -149,13 +149,11 @@ export class ExpressApp {
   }
 
   private initializeRoutes(): void {
-    // Import der API Routes
+    // Temporär: Einfache Routes ohne komplexe Joi-Validierung
     const { createApiRoutes } = require('./routes');
-    
-    // API Routes registrieren
     this.app.use('/api/v1', createApiRoutes());
 
-    // Placeholder Route
+    // Einfache Ping Route für Tests
     this.app.get('/api/v1/ping', (req, res) => {
       res.json({
         message: 'LexPilot Backend API is running!',
