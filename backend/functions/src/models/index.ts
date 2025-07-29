@@ -15,6 +15,7 @@ export interface User extends BaseEntity {
   photoURL?: string;
   role: UserRole;
   subscription: SubscriptionTier;
+  lastLogin?: Date;
   settings: UserSettings;
   statistics: UserStatistics;
 }

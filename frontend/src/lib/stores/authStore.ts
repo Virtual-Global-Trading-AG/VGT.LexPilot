@@ -131,8 +131,27 @@ export const useAuthStore = create<AuthState>()(
           return false;
         }
 
-        // After registration, user needs to verify email before signing in
-        set({ loading: false, error: null });
+        // Check if registration returned tokens (auto-login)
+        if (result.user && result.tokens) {
+          set({ 
+            user: {
+              ...result.user,
+              role: (result.user.role as 'user' | 'premium' | 'admin') || 'user'
+            },
+            userProfile: {
+              ...result.user,
+              role: (result.user.role as 'user' | 'premium' | 'admin') || 'user'
+            },
+            isAuthenticated: true,
+            accessToken: result.tokens.idToken,
+            loading: false,
+            error: null
+          });
+        } else {
+          // Registration successful but no auto-login
+          set({ loading: false, error: null });
+        }
+        
         return true;
       } catch (error) {
         set({ 

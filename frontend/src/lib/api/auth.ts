@@ -103,7 +103,7 @@ class ApiAuthService {
 
       return {
         success: true,
-        data: data.data,
+        data: data.data || data, // Fallback to data itself if data.data doesn't exist
         message: data.message
       };
     } catch (error) {
@@ -156,6 +156,7 @@ class ApiAuthService {
   async register(data: RegisterData): Promise<AuthResult> {
     const result = await this.makeRequest<{
       user: any;
+      tokens?: { idToken: string; refreshToken: string };
       verificationLink?: string;
     }>('/auth/register', {
       method: 'POST',
@@ -163,6 +164,25 @@ class ApiAuthService {
     });
 
     if (result.success && result.data) {
+      // Check if tokens were returned (auto-login after registration)
+      if (result.data.tokens) {
+        // Store tokens
+        this.accessToken = result.data.tokens.idToken;
+        this.refreshToken = result.data.tokens.refreshToken;
+        
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('accessToken', this.accessToken);
+          localStorage.setItem('refreshToken', this.refreshToken);
+        }
+
+        return {
+          success: true,
+          user: result.data.user,
+          tokens: result.data.tokens
+        };
+      }
+
+      // Registration successful but no auto-login
       return {
         success: true,
         user: result.data.user

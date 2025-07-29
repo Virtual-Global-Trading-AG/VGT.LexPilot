@@ -1,8 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { motion } from "motion/react"
-import { Eye, EyeOff, Mail, Lock, User, Building, ArrowRight, Check } from "lucide-react"
+import { Eye, EyeOff, Mail, Lock, User, Building, ArrowRight, Check, CheckCircle } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -29,6 +29,14 @@ export function RegisterForm() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
   const [agreedToTerms, setAgreedToTerms] = useState(false)
+  const [registrationSuccess, setRegistrationSuccess] = useState(false)
+
+  // Debug log for registrationSuccess changes
+  console.log('registrationSuccess state:', registrationSuccess);
+
+  useEffect(() => {
+    console.log('registrationSuccess changed to:', registrationSuccess);
+  }, [registrationSuccess]);
 
   const passwordRequirements = [
     { regex: /.{6,}/, text: "Mindestens 6 Zeichen" },
@@ -80,6 +88,8 @@ export function RegisterForm() {
     
     if (!validateForm()) return
     
+    console.log('Starting registration...'); // Debug log
+    
     const success = await register({
       email: formData.email,
       password: formData.password,
@@ -88,8 +98,11 @@ export function RegisterForm() {
       lastName: formData.lastName
     })
     
+    console.log('Registration success:', success); // Debug log
+    
     if (success) {
-      router.push("/dashboard")
+      console.log('Setting registrationSuccess to true'); // Debug log
+      setRegistrationSuccess(true)
     }
   }
 
@@ -114,6 +127,86 @@ export function RegisterForm() {
     if (strength < 50) return "bg-orange-500"
     if (strength < 75) return "bg-yellow-500"
     return "bg-green-500"
+  }
+
+  // Show success message if registration was successful
+  if (registrationSuccess) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="w-full max-w-lg mx-auto"
+      >
+        <Card className="border-0 shadow-2xl bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm">
+          <CardHeader className="space-y-1 text-center pb-8">
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
+              className="mx-auto w-16 h-16 bg-gradient-to-r from-green-600 to-blue-600 rounded-xl flex items-center justify-center mb-4"
+            >
+              <CheckCircle className="w-8 h-8 text-white" />
+            </motion.div>
+            <CardTitle className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 dark:from-white dark:to-gray-300 bg-clip-text text-transparent">
+              Registrierung erfolgreich!
+            </CardTitle>
+            <CardDescription className="text-gray-600 dark:text-gray-400">
+              Ihr Account wurde erfolgreich erstellt
+            </CardDescription>
+          </CardHeader>
+
+          <CardContent className="space-y-6 text-center">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="space-y-4"
+            >
+              <Alert className="border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-900/20">
+                <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
+                <AlertDescription className="text-green-800 dark:text-green-200">
+                  Eine Bestätigungs-E-Mail wurde an <strong>{formData.email}</strong> gesendet.
+                </AlertDescription>
+              </Alert>
+
+              <div className="space-y-2 text-gray-600 dark:text-gray-400">
+                <p>
+                  Bitte überprüfen Sie Ihr E-Mail-Postfach und klicken Sie auf den Bestätigungslink, 
+                  um Ihren Account zu aktivieren.
+                </p>
+                <p className="text-sm">
+                  Nach der Bestätigung können Sie sich mit Ihren Zugangsdaten anmelden.
+                </p>
+              </div>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5 }}
+              className="space-y-4"
+            >
+              <Button
+                onClick={() => router.push("/login")}
+                className="w-full h-12 bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700 text-white font-medium transition-all duration-200"
+              >
+                Zur Anmeldung
+              </Button>
+
+              <div className="text-center">
+                <button
+                  onClick={() => setRegistrationSuccess(false)}
+                  className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
+                >
+                  Zurück zur Registrierung
+                </button>
+              </div>
+            </motion.div>
+          </CardContent>
+        </Card>
+      </motion.div>
+    )
   }
 
   return (

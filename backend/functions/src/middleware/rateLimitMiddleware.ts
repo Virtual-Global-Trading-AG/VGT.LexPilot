@@ -155,7 +155,7 @@ export class RateLimitMiddleware {
    */
   static authLimiter = this.createRateLimiter({
     windowMs: 15 * 60 * 1000, // 15 Minuten
-    maxRequests: 5,
+    maxRequests: 8,
     keyGenerator: (req) => `auth:${req.ip}`,
     message: 'Too many authentication attempts, please try again later',
     skipSuccessfulRequests: true

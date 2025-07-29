@@ -31,8 +31,14 @@ export abstract class BaseRepository<T extends BaseEntity> {
   async create(item: Omit<T, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
     try {
       const now = new Date();
+      
+      // Filter out undefined values to prevent Firestore errors
+      const filteredItem = Object.fromEntries(
+        Object.entries(item).filter(([_, value]) => value !== undefined)
+      );
+
       const entity = {
-        ...item,
+        ...filteredItem,
         createdAt: now,
         updatedAt: now
       } as T;
@@ -79,8 +85,13 @@ export abstract class BaseRepository<T extends BaseEntity> {
    */
   async update(id: string, updates: Partial<Omit<T, 'id' | 'createdAt'>>): Promise<void> {
     try {
+      // Filter out undefined values to prevent Firestore errors
+      const filteredUpdates = Object.fromEntries(
+        Object.entries(updates).filter(([_, value]) => value !== undefined)
+      );
+
       const updateData = {
-        ...updates,
+        ...filteredUpdates,
         updatedAt: new Date()
       };
 

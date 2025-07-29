@@ -77,11 +77,12 @@ export class UserRepository extends BaseRepository<User> {
       const existingUser = await this.findByUid(authUser.uid);
       
       if (existingUser) {
-        // Update existing user
+        // Update existing user including lastLogin
         await this.update(existingUser.id, {
           email: authUser.email.toLowerCase(),
           displayName: authUser.displayName,
-          photoURL: authUser.photoURL
+          photoURL: authUser.photoURL,
+          lastLogin: new Date()
         });
 
         const updatedUser = await this.findById(existingUser.id);
@@ -99,6 +100,7 @@ export class UserRepository extends BaseRepository<User> {
           photoURL: authUser.photoURL,
           role: UserRole.USER,
           subscription: SubscriptionTier.FREE,
+          lastLogin: new Date(),
           settings: {
             language: 'de',
             timezone: 'Europe/Zurich',

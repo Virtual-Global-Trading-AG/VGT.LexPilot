@@ -70,17 +70,12 @@ export class AuthController extends BaseController {
       // Get user data from Firebase Auth
       const user = await getAuth().getUser(localId);
 
-      // Create or update user in Firestore
+      // Create or update user in Firestore (lastLogin is updated automatically)
       const userData = await this.userRepository.createOrUpdateFromAuth({
         uid: user.uid,
         email: user.email!,
         displayName: user.displayName,
         photoURL: user.photoURL
-      });
-
-      // Update last login
-      await this.db.collection('users').doc(user.uid).update({
-        lastLogin: new Date().toISOString()
       });
 
       this.logger.info('Login successful', { userId: user.uid, email });
@@ -134,55 +129,28 @@ export class AuthController extends BaseController {
         emailVerified: false
       });
 
-      // Create user profile in Firestore
-      const userProfile = {
+      // Create user data using UserRepository with lastLogin included
+      const userData = await this.userRepository.createOrUpdateFromAuth({
         uid: userRecord.uid,
         email: email.toLowerCase(),
-        emailVerified: false,
-        displayName: displayName || '',
-        firstName: firstName || '',
-        lastName: lastName || '',
-        company: '',
-        phone: '',
-        role: 'user',
-        status: 'active',
-        preferences: {
-          language: 'de',
-          timezone: 'Europe/Zurich',
-          notifications: {
-            email: true,
-            push: true,
-            sms: false
-          }
-        },
-        subscription: {
-          type: 'free',
-          expiresAt: null
-        },
-        usage: {
-          documentsUploaded: 0,
-          analysesCompleted: 0,
-          storageUsed: 0,
-          costThisMonth: 0
-        },
-        statistics: {
-          documentsAnalyzed: 0,
-          totalCost: 0,
-          monthlyUsage: [],
-          averageConfidence: 0,
-          lastActivity: new Date()
-        },
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        lastLogin: new Date().toISOString()
-      };
+        displayName: displayName || `${firstName} ${lastName}`.trim() || undefined
+      });
 
-      await this.db.collection('users').doc(userRecord.uid).set(userProfile);
+      // Generate custom token for immediate login
+      const customToken = await getAuth().createCustomToken(userRecord.uid);
 
-      // Generate email verification link
-      const verificationLink = await getAuth().generateEmailVerificationLink(email);
+      // Sign in the user with the custom token to get ID token
+      const signInResult = await this.signInWithCustomToken(customToken);
+      
+      if (!signInResult.success) {
+        this.logger.error('Failed to sign in after registration', new Error(signInResult.error || 'Unknown error'), { userId: userRecord.uid });
+        this.sendError(res, 500, 'Registration successful but auto-login failed');
+        return;
+      }
 
-      this.logger.info('User registered successfully', { 
+      const { idToken, refreshToken } = signInResult.data;
+
+      this.logger.info('User registered and logged in successfully', { 
         userId: userRecord.uid, 
         email 
       });
@@ -192,10 +160,14 @@ export class AuthController extends BaseController {
           uid: userRecord.uid,
           email: userRecord.email,
           displayName: userRecord.displayName,
-          emailVerified: userRecord.emailVerified
+          emailVerified: userRecord.emailVerified,
+          role: userData.role
         },
-        verificationLink // In production, send this via email instead
-      }, 'Registration successful. Please verify your email.');
+        tokens: {
+          idToken,
+          refreshToken
+        }
+      }, 'Registration and login successful');
 
     } catch (error) {
       this.logger.error('Registration error', error as Error, { 
@@ -435,6 +407,56 @@ export class AuthController extends BaseController {
   }
 
   // Private helper methods
+
+  /**
+   * Sign in with custom token using Firebase REST API
+   */
+  private async signInWithCustomToken(customToken: string): Promise<{
+    success: boolean;
+    data?: any;
+    error?: string;
+  }> {
+    try {
+      const response = await fetch(
+        `https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=${process.env.API_KEY}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            token: customToken,
+            returnSecureToken: true
+          })
+        }
+      );
+
+      const data = await response.json() as any;
+
+      if (!response.ok) {
+        return {
+          success: false,
+          error: data.error?.message || 'Custom token authentication failed'
+        };
+      }
+
+      return {
+        success: true,
+        data: {
+          idToken: data.idToken,
+          refreshToken: data.refreshToken,
+          localId: data.localId,
+          expiresIn: data.expiresIn
+        }
+      };
+
+    } catch (error) {
+      return {
+        success: false,
+        error: 'Network error during custom token authentication'
+      };
+    }
+  }
 
   /**
    * Sign in with email and password using Firebase REST API
