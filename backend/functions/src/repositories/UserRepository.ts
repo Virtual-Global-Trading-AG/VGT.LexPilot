@@ -87,7 +87,7 @@ export class UserRepository extends BaseRepository<User> {
 
         const updatedUser = await this.findById(existingUser.id);
         if (!updatedUser) {
-          throw new Error('Failed to retrieve updated user');
+          throw new Error('Failed to retrieve updated user in store');
         }
         
         return updatedUser;
