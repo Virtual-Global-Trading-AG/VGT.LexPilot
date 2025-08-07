@@ -12,7 +12,7 @@ const documentController = new DocumentController();
 router.use(authMiddleware);
 
 // Apply rate limiting to document operations
-router.use(rateLimitMiddleware);
+//router.use(rateLimitMiddleware);
 
 // Validation schemas
 const uploadDocumentSchema = Joi.object({

@@ -642,10 +642,10 @@ export class AnalysisService {
    * Speichert Rechtsgrundlagen im Vector Store für spätere Referenzierung
    */
   async indexLegalTexts(
-    texts: { 
-      content: string; 
-      title: string; 
-      source: string; 
+    texts: {
+      content: string;
+      title: string;
+      source: string;
       jurisdiction: string;
       legalArea: string;
     }[],
@@ -664,7 +664,7 @@ export class AnalysisService {
       for (let i = 0; i < texts.length; i++) {
         const text = texts[i];
         if (!text) continue; // Skip undefined entries
-        
+
         progressCallback?.(Math.round((i / texts.length) * 50), `Processing ${text.title}`);
 
         // Teile jeden Gesetzestext in Chunks auf
@@ -681,7 +681,7 @@ export class AnalysisService {
         });
 
         const chunks = await this.documentSplitter.splitDocument(document);
-        
+
         // Füge spezifische Metadaten für Rechtsgrundlagen hinzu
         const enhancedChunks = chunks.map((chunk, index) => ({
           ...chunk,
@@ -706,7 +706,7 @@ export class AnalysisService {
         progressCallback?.(totalProgress, status);
       });
 
-      this.logger.info('Legal texts indexing completed', { 
+      this.logger.info('Legal texts indexing completed', {
         totalChunks: allChunks.length,
         textsProcessed: texts.length
       });

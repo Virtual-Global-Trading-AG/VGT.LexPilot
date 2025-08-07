@@ -1,5 +1,5 @@
 import { PineconeStore } from '@langchain/pinecone';
-import { Pinecone } from '@pinecone-database/pinecone';
+import { Pinecone as PineconeClient } from "@pinecone-database/pinecone";
 import { Document } from '@langchain/core/documents';
 import { EmbeddingService } from '../services/EmbeddingService';
 import { Logger } from '../utils/logger';
@@ -24,7 +24,7 @@ export interface SearchResult {
  */
 export class PineconeVectorStore {
   private readonly logger = Logger.getInstance();
-  private client!: Pinecone; // Definitive Assignment Assertion
+  private pinecone!: PineconeClient; // Definitive Assignment Assertion
   private embeddingService: EmbeddingService;
   private store?: PineconeStore;
 
@@ -44,13 +44,13 @@ export class PineconeVectorStore {
         throw new Error('PINECONE_API_KEY environment variable is required');
       }
 
-      this.client = new Pinecone({
+      this.pinecone = new PineconeClient({
         apiKey: apiKey,
       });
 
-      this.logger.info('Pinecone client initialized successfully');
+      this.logger.info('Pinecone pinecone initialized successfully');
     } catch (error) {
-      this.logger.error('Failed to initialize Pinecone client', error as Error);
+      this.logger.error('Failed to initialize Pinecone pinecone', error as Error);
       throw new Error(`Pinecone initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -65,14 +65,14 @@ export class PineconeVectorStore {
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        const pineconeIndex = this.client.Index(config.indexName);
+        const pineconeIndex = this.pinecone.Index(config.indexName);
         
         this.store = await PineconeStore.fromExistingIndex(
           this.embeddingService.getEmbeddingModel(),
           {
             pineconeIndex,
-            namespace: config.namespace,
-            textKey: 'text',
+            //namespace: config.namespace,
+            //textKey: 'text',
           }
         );
 
@@ -111,6 +111,7 @@ export class PineconeVectorStore {
     progressCallback?: (progress: number, status: string) => void
   ): Promise<void> {
     if (!this.store) {
+      this.logger.info('initializeStore', config);
       await this.initializeStore(config);
     }
 
@@ -130,8 +131,14 @@ export class PineconeVectorStore {
     });
 
     try {
-      for (let i = 0; i < chunks.length; i += batchSize) {
+      /*for (let i = 0; i < chunks.length; i += batchSize) {
+
+        this.logger.info('in loop');
+
+
         const batch = chunks.slice(i, i + batchSize);
+
+        this.logger.info('chunks', chunks);
         const batchNumber = Math.floor(i / batchSize) + 1;
 
         // Konvertiere HierarchicalChunk zu Document für LangChain
@@ -140,7 +147,15 @@ export class PineconeVectorStore {
           metadata: chunk.metadata
         }));
 
-        await this.store!.addDocuments(documents);
+        console.log(documents);
+
+        console.log('Doc length', documents.length);
+
+        await this.store!.addDocuments(documents, { ids: ["1", "2", "3", "4"] });
+
+        this.logger.info('Add document',
+          documents.length
+        );
 
         const progress = Math.round((batchNumber / totalBatches) * 100);
         progressCallback?.(progress, `Stored batch ${batchNumber}/${totalBatches}`);
@@ -155,7 +170,32 @@ export class PineconeVectorStore {
         if (i + batchSize < chunks.length) {
           await new Promise(resolve => setTimeout(resolve, 100));
         }
-      }
+      }*/
+
+      const document1: Document = {
+        pageContent: "The powerhouse of the cell is the mitochondria",
+        metadata: { source: "https://example.com" },
+      };
+
+      const document2: Document = {
+        pageContent: "Buildings are made out of brick",
+        metadata: { source: "https://example.com" },
+      };
+
+      const document3: Document = {
+        pageContent: "Mitochondria are made out of lipids",
+        metadata: { source: "https://example.com" },
+      };
+
+      const document4: Document = {
+        pageContent: "The 2024 Olympics are in Paris",
+        metadata: { source: "https://example.com" },
+      };
+
+      const documentsTest = [document1, document2, document3, document4];
+
+      await this.store!.addDocuments(documentsTest, { ids: ["1", "2", "3", "4"] });
+
 
       this.logger.info('All documents stored successfully', {
         totalChunks: chunks.length,
@@ -249,7 +289,7 @@ export class PineconeVectorStore {
     }
 
     try {
-      const pineconeIndex = this.client.Index(config.indexName);
+      const pineconeIndex = this.pinecone.Index(config.indexName);
       
       // Lösche basierend auf Metadaten-Filter
       await pineconeIndex.namespace(config.namespace).deleteMany(filter);
@@ -278,7 +318,7 @@ export class PineconeVectorStore {
     indexFullness: number;
   }> {
     try {
-      const pineconeIndex = this.client.Index(config.indexName);
+      const pineconeIndex = this.pinecone.Index(config.indexName);
       const stats = await pineconeIndex.describeIndexStats();
 
       const namespaceStats = stats.namespaces?.[config.namespace];
@@ -304,7 +344,7 @@ export class PineconeVectorStore {
    */
   async healthCheck(indexName: string): Promise<boolean> {
     try {
-      const pineconeIndex = this.client.Index(indexName);
+      const pineconeIndex = this.pinecone.Index(indexName);
       const stats = await pineconeIndex.describeIndexStats();
       return stats !== null;
 

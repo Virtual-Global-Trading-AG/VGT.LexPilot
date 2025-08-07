@@ -24,7 +24,7 @@ const envSchema = z.object({
   // Pinecone
   PINECONE_API_KEY: z.string().min(1),
   PINECONE_ENVIRONMENT: z.string().default('gcp-starter'),
-  PINECONE_INDEX_NAME: z.string().default('lexilot-legal-docs'),
+  PINECONE_INDEX_NAME: z.string().default('lexpilot-legal-docs'),
   
   // HuggingFace
   HUGGINGFACE_API_KEY: z.string().optional(),

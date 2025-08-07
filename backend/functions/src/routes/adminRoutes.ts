@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { AdminController } from '../controllers/AdminController';
-import { authMiddleware } from '../middleware/authMiddleware';
+import { AuthMiddleware, authMiddleware } from '../middleware/authMiddleware';
 import { ValidationMiddleware } from '../middleware/validationMiddleware';
 import { rateLimitMiddleware } from '../middleware/rateLimitMiddleware';
 import * as Joi from 'joi';
@@ -12,7 +12,7 @@ const adminController = new AdminController();
 router.use(authMiddleware);
 
 // Apply stricter rate limiting for admin operations
-router.use(rateLimitMiddleware);
+//router.use(rateLimitMiddleware);
 
 // Validation schemas
 const indexLegalTextsSchema = Joi.object({

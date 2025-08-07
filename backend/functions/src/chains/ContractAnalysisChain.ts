@@ -1,10 +1,9 @@
-import { LLMChain } from 'langchain/chains';
-import { PromptTemplate } from '@langchain/core/prompts';
-import { StructuredOutputParser } from 'langchain/output_parsers';
+import { ChatPromptTemplate } from '@langchain/core/prompts';
+import { Runnable, RunnableSequence } from '@langchain/core/runnables';
+import { Document as LangChainDocument } from 'langchain/document';
 import { z } from 'zod';
-import { Document } from 'langchain/document';
-import { Logger } from '../utils/logger';
 import { LLMFactory } from '../factories/LLMFactory';
+import { Logger } from '../utils/logger';
 import { BaseLegalChain } from './BaseChain';
 
 // Zod Schemas für strukturierte Ausgaben
@@ -73,17 +72,17 @@ export class AnalysisSubject {
 }
 
 /**
- * Contract Analysis Chain implementiert die IRAC Methodology
+ * Contract Analysis Chain implementiert die IRAC Methodology mit LCEL
  * (Issue, Rule, Application, Conclusion)
  */
 export class ContractAnalysisChain extends BaseLegalChain {
   readonly logger = Logger.getInstance();
   private readonly llmFactory = new LLMFactory();
   private readonly chains: {
-    issue: LLMChain;
-    rule: LLMChain;
-    application: LLMChain;
-    conclusion: LLMChain;
+    issue: Runnable;
+    rule: Runnable;
+    application: Runnable;
+    conclusion: Runnable;
   };
 
   constructor() {
@@ -92,13 +91,14 @@ export class ContractAnalysisChain extends BaseLegalChain {
   }
 
   /**
-   * Initialisiert die verschiedenen Analyse-Chains
+   * Initialisiert die verschiedenen Analyse-Chains mit LCEL
    */
-  private setupChains(): any {
-    // Issue Identification Chain
-    const issueChain = new LLMChain({
-      llm: this.llmFactory.createAnalysisLLM(),
-      prompt: PromptTemplate.fromTemplate(`
+  private setupChains() {
+    const analysisLLM = this.llmFactory.createAnalysisLLM();
+    const validationLLM = this.llmFactory.createValidationLLM();
+
+    // Issue Identification Chain mit LCEL
+    const issuePrompt = ChatPromptTemplate.fromTemplate(`
 Als Schweizer Rechtsexperte identifiziere die rechtlichen Hauptfragen in diesem Vertrag.
 
 VERTRAG:
@@ -121,13 +121,12 @@ Analysiere systematisch und antworte im JSON-Format:
   "missingClauses": ["Fehlende Klausel"],
   "ambiguities": ["Mehrdeutigkeit"]
 }}
-      `)
-    });
+    `);
 
-    // Rule Application Chain
-    const ruleChain = new LLMChain({
-      llm: this.llmFactory.createAnalysisLLM(),
-      prompt: PromptTemplate.fromTemplate(`
+    const issueChain = RunnableSequence.from([issuePrompt, analysisLLM]);
+
+    // Rule Application Chain mit LCEL
+    const rulePrompt = ChatPromptTemplate.fromTemplate(`
 Wende relevante Schweizer Gesetze auf die Rechtsfragen an.
 
 RECHTSFRAGEN:
@@ -146,13 +145,12 @@ Analysiere nach Schweizer Recht und antworte im JSON-Format:
   "legalPrinciples": ["Grundsatz 1"],
   "jurisdictionSpecifics": "Schweizer Besonderheiten"
 }}
-      `)
-    });
+    `);
 
-    // Application Chain
-    const applicationChain = new LLMChain({
-      llm: this.llmFactory.createAnalysisLLM(),
-      prompt: PromptTemplate.fromTemplate(`
+    const ruleChain = RunnableSequence.from([rulePrompt, analysisLLM]);
+
+    // Application Chain mit LCEL
+    const applicationPrompt = ChatPromptTemplate.fromTemplate(`
 Wende die Rechtsregeln auf den Sachverhalt an.
 
 RECHTSFRAGEN: {issues}
@@ -166,13 +164,12 @@ Antworte im JSON-Format:
   "riskAssessment": "Risikobewertung",
   "recommendedActions": ["Maßnahme 1"]
 }}
-      `)
-    });
+    `);
 
-    // Conclusion Chain
-    const conclusionChain = new LLMChain({
-      llm: this.llmFactory.createValidationLLM(),
-      prompt: PromptTemplate.fromTemplate(`
+    const applicationChain = RunnableSequence.from([applicationPrompt, analysisLLM]);
+
+    // Conclusion Chain mit LCEL
+    const conclusionPrompt = ChatPromptTemplate.fromTemplate(`
 Erstelle die Schlussfolgerung der IRAC-Analyse.
 
 RECHTSFRAGEN: {issues}
@@ -187,8 +184,9 @@ Antworte im JSON-Format:
   "recommendations": ["Empfehlung"],
   "confidenceLevel": 0.8
 }}
-      `)
-    });
+    `);
+
+    const conclusionChain = RunnableSequence.from([conclusionPrompt, validationLLM]);
 
     return {
       issue: issueChain,
@@ -199,9 +197,9 @@ Antworte im JSON-Format:
   }
 
   /**
-   * Hauptanalyse-Methode - implementiert vollständige IRAC-Methodology
+   * Hauptanalyse-Methode - implementiert vollständige IRAC-Methodology mit LCEL
    */
-  async analyze(document: Document): Promise<ContractAnalysisResult> {
+  async analyze(document: LangChainDocument): Promise<ContractAnalysisResult> {
     const startTime = Date.now();
     const analysisSubject = new AnalysisSubject();
 
@@ -215,8 +213,8 @@ Antworte im JSON-Format:
       // Issue Identification (20% Progress)
       analysisSubject.notify({ step: 'issue_identification', progress: 20 });
       this.logger.info('Starting issue identification phase');
-      
-      const issuesResult = await this.chains.issue.call({
+
+      const issuesResult = await this.chains.issue.invoke({
         contract: document.pageContent,
         contractType: document.metadata.type || 'Allgemeiner Vertrag',
         jurisdiction: document.metadata.jurisdiction || 'CH'
@@ -225,38 +223,44 @@ Antworte im JSON-Format:
       // Rule Application (40% Progress)
       analysisSubject.notify({ step: 'rule_application', progress: 40 });
       this.logger.info('Starting rule application phase');
-      
-      const rulesResult = await this.chains.rule.call({
-        issues: JSON.stringify(issuesResult)
+
+      const rulesResult = await this.chains.rule.invoke({
+        issues: typeof issuesResult.content === 'string' ? issuesResult.content : JSON.stringify(issuesResult.content)
       });
 
       // Application to Facts (60% Progress)
       analysisSubject.notify({ step: 'fact_application', progress: 60 });
       this.logger.info('Starting fact application phase');
-      
-      const applicationResult = await this.chains.application.call({
-        issues: JSON.stringify(issuesResult),
-        rules: JSON.stringify(rulesResult),
+
+      const applicationResult = await this.chains.application.invoke({
+        issues: typeof issuesResult.content === 'string' ? issuesResult.content : JSON.stringify(issuesResult.content),
+        rules: typeof rulesResult.content === 'string' ? rulesResult.content : JSON.stringify(rulesResult.content),
         contract: document.pageContent
       });
 
       // Conclusion & Recommendations (80% Progress)
       analysisSubject.notify({ step: 'conclusion', progress: 80 });
       this.logger.info('Starting conclusion phase');
-      
-      const conclusionResult = await this.chains.conclusion.call({
-        issues: JSON.stringify(issuesResult),
-        rules: JSON.stringify(rulesResult),
-        application: JSON.stringify(applicationResult)
+
+      const conclusionResult = await this.chains.conclusion.invoke({
+        issues: typeof issuesResult.content === 'string' ? issuesResult.content : JSON.stringify(issuesResult.content),
+        rules: typeof rulesResult.content === 'string' ? rulesResult.content : JSON.stringify(rulesResult.content),
+        application: typeof applicationResult.content === 'string' ? applicationResult.content : JSON.stringify(applicationResult.content)
       });
+
+      // Parse JSON responses
+      const parsedIssues = JSON.parse(typeof issuesResult.content === 'string' ? issuesResult.content : JSON.stringify(issuesResult.content));
+      const parsedRules = JSON.parse(typeof rulesResult.content === 'string' ? rulesResult.content : JSON.stringify(rulesResult.content));
+      const parsedApplication = JSON.parse(typeof applicationResult.content === 'string' ? applicationResult.content : JSON.stringify(applicationResult.content));
+      const parsedConclusion = JSON.parse(typeof conclusionResult.content === 'string' ? conclusionResult.content : JSON.stringify(conclusionResult.content));
 
       // Validation (95% Progress)
       analysisSubject.notify({ step: 'validation', progress: 95 });
       const validatedResult = await this.validateOutput({
-        issues: issuesResult.mainIssues || [],
-        rules: rulesResult.applicableLaws || [],
-        application: applicationResult,
-        conclusion: conclusionResult
+        issues: parsedIssues.mainIssues || [],
+        rules: parsedRules.applicableLaws || [],
+        application: parsedApplication,
+        conclusion: parsedConclusion
       });
 
       // Final Result Assembly
@@ -275,7 +279,7 @@ Antworte im JSON-Format:
       };
 
       analysisSubject.notify({ step: 'completed', progress: 100 });
-      
+
       this.logger.info('Contract analysis completed', {
         processingTimeMs: processingTime,
         issueCount: finalResult.issues.length,
@@ -313,13 +317,13 @@ Antworte im JSON-Format:
     try {
       // Validiere Issues
       const validatedIssues = results.issues.map(issue => IssueSchema.parse(issue));
-      
+
       // Validiere Rules
       const validatedRules = results.rules.map(rule => RuleSchema.parse(rule));
-      
+
       // Validiere Application
       const validatedApplication = ApplicationSchema.parse(results.application);
-      
+
       // Validiere Conclusion
       const validatedConclusion = ConclusionSchema.parse(results.conclusion);
 
@@ -346,18 +350,18 @@ Antworte im JSON-Format:
   }
 
   /**
-   * Analysiert spezifische Vertragsklauseln
+   * Analysiert spezifische Vertragsklauseln mit LCEL
    */
   async analyzeSpecificClause(
-    clauseText: string, 
-    clauseType: string, 
+    clauseText: string,
+    clauseType: string,
     contractContext: string
   ): Promise<{
     riskLevel: 'low' | 'medium' | 'high';
     issues: string[];
     recommendations: string[];
   }> {
-    const clauseAnalysisPrompt = PromptTemplate.fromTemplate(`
+    const clauseAnalysisPrompt = ChatPromptTemplate.fromTemplate(`
 Analysiere diese spezifische Vertragsklausel im Kontext des Schweizer Rechts:
 
 KLAUSEL:
@@ -376,16 +380,16 @@ Antworte im JSON-Format.
     `);
 
     const llm = this.llmFactory.createAnalysisLLM();
-    const clauseChain = new LLMChain({ llm, prompt: clauseAnalysisPrompt });
+    const clauseChain = RunnableSequence.from([clauseAnalysisPrompt, llm]);
 
-    const result = await clauseChain.call({
+    const result = await clauseChain.invoke({
       clauseText,
       clauseType,
       contractContext
     });
 
     // Parse und validiere das Ergebnis
-    // Vereinfachte Implementierung - in Produktion würde hier eine vollständige Validierung stehen
-    return JSON.parse(result.text);
+    const content = typeof result.content === 'string' ? result.content : JSON.stringify(result.content);
+    return JSON.parse(content);
   }
 }
