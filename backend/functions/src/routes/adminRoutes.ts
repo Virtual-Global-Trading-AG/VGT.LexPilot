@@ -12,7 +12,7 @@ const adminController = new AdminController();
 router.use(authMiddleware);
 
 // Apply stricter rate limiting for admin operations
-//router.use(rateLimitMiddleware);
+// router.use(rateLimitMiddleware);
 
 // Validation schemas
 const indexLegalTextsSchema = Joi.object({

@@ -66,6 +66,8 @@ export class PineconeVectorStore {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         const pineconeIndex = this.pinecone.Index(config.indexName);
+
+        console.log('pineconeIndex', pineconeIndex);
         
         this.store = await PineconeStore.fromExistingIndex(
           this.embeddingService.getEmbeddingModel(),
@@ -111,7 +113,6 @@ export class PineconeVectorStore {
     progressCallback?: (progress: number, status: string) => void
   ): Promise<void> {
     if (!this.store) {
-      this.logger.info('initializeStore', config);
       await this.initializeStore(config);
     }
 
@@ -131,14 +132,8 @@ export class PineconeVectorStore {
     });
 
     try {
-      /*for (let i = 0; i < chunks.length; i += batchSize) {
-
-        this.logger.info('in loop');
-
-
+      for (let i = 0; i < chunks.length; i += batchSize) {
         const batch = chunks.slice(i, i + batchSize);
-
-        this.logger.info('chunks', chunks);
         const batchNumber = Math.floor(i / batchSize) + 1;
 
         // Konvertiere HierarchicalChunk zu Document für LangChain
@@ -147,15 +142,7 @@ export class PineconeVectorStore {
           metadata: chunk.metadata
         }));
 
-        console.log(documents);
-
-        console.log('Doc length', documents.length);
-
-        await this.store!.addDocuments(documents, { ids: ["1", "2", "3", "4"] });
-
-        this.logger.info('Add document',
-          documents.length
-        );
+        await this.store!.addDocuments(documents);
 
         const progress = Math.round((batchNumber / totalBatches) * 100);
         progressCallback?.(progress, `Stored batch ${batchNumber}/${totalBatches}`);
@@ -170,32 +157,7 @@ export class PineconeVectorStore {
         if (i + batchSize < chunks.length) {
           await new Promise(resolve => setTimeout(resolve, 100));
         }
-      }*/
-
-      const document1: Document = {
-        pageContent: "The powerhouse of the cell is the mitochondria",
-        metadata: { source: "https://example.com" },
-      };
-
-      const document2: Document = {
-        pageContent: "Buildings are made out of brick",
-        metadata: { source: "https://example.com" },
-      };
-
-      const document3: Document = {
-        pageContent: "Mitochondria are made out of lipids",
-        metadata: { source: "https://example.com" },
-      };
-
-      const document4: Document = {
-        pageContent: "The 2024 Olympics are in Paris",
-        metadata: { source: "https://example.com" },
-      };
-
-      const documentsTest = [document1, document2, document3, document4];
-
-      await this.store!.addDocuments(documentsTest, { ids: ["1", "2", "3", "4"] });
-
+      }
 
       this.logger.info('All documents stored successfully', {
         totalChunks: chunks.length,
