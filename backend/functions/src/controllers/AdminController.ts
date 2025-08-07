@@ -1,8 +1,10 @@
-import { Request, Response, NextFunction } from 'express';
-import { getFirestore } from 'firebase-admin/firestore';
+import { NextFunction, Request, Response } from 'express';
 import { getAuth } from 'firebase-admin/auth';
+import { getFirestore } from 'firebase-admin/firestore';
+import * as fs from 'fs';
+import * as path from 'path';
+import pdfParse from 'pdf-parse';
 import { BaseController } from './BaseController';
-import { Logger } from '../utils/logger';
 
 interface AdminUserUpdateRequest {
   role?: 'user' | 'premium' | 'admin';
@@ -992,6 +994,74 @@ export class AdminController extends BaseController {
       this.logger.error('Legal context search failed', error as Error, {
         userId: this.getUserId(req),
         query: req.body.query?.substring(0, 100)
+      });
+      next(error);
+    }
+  }
+
+  /**
+   * Index Specific Legal Text (Admin Only)
+   * POST /api/admin/legal-texts/index-specific
+   * 
+   * This endpoint reads a hardcoded PDF document and indexes it using the AnalysisService
+   */
+  public async indexSpecificLegalText(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = this.getUserId(req);
+
+      // Validate admin role
+      const userRecord = await getAuth().getUser(userId);
+      if (!userRecord.customClaims?.admin) {
+        this.sendError(res, 403, 'Admin access required');
+        return;
+      }
+
+      // Read the dsg.pdf file from the assets directory
+      const pdfPath = path.join(__dirname, '../../assets/dsg.pdf');
+      const pdfBuffer = fs.readFileSync(pdfPath);
+      const pdfData = await pdfParse(pdfBuffer);
+      const content = pdfData.text;
+      
+      // Create text object for indexing
+      const text = {
+        content: content,
+        title: 'DSG - Datenschutzgesetz',
+        source: 'DSG',
+        jurisdiction: 'CH',
+        legalArea: 'Datenschutzrecht'
+      };
+
+      // Import AnalysisService dynamically to avoid circular dependency
+      const { AnalysisService } = await import('../services/AnalysisService');
+      const analysisService = new AnalysisService();
+
+      this.logger.info('Starting specific legal text indexing', {
+        userId,
+        document: text.title
+      });
+
+      let progress = 0;
+      const progressCallback = (progressPercent: number, status: string) => {
+        progress = progressPercent;
+        this.logger.info('Indexing progress', { progress, status });
+      };
+
+      await analysisService.indexLegalTexts([text], progressCallback);
+
+      this.sendSuccess(res, {
+        message: 'Specific legal text indexed successfully',
+        document: text.title,
+        timestamp: new Date().toISOString()
+      });
+
+      this.logger.info('Specific legal text indexing completed', {
+        userId,
+        document: text.title
+      });
+
+    } catch (error) {
+      this.logger.error('Specific legal text indexing failed', error as Error, {
+        userId: this.getUserId(req)
       });
       next(error);
     }

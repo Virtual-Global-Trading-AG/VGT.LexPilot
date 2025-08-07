@@ -114,4 +114,12 @@ router.get('/vector-store/stats',
   adminController.getVectorStoreStats.bind(adminController)
 );
 
+/**
+ * Index Specific Legal Text (Admin Only)
+ * POST /api/admin/legal-texts/index-specific
+ */
+router.post('/legal-texts/index-specific',
+  adminController.indexSpecificLegalText.bind(adminController)
+);
+
 export default router;
