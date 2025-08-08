@@ -1,3 +1,5 @@
+import { HumanMessage } from '@langchain/core/messages';
+import { ChatOpenAI } from '@langchain/openai';
 import { Request, Response, NextFunction } from 'express';
 import { BaseController } from './BaseController';
 import { Logger } from '../utils/logger';
@@ -125,7 +127,7 @@ export class DocumentController extends BaseController {
       }
 
       const document = await this.firestoreService.getDocument(documentId, userId);
-      
+
       if (!document) {
         this.sendError(res, 404, 'Document not found');
         return;
@@ -319,7 +321,7 @@ export class DocumentController extends BaseController {
           error: (error as Error).message
         });
       }
-      
+
       this.sendSuccess(res, {
         documentId,
         content,
@@ -830,6 +832,54 @@ export class DocumentController extends BaseController {
   }
 
   /**
+   * Text Similarity Search
+   * POST /api/documents/similarity-search
+   */
+  public async textSimilaritySearch(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = this.getUserId(req);
+      const { text } = req.body;
+
+      if (!text || typeof text !== 'string') {
+        this.sendError(res, 400, 'Text content is required');
+        return;
+      }
+
+      if (text.length > 10000) {
+        this.sendError(res, 400, 'Text content too long (max 10,000 characters)');
+        return;
+      }
+
+      // Perform similarity search
+      const results = await this.analysisService.parallelizeSimilaritySearch(text);
+
+      this.sendSuccess(res, {
+        results: results.map(doc => ({
+          content: doc.pageContent,
+          metadata: doc.metadata,
+          id: doc.id
+        })),
+        totalResults: results.length,
+        searchText: text.substring(0, 100) + (text.length > 100 ? '...' : ''),
+        timestamp: new Date().toISOString()
+      });
+
+      this.logger.info('Text similarity search completed', {
+        userId,
+        textLength: text.length,
+        resultsCount: results.length
+      });
+
+    } catch (error) {
+      this.logger.error('Text similarity search failed', error as Error, {
+        userId: this.getUserId(req),
+        textLength: req.body.text?.length || 0
+      });
+      next(error);
+    }
+  }
+
+  /**
    * DSGVO Compliance Check with Text Input
    * POST /api/documents/dsgvo-check
    */
@@ -895,9 +945,586 @@ export class DocumentController extends BaseController {
     }
   }
 
+  /**
+   * Complete DSGVO/DSG Check mit LangChain Integration
+   * Nutzt bereits befüllte Swiss DSG Vector Database
+   * POST /api/documents/complete-dsgvo-check
+   */
+  public async completeDSGVOCheck(req: Request, res: Response, next: NextFunction): Promise<void> {
+    const startTime = Date.now();
+    try {
+      const userId = this.getUserId(req);
+      const { question, maxSources = 5, language = 'de', includeContext = true } = req.body;
+
+      // Input Validation
+      if (!question || typeof question !== 'string') {
+        this.logger.error('DSG Check: Missing or invalid question', undefined, {
+          userId,
+          questionType: typeof question,
+          questionValue: question
+        });
+        this.sendError(res, 400, 'Benutzerfrage ist erforderlich');
+        return;
+      }
+
+      if (question.length > 5000) {
+        this.logger.error('DSG Check: Question too long', undefined, {
+          userId,
+          questionLength: question.length,
+          maxLength: 5000
+        });
+        this.sendError(res, 400, 'Frage zu lang (max 5.000 Zeichen)');
+        return;
+      }
+
+      if (maxSources < 1 || maxSources > 10) {
+        this.logger.error('DSG Check: Invalid maxSources parameter', undefined, {
+          userId,
+          maxSources,
+          allowedRange: '1-10'
+        });
+        this.sendError(res, 400, 'maxSources muss zwischen 1 und 10 liegen');
+        return;
+      }
+
+      this.logger.info('DSG Check: Starting complete check with pre-populated Swiss DSG database', {
+        userId,
+        questionLength: question.length,
+        maxSources,
+        language,
+        includeContext,
+        timestamp: new Date().toISOString(),
+        databaseStatus: 'Pre-populated Swiss DSG Vector Store'
+      });
+
+      // ==========================================
+      // SCHRITT 1: Optimierte Suchbegriffe für befüllte DSG-Datenbank
+      // ==========================================
+      const step1StartTime = Date.now();
+      const chatGptQueriesPrompt = `Frage: "${question}"
+
+KONTEXT: Es existiert bereits eine vollständig befüllte Vektor-Datenbank mit dem kompletten Datenschutzgesetz der Schweiz (DSG/nDSG), einschließlich aller Artikel, Absätze, Bestimmungen und Kommentare.
+
+AUFGABE: Erstelle 2-3 präzise deutsche Suchbegriffe, die optimal für die semantische Suche in dieser bereits indexierten DSG-Schweiz-Datenbank geeignet sind:
+
+ANFORDERUNGEN:
+- Verwende exakte Schweizer Rechtsterminologie aus dem DSG/nDSG
+- Fokussiere auf spezifische DSG-Konzepte und -Artikel die in der Datenbank indexiert sind
+- Berücksichtige sowohl das alte DSG als auch das neue DSG (nDSG) von 2023
+- Wähle Begriffe, die in der Vektor-Datenbank hohe semantische Relevanz-Scores erzielen werden
+- Nutze Begriffe, die häufig in Schweizer Datenschutz-Dokumenten verwendet werden
+
+BEISPIELE für optimale Suchbegriffe:
+- "Personendaten Bearbeitung" (statt nur "Daten")
+- "Auskunftsrecht Betroffene" (statt nur "Auskunft")
+- "Datenschutzerklärung Informationspflicht" (statt nur "Information")
+- "Einwilligung Datenbearbeitung" (statt nur "Zustimmung")
+- "Datensicherheit Schutzmassnahmen" (statt nur "Sicherheit")
+
+Da die Vector Database bereits vollständig indexiert ist, optimiere die Suchbegriffe für maximale semantische Übereinstimmung mit dem DSG-Inhalt:
+
+Suchbegriffe:`;
+
+      this.logger.debug('DSG Check Step 1: Generating optimized search queries for pre-populated DSG database', {
+        userId,
+        promptLength: chatGptQueriesPrompt.length,
+        step: 'query_generation_optimized',
+        targetDatabase: 'Pre-populated Swiss DSG Vector Store',
+        databaseStatus: 'fully_indexed_and_ready',
+        estimatedTokens: Math.ceil(chatGptQueriesPrompt.length / 4)
+      });
+
+      const chatGptResponse = await this.callChatGPT(chatGptQueriesPrompt);
+      const step1Duration = Date.now() - step1StartTime;
+
+      this.logger.debug('DSG Check Step 1: Optimized DSG queries generated successfully', {
+        userId,
+        responseLength: chatGptResponse.length,
+        duration: step1Duration,
+        rawResponse: chatGptResponse.substring(0, 200) + (chatGptResponse.length > 200 ? '...' : ''),
+        step: 'query_generation_completed'
+      });
+
+      // Parse Suchbegriffe aus ChatGPT Response
+      const queries = chatGptResponse.split('\n')
+      .map(q => q.trim().replace(/^[-*•\d+.]\s*/, '')) // Remove bullet points and numbers
+      .filter(q => q.length > 0 &&
+        !q.includes('Suchbegriffe:') &&
+        !q.includes('BEISPIELE') &&
+        !q.includes('AUFGABE') &&
+        q.length > 5)
+      .slice(0, 3); // Max 3 queries
+
+      if (queries.length === 0) {
+        this.logger.error('DSG Check Step 1: No valid search queries generated', undefined, {
+          userId,
+          rawResponse: chatGptResponse,
+          step1Duration
+        });
+        this.sendError(res, 500, 'Fehler beim Generieren der Suchbegriffe');
+        return;
+      }
+
+      this.logger.info('DSG Check Step 1: Swiss DSG search queries parsed and validated', {
+        userId,
+        queriesCount: queries.length,
+        queries: queries,
+        step1Duration,
+        targetDatabase: 'Pre-populated Swiss DSG Vector Store',
+        queryOptimization: 'database_specific'
+      });
+
+      // ==========================================
+      // SCHRITT 2: Similarity Search in bereits befüllter Swiss DSG Vector Store
+      // ==========================================
+      const step2StartTime = Date.now();
+      this.logger.info('DSG Check Step 2: Starting parallel similarity search in pre-populated Swiss DSG database', {
+        userId,
+        queriesCount: queries.length,
+        maxResultsPerQuery: Math.ceil(maxSources / queries.length) + 1,
+        vectorStore: 'Pre-populated Swiss DSG/nDSG Database',
+        databaseStatus: 'Ready, Indexed, and Optimized',
+        searchStrategy: 'parallel_semantic_search'
+      });
+
+      const allResults = await Promise.all(
+        queries.map(async (query, index) => {
+          const queryStartTime = Date.now();
+          const resultsPerQuery = Math.ceil(maxSources / queries.length) + 1;
+
+          this.logger.debug('DSG Check Step 2: Processing query in pre-indexed DSG database', {
+            userId,
+            queryIndex: index,
+            query: query,
+            resultsRequested: resultsPerQuery,
+            timestamp: new Date().toISOString(),
+            searchContext: 'Pre-populated Swiss DSG Vector Store'
+          });
+
+          // Hier wird Ihre bereits befüllte Swiss DSG Vector Database durchsucht
+          const results = await this.analysisService.parallelizeSimilaritySearch(query, resultsPerQuery);
+          const queryDuration = Date.now() - queryStartTime;
+
+
+          this.logger.debug('DSG Check Step 2: Query results from pre-indexed DSG database', {
+            userId,
+            queryIndex: index,
+            query: query,
+            resultsCount: results.length,
+            duration: queryDuration,
+            foundArticles: results.map(r => r.metadata?.article || r.metadata?.section || 'Unknown').filter(Boolean),
+            vectorDatabase: 'Pre-populated Swiss DSG',
+            searchPerformance: queryDuration < 1000 ? 'excellent' : queryDuration < 3000 ? 'good' : 'slow'
+          });
+
+          return results;
+        })
+      );
+
+      const step2Duration = Date.now() - step2StartTime;
+
+      // ==========================================
+      // SCHRITT 3: Eindeutige Swiss DSG Ergebnisse zusammenführen
+      // ==========================================
+      const uniqueResults = new Map<string, any>();
+      const duplicateCount = { count: 0 };
+      const foundDSGArticles: string[] = [];
+      const relevanceScores: number[] = [];
+
+      allResults.flat().forEach((item: any, index) => {
+        if (item.id && !uniqueResults.has(item.id) && uniqueResults.size < maxSources) {
+          uniqueResults.set(item.id, item);
+
+          // DSG-Artikel und Relevanz-Scores extrahieren
+          const article = item.metadata?.article || item.metadata?.section || `Sektion-${index}`;
+          if (article && !article.includes('Sektion-')) foundDSGArticles.push(article);
+
+          if (item.score) relevanceScores.push(item.score);
+
+          this.logger.debug('DSG Check Step 2: Added unique Swiss DSG result from pre-populated database', {
+            userId,
+            resultId: item.id,
+            resultIndex: index,
+            dsgArticle: article,
+            relevanceScore: item.score,
+            contentPreview: item.pageContent?.substring(0, 100) + '...',
+            source: 'Pre-populated Swiss DSG Vector Store'
+          });
+        } else if (item.id && uniqueResults.has(item.id)) {
+          duplicateCount.count++;
+        }
+      });
+
+      const vectorSearchResults = Array.from(uniqueResults.values());
+      const avgRelevanceScore = relevanceScores.length > 0 ?
+        relevanceScores.reduce((a, b) => a + b, 0) / relevanceScores.length : 0;
+
+      this.logger.info('DSG Check Step 2: Swiss DSG vector search in pre-populated database completed', {
+        userId,
+        totalRawResults: allResults.flat().length,
+        uniqueResults: vectorSearchResults.length,
+        duplicatesFiltered: duplicateCount.count,
+        foundDSGArticles: [...new Set(foundDSGArticles)],
+        averageRelevanceScore: avgRelevanceScore,
+        step2Duration,
+        databasePerformance: {
+          searchTime: step2Duration,
+          resultsQuality: avgRelevanceScore > 0.8 ? 'excellent' : avgRelevanceScore > 0.6 ? 'good' : 'moderate',
+          databaseUtilization: 'pre_populated_optimized'
+        }
+      });
+
+      if (vectorSearchResults.length === 0) {
+        this.logger.warn('DSG Check Step 2: No results found in pre-populated DSG database', {
+          userId,
+          queries: queries,
+          databaseStatus: 'Pre-populated but no matches',
+          possibleIssues: ['query_too_specific', 'database_content_mismatch', 'threshold_too_high']
+        });
+
+        this.sendError(res, 404, 'Keine relevanten DSG-Artikel in der Datenbank gefunden. Möglicherweise ist die Anfrage zu spezifisch.');
+        return;
+      }
+
+      // ==========================================
+      // SCHRITT 4: Context-Aufbereitung mit Swiss DSG spezifischen Informationen
+      // ==========================================
+      const step3StartTime = Date.now();
+
+      let contextText = '';
+      if (includeContext && vectorSearchResults.length > 0) {
+        contextText = vectorSearchResults
+        .map((doc, index) => {
+          const contentLength = Math.min(doc.pageContent.length, 300); // Längerer Context für bessere Analyse
+          const shortContent = doc.pageContent.substring(0, contentLength);
+          const article = doc.metadata?.article || doc.metadata?.section || 'DSG Bestimmung';
+          const articleInfo = article ? ` (${article})` : '';
+          const score = doc.score ? ` [Relevanz: ${(doc.score * 100).toFixed(1)}%]` : '';
+
+          this.logger.debug('DSG Check Step 3: Processing Swiss DSG context document from pre-populated database', {
+            userId,
+            docIndex: index,
+            docId: doc.id,
+            dsgArticle: article,
+            relevanceScore: doc.score,
+            originalLength: doc.pageContent.length,
+            includedLength: contentLength,
+            metadata: doc.metadata,
+            source: 'Pre-populated Swiss DSG Database'
+          });
+
+          return `${index + 1}. ${article}${score}:\n${shortContent}${contentLength < doc.pageContent.length ? '...' : ''}`;
+        })
+        .join('\n\n');
+      }
+
+      this.logger.info('DSG Check Step 3: Swiss DSG context from pre-populated database prepared', {
+        userId,
+        contextLength: contextText.length,
+        documentsIncluded: vectorSearchResults.length,
+        contextSource: 'Pre-populated Swiss DSG Vector Database',
+        includeContext,
+        avgContextLength: contextText.length / Math.max(vectorSearchResults.length, 1)
+      });
+
+      // ==========================================
+      // SCHRITT 5: Finale Swiss DSG Analyse mit LangChain
+      // ==========================================
+      const finalAnalysisPrompt = `Benutzerfrage: "${question}"
+
+${includeContext && contextText ? `SCHWEIZER DSG-KONTEXT aus der indexierten Datenbank:
+${contextText}
+
+` : ''}AUFGABE: Analysiere die Benutzerfrage basierend auf dem Schweizer Datenschutzgesetz (DSG/nDSG) und gib eine strukturierte, professionelle Antwort:
+
+ANALYSE-FOKUS:
+- Schweizer Datenschutzrecht (DSG 2023)
+- Relevante DSG-Artikel und Bestimmungen
+- Praktische Umsetzung in der Schweiz
+- Compliance-Anforderungen
+
+ANTWORT-STRUKTUR:
+
+## 🏛️ Rechtliche Grundlage (DSG Schweiz)
+[Relevante Artikel des Schweizer DSG mit Bezug zur Frage]
+
+## ✅ Antwort basierend auf Schweizer Recht
+[Direkte, präzise Antwort zur gestellten Frage]
+
+## ⚖️ Rechtliche Bewertung
+**Status:** [KONFORM / NICHT KONFORM / TEILWEISE KONFORM / UNKLARE RECHTSLAGE]
+
+**Begründung:** [Juristische Einschätzung basierend auf DSG]
+
+## 🎯 Konkrete Empfehlungen
+[Spezifische Handlungsempfehlungen für die Schweiz]
+- [Empfehlung 1]
+- [Empfehlung 2]
+- [Empfehlung 3]
+
+## ⚠️ Wichtige Hinweise
+[Besonderheiten des Schweizer Datenschutzrechts, Unterschiede zur DSGVO]
+
+## 📚 Referenzen
+[Erwähnte DSG-Artikel mit Kurzbeschreibung]
+
+STIL: Professionell, präzise, praxisorientiert für Schweizer Kontext`;
+
+      this.logger.debug('DSG Check Step 4: Starting comprehensive Swiss DSG analysis with LangChain', {
+        userId,
+        finalPromptLength: finalAnalysisPrompt.length,
+        estimatedTokens: Math.ceil(finalAnalysisPrompt.length / 4),
+        analysisContext: 'Swiss DSG/nDSG with pre-populated database context',
+        includeContext,
+        contextDocuments: vectorSearchResults.length
+      });
+
+      const finalAnalysis = await this.callChatGPT(finalAnalysisPrompt);
+      const step3Duration = Date.now() - step3StartTime;
+
+      this.logger.debug('DSG Check Step 4: Comprehensive Swiss DSG analysis completed', {
+        userId,
+        analysisLength: finalAnalysis.length,
+        step3Duration,
+        analysisQuality: finalAnalysis.length > 500 ? 'comprehensive' : 'basic'
+      });
+
+      // ==========================================
+      // SCHRITT 6: Response zusammenstellen
+      // ==========================================
+      const totalDuration = Date.now() - startTime;
+      const uniqueDSGArticles = [...new Set(foundDSGArticles)];
+
+      const response = {
+        question: question,
+        searchQueries: {
+          generated: queries,
+          count: queries.length,
+          optimizedFor: 'Pre-populated Swiss DSG Vector Database'
+        },
+        foundSources: {
+          count: vectorSearchResults.length,
+          law: 'Datenschutzgesetz der Schweiz (DSG/nDSG)',
+          articles: uniqueDSGArticles,
+          averageRelevance: avgRelevanceScore,
+          database: {
+            type: 'Pre-populated Vector Store',
+            content: 'Complete Swiss DSG/nDSG',
+            status: 'Fully Indexed and Optimized'
+          },
+          sources: vectorSearchResults.map((doc, index) => {
+            const article = doc.metadata?.article || doc.metadata?.section || 'DSG Bestimmung';
+
+            this.logger.debug('DSG Check: Preparing Swiss DSG source for response', {
+              userId,
+              sourceIndex: index,
+              sourceId: doc.id,
+              dsgArticle: article,
+              contentLength: doc.pageContent.length,
+              relevanceScore: doc.score
+            });
+
+            return {
+              content: doc.pageContent.substring(0, 250) + (doc.pageContent.length > 250 ? '...' : ''),
+              metadata: {
+                ...doc.metadata,
+                law: 'Swiss DSG/nDSG',
+                article: article,
+                relevanceScore: doc.score,
+                source: 'Pre-populated Vector Database'
+              },
+              id: doc.id
+            };
+          })
+        },
+        analysis: finalAnalysis,
+        timestamp: new Date().toISOString(),
+        performance: {
+          totalDuration,
+          step1Duration, // Query generation
+          step2Duration, // Vector search
+          step3Duration, // Final analysis
+          breakdown: {
+            queryGeneration: `${step1Duration}ms`,
+            databaseSearch: `${step2Duration}ms`,
+            finalAnalysis: `${step3Duration}ms`,
+            total: `${totalDuration}ms`
+          },
+          efficiency: totalDuration < 10000 ? 'excellent' : totalDuration < 20000 ? 'good' : 'moderate'
+        },
+        processingSteps: {
+          step1: `Schweiz-spezifische DSG-Suchbegriffe für Vektor-DB optimiert (${queries.length} queries)`,
+          step2: `${vectorSearchResults.length} relevante DSG-Artikel aus befüllter Datenbank gefunden`,
+          step3: 'Vollständige DSG-Compliance-Analyse für die Schweiz erstellt'
+        },
+        legalContext: {
+          jurisdiction: 'Switzerland',
+          law: 'Datenschutzgesetz (DSG/nDSG)',
+          framework: 'Swiss Data Protection Law',
+          effectiveDate: '2023-09-01',
+          vectorDatabase: {
+            name: 'Swiss DSG Vector Store',
+            status: 'Pre-populated and Fully Indexed',
+            content: 'Complete Swiss Data Protection Law with Articles and Commentary',
+            articlesFound: uniqueDSGArticles.length,
+            searchOptimization: 'Database-specific query generation'
+          }
+        },
+        langchainIntegration: {
+          model: 'gpt-4',
+          framework: 'LangChain',
+          version: '0.3.67',
+          totalTokensEstimated: Math.ceil((chatGptQueriesPrompt.length + finalAnalysisPrompt.length) / 4),
+          databaseIntegration: {
+            type: 'Pre-populated Vector Store',
+            searchMethod: 'Semantic Similarity',
+            optimization: 'Swiss DSG specific'
+          }
+        },
+        config: {
+          maxSources,
+          language,
+          includeContext,
+          databaseOptimized: true
+        }
+      };
+
+      this.sendSuccess(res, response);
+
+      this.logger.info('DSG Check: Complete Swiss DSG check with pre-populated database finished successfully', {
+        userId,
+        totalDuration,
+        questionLength: question.length,
+        queriesGenerated: queries.length,
+        sourcesFound: vectorSearchResults.length,
+        dsgArticlesFound: uniqueDSGArticles,
+        analysisLength: finalAnalysis.length,
+        responseSize: JSON.stringify(response).length,
+        averageRelevance: avgRelevanceScore,
+        performance: {
+          step1: step1Duration,
+          step2: step2Duration,
+          step3: step3Duration,
+          total: totalDuration,
+          efficiency: totalDuration < 10000 ? 'excellent' : 'moderate'
+        },
+        databaseUtilization: {
+          type: 'Pre-populated Swiss DSG Vector Store',
+          performance: 'optimized',
+          contentMatch: 'swiss_dsg_specific'
+        }
+      });
+
+    } catch (error) {
+      const errorDuration = Date.now() - startTime;
+
+      this.logger.error('DSG Check: Complete Swiss DSG check with pre-populated database failed', error as Error, {
+        userId: this.getUserId(req),
+        questionLength: req.body.question?.length || 0,
+        errorAfter: errorDuration,
+        errorType: error instanceof Error ? error.constructor.name : typeof error,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        databaseStatus: 'Pre-populated Swiss DSG Vector Store',
+        possibleCauses: [
+          'vector_database_connection_failed',
+          'chatgpt_api_error',
+          'search_query_generation_failed',
+          'database_content_mismatch'
+        ]
+      });
+
+      // Detaillierte Fehlermeldungen für besseres Debugging
+      if (error instanceof Error) {
+        if (error.message.includes('OPENAI_API_KEY')) {
+          this.sendError(res, 500, 'OpenAI API-Konfiguration fehlt');
+        } else if (error.message.includes('PINECONE') || error.message.includes('vector')) {
+          this.sendError(res, 500, 'Fehler beim Zugriff auf die DSG-Datenbank');
+        } else if (error.message.includes('timeout')) {
+          this.sendError(res, 504, 'Anfrage-Timeout - bitte versuchen Sie es erneut');
+        } else {
+          this.sendError(res, 500, 'Fehler bei der DSG-Analyse');
+        }
+      } else {
+        this.sendError(res, 500, 'Unerwarteter Fehler bei der DSG-Analyse');
+      }
+
+      next(error);
+    }
+  }
+
   // ==========================================
   // PRIVATE HELPER METHODS
   // ==========================================
+
+  /**
+   * Helper-Methode für LangChain ChatOpenAI Aufrufe mit detailliertem Logging
+   */
+  private async callChatGPT(prompt: string): Promise<string> {
+    const callStartTime = Date.now();
+    try {
+      const openaiApiKey = process.env.OPENAI_API_KEY;
+      if (!openaiApiKey) {
+        this.logger.error('ChatGPT Call: OpenAI API Key not configured');
+        throw new Error('OpenAI API Key nicht konfiguriert');
+      }
+
+      this.logger.info('ChatGPT Call: Initializing ChatOpenAI model', {
+        promptLength: prompt.length,
+        estimatedTokens: Math.ceil(prompt.length / 4),
+        model: 'gpt-4',
+        maxTokens: 1500
+      });
+
+      // Initialisiere ChatOpenAI mit LangChain
+      const chatModel = new ChatOpenAI({
+        apiKey: openaiApiKey,
+        model: 'gpt-4',
+        temperature: 0.3,
+        maxTokens: 1500,
+        timeout: 60000
+      });
+
+      // Erstelle Human Message für LangChain
+      const message = new HumanMessage({
+        content: prompt
+      });
+
+      this.logger.debug('ChatGPT Call: Sending request to OpenAI', {
+        promptPreview: prompt.substring(0, 200) + (prompt.length > 200 ? '...' : ''),
+        messageType: 'HumanMessage',
+        timestamp: new Date().toISOString()
+      });
+
+      // Führe den API-Aufruf durch
+      const response = await chatModel.invoke([message]);
+      const callDuration = Date.now() - callStartTime;
+
+      const responseContent = response.content.toString();
+
+      this.logger.info('ChatGPT Call: Response received successfully', {
+        responseLength: responseContent.length,
+        duration: callDuration,
+        responsePreview: responseContent.substring(0, 200) + (responseContent.length > 200 ? '...' : ''),
+        tokenUsageEstimated: {
+          input: Math.ceil(prompt.length / 4),
+          output: Math.ceil(responseContent.length / 4),
+          total: Math.ceil((prompt.length + responseContent.length) / 4)
+        }
+      });
+
+      return responseContent;
+
+    } catch (error) {
+      const errorDuration = Date.now() - callStartTime;
+      this.logger.error('ChatGPT Call: LangChain ChatOpenAI call failed', error as Error, {
+        promptLength: prompt.length,
+        duration: errorDuration,
+        errorType: error instanceof Error ? error.constructor.name : typeof error,
+        errorMessage: error instanceof Error ? error.message : String(error)
+      });
+      throw new Error('Fehler beim Aufruf der ChatOpenAI API über LangChain');
+    }
+  }
 
   private generateDocumentId(): string {
     return `doc_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;

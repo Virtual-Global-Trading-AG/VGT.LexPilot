@@ -1,3 +1,4 @@
+import { ChatOpenAI } from '@langchain/openai';
 import { Document } from 'langchain/document';
 import { Logger } from '../utils/logger';
 import { StorageService } from './StorageService';
@@ -10,6 +11,7 @@ import { LLMFactory } from '../factories/LLMFactory';
 import { PineconeVectorStore, VectorStoreConfig, SearchResult } from '../vectorstore';
 import { websocketManager } from '../websocket';
 import { v4 as uuidv4 } from 'uuid';
+import { DocumentInterface } from '@langchain/core/documents';
 
 export interface AnalysisRequest {
   documentId: string;
@@ -51,6 +53,11 @@ export interface ProcessingProgress {
   details?: any;
 }
 
+export interface Modules {
+  indexName: string;
+  namespace?: string;
+}
+
 /**
  * Service für die Integration der RAG-Pipeline mit der Dokumentenverwaltung
  * Orchestriert den gesamten Analyse-Workflow von Download bis Ergebnis-Speicherung
@@ -64,11 +71,11 @@ export class AnalysisService {
   private readonly documentSplitter: LegalDocumentSplitter;
   private readonly llmFactory: LLMFactory;
   private readonly vectorStore: PineconeVectorStore;
-  
+
   // Chains für verschiedene Analyse-Typen
   private readonly contractAnalysisChain: ContractAnalysisChain;
   private readonly gdprComplianceChain: GDPRComplianceChain;
-  
+
   // Active analysis tracking
   private readonly activeAnalyses = new Map<string, {
     abortController: AbortController;
@@ -84,7 +91,7 @@ export class AnalysisService {
     this.documentSplitter = new LegalDocumentSplitter();
     this.llmFactory = new LLMFactory();
     this.vectorStore = new PineconeVectorStore(this.embeddingService);
-    
+
     // Initialize analysis chains
     this.contractAnalysisChain = new ContractAnalysisChain();
     this.gdprComplianceChain = new GDPRComplianceChain();
@@ -96,7 +103,7 @@ export class AnalysisService {
   async startAnalysis(request: AnalysisRequest): Promise<string> {
     const analysisId = uuidv4();
     const abortController = new AbortController();
-    
+
     try {
       this.logger.info('Starting document analysis', {
         analysisId,
@@ -159,26 +166,26 @@ export class AnalysisService {
     abortSignal: AbortSignal
   ): Promise<void> {
     const startTime = Date.now();
-    
+
     try {
       await this.updateAnalysisStatus(analysisId, 'processing', 5);
 
       // 1. Download document from Firebase Storage
       await this.reportProgress('download', 10, 'Downloading document from storage', analysisId);
       const documentContent = await this.downloadDocument(request.documentId, request.userId);
-      
+
       if (abortSignal.aborted) throw new Error('Analysis cancelled');
 
       // 2. Split document into hierarchical chunks
       await this.reportProgress('split', 25, 'Splitting document into chunks', analysisId);
       const chunks = await this.splitDocument(documentContent, request.documentId);
-      
+
       if (abortSignal.aborted) throw new Error('Analysis cancelled');
 
       // 3. Generate embeddings for chunks
       await this.reportProgress('embed', 45, 'Generating embeddings', analysisId);
       const embeddings = await this.generateEmbeddings(chunks, request.options?.language);
-      
+
       if (abortSignal.aborted) throw new Error('Analysis cancelled');
 
       // 4. Perform analysis based on type
@@ -189,13 +196,13 @@ export class AnalysisService {
         embeddings,
         request.options
       );
-      
+
       if (abortSignal.aborted) throw new Error('Analysis cancelled');
 
       // 5. Save results
       await this.reportProgress('save', 90, 'Saving analysis results', analysisId);
       const processingTime = Date.now() - startTime;
-      
+
       await this.updateAnalysisResult(analysisId, {
         status: 'completed',
         progress: 100,
@@ -250,7 +257,7 @@ export class AnalysisService {
 
       // For now, assume text content - in production, add file type detection
       const content = await response.text();
-      
+
       this.logger.debug('Document downloaded successfully', {
         documentId,
         contentLength: content.length
@@ -283,7 +290,7 @@ export class AnalysisService {
       });
 
       const chunks = await this.documentSplitter.splitDocument(document);
-      
+
       this.logger.debug('Document split completed', {
         documentId,
         chunksCount: chunks.length,
@@ -313,7 +320,7 @@ export class AnalysisService {
       const batchSize = 20;
       for (let i = 0; i < chunks.length; i += batchSize) {
         const batch = chunks.slice(i, i + batchSize);
-        
+
         const batchPromises = batch.map(async (chunk) => {
           const embedding = await this.embeddingService.embedDocument(
             chunk.pageContent,
@@ -464,7 +471,7 @@ export class AnalysisService {
    */
   private inferDocumentType(chunk: HierarchicalChunk): DocumentType {
     const content = chunk.pageContent.toLowerCase();
-    
+
     if (content.includes('vertrag') || content.includes('contract')) {
       return DocumentType.CONTRACT;
     }
@@ -480,7 +487,7 @@ export class AnalysisService {
       'contract_risk': 5 * 60 * 1000, // 5 minutes
       'legal_review': 8 * 60 * 1000 // 8 minutes
     };
-    
+
     const estimateMs = estimates[analysisType] || 5 * 60 * 1000;
     return new Date(Date.now() + estimateMs);
   }
@@ -492,15 +499,15 @@ export class AnalysisService {
 
   private generateRecommendedActions(contractResults: any, gdprResults: any): string[] {
     const actions: string[] = [];
-    
+
     if (contractResults?.conclusion?.criticalIssues?.length > 0) {
       actions.push('Überprüfung kritischer Vertragsklauseln erforderlich');
     }
-    
+
     if (gdprResults?.overallScore < 0.7) {
       actions.push('DSGVO-Compliance-Maßnahmen implementieren');
     }
-    
+
     return actions;
   }
 
@@ -513,17 +520,17 @@ export class AnalysisService {
    * Progress and Status Management mit WebSocket-Integration
    */
   private async reportProgress(
-    stage: ProcessingProgress['stage'], 
-    progress: number, 
+    stage: ProcessingProgress['stage'],
+    progress: number,
     message: string,
     analysisId?: string,
     details?: any
   ): Promise<void> {
     const progressUpdate: ProcessingProgress = { stage, progress, message, details };
-    
+
     // Log für Debugging
     this.logger.debug('Analysis progress', progressUpdate);
-    
+
     // Sende WebSocket Update wenn analysisId verfügbar ist
     if (analysisId) {
       const analysis = this.activeAnalyses.get(analysisId);
@@ -564,7 +571,7 @@ export class AnalysisService {
       status,
       updatedAt: new Date()
     };
-    
+
     if (progress !== undefined) {
       updates.progress = progress;
     }
@@ -628,7 +635,7 @@ export class AnalysisService {
   ): Promise<{ items: AnalysisResult[]; total: number; page: number; limit: number }> {
     // In production, query Firestore
     this.logger.debug('Listing user analyses', { userId, options });
-    
+
     return {
       items: [],
       total: 0,
@@ -755,8 +762,8 @@ export class AnalysisService {
       this.logger.debug('Legal context search completed', {
         query: query.substring(0, 100),
         resultsCount: results.documents.length,
-        averageScore: results.scores.length > 0 
-          ? results.scores.reduce((a, b) => a + b, 0) / results.scores.length 
+        averageScore: results.scores.length > 0
+          ? results.scores.reduce((a, b) => a + b, 0) / results.scores.length
           : 0
       });
 
@@ -803,7 +810,7 @@ export class AnalysisService {
       const legalTopics = this.extractLegalTopicsFromAnalysis(contractAnalysis);
 
       // 3. Suche relevante Rechtsgrundlagen
-      const searchQueries = legalTopics.map(topic => 
+      const searchQueries = legalTopics.map(topic =>
         `${topic} ${options?.legalArea || ''} ${options?.jurisdiction || 'Schweiz'}`
       );
 
@@ -969,7 +976,7 @@ export class AnalysisService {
 
   private extractLegalTopicsFromAnalysis(analysis: any): string[] {
     const topics: string[] = [];
-    
+
     if (analysis.issues) {
       topics.push(...analysis.issues.map((issue: any) => issue.legalArea || issue.issue));
     }
@@ -985,7 +992,7 @@ export class AnalysisService {
         'Arbeitsrecht', 'Vertragsrecht', 'Datenschutz', 'Handelsrecht',
         'Gesellschaftsrecht', 'Immaterialgüterrecht', 'Steuerrecht'
       ];
-      
+
       legalTerms.forEach(term => {
         if (text.includes(term)) {
           topics.push(term);
@@ -1091,6 +1098,68 @@ export class AnalysisService {
   }
 
   /**
+   * Führt parallele Similarity Searches für mehrere Queries durch
+   * und gibt eindeutige Ergebnisse zurück
+   */
+  public async parallelizeSimilaritySearch(
+    text: string,
+    k: number = 5
+  ): Promise<DocumentInterface[]> {
+    const vectorstore = await this.getVectorStore();
+
+    /*const results = await Promise.all(
+      texts.map((query) => vectorstore.store!.similaritySearch(text, k))
+    );*/
+
+    const results = await vectorstore.store!.similaritySearch(text, k);
+
+    const uniqueResults = new Map<string, DocumentInterface>();
+    results.flat().forEach((item: DocumentInterface) => {
+      if (item.id && !uniqueResults.has(item.id)) {
+        uniqueResults.set(item.id, item);
+      }
+    });
+
+    return Array.from(uniqueResults.values());
+  }
+
+  createJuridicalAssistant(options?: {
+    temperature?: number;
+    model?: string;
+  }): ChatOpenAI {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      throw new Error('OPENAI_API_KEY environment variable is required');
+    }
+
+    return new ChatOpenAI({
+      apiKey,
+      model: options?.model || 'gpt-4', // ✅ Dein gewünschtes Modell
+      temperature: options?.temperature || 0.3, // ✅ Niedrige Temperatur für präzise Antworten
+      maxTokens: 2000,
+      timeout: 60000
+    });
+  }
+
+
+  /**
+   * Holt den Vector Store für den angegebenen Index
+   */
+  private async getVectorStore() {
+    const vectorConfig: VectorStoreConfig = {
+      indexName: process.env.PINECONE_LEGAL_INDEX || 'legal-texts',
+      namespace: 'legal-regulations'
+    };
+
+    if (!this.vectorStore) {
+      throw new Error('Vector store not initialized');
+    }
+
+    await this.vectorStore.initializeStore(vectorConfig);
+    return this.vectorStore;
+  }
+
+  /**
    * Health Check
    */
   async healthCheck(): Promise<{ status: string; services: any }> {
@@ -1099,7 +1168,7 @@ export class AnalysisService {
       firestoreService: await this.checkServiceHealth(() => Promise.resolve({ status: 'healthy' })),
       embeddingService: await this.checkServiceHealth(() => Promise.resolve({ status: 'healthy' })),
       llmFactory: await this.checkServiceHealth(() => Promise.resolve({ status: 'healthy' })),
-      vectorStore: await this.checkServiceHealth(() => 
+      vectorStore: await this.checkServiceHealth(() =>
         this.vectorStore.healthCheck(process.env.PINECONE_LEGAL_INDEX || 'legal-texts')
       )
     };

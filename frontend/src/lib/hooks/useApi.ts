@@ -15,6 +15,21 @@ export interface DSGVOCheckRequest {
   language?: string;
 }
 
+// Neues Interface für den vollständigen DSGVO Check
+export interface CompleteDSGVOCheckRequest {
+  question: string;
+  language?: string;
+  includeContext?: boolean;
+  maxSources?: number;
+}
+
+export interface SimilaritySearchRequest {
+  text: string;
+  indexName?: string;
+  namespace?: string;
+  topK?: number;
+}
+
 export interface AnalysisResult {
   analysis: any;
   legalContext: {
@@ -95,15 +110,80 @@ export function useDocumentAnalysis() {
     }
   }, [isAuthenticated]);
 
+  // Neue Methode für den vollständigen DSGVO Check
+  const completeDSGVOCheck = useCallback(async (
+    request: CompleteDSGVOCheckRequest
+  ): Promise<any | null> => {
+    if (!isAuthenticated) {
+      setError('Authentifizierung erforderlich');
+      return null;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await apiClient.post<any>(
+        '/documents/dsgvo-check-complete',
+        request
+      );
+
+      if (response.success && response.data) {
+        return response.data;
+      } else {
+        setError(response.error || 'Vollständiger DSGVO-Check fehlgeschlagen');
+        return null;
+      }
+    } catch (err) {
+      setError('Netzwerkfehler bei der DSGVO-Analyse');
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, [isAuthenticated]);
+
+  const textSimilaritySearch = useCallback(async (
+    request: SimilaritySearchRequest
+  ): Promise<any | null> => {
+    if (!isAuthenticated) {
+      setError('Not authenticated');
+      return null;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await apiClient.post<any>(
+        '/documents/similarity-search',
+        request
+      );
+
+      console.log(response);
+      if (response.success && response.data) {
+        return response.data;
+      } else {
+        setError(response.error || 'Similarity search failed');
+        return null;
+      }
+    } catch (err) {
+      setError('Network error during similarity search');
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, [isAuthenticated]);
+
   return {
     analyzeContractWithRAG,
     checkDSGVOCompliance,
+    completeDSGVOCheck, // Neue Methode hinzugefügt
+    textSimilaritySearch,
     loading,
     error,
     clearError: () => setError(null)
   };
 }
-
 export function useDocumentUpload() {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);

@@ -70,6 +70,26 @@ const dsgvoCheckSchema = Joi.object({
   language: Joi.string().valid('de', 'en', 'fr', 'it').default('de')
 });
 
+// Schema für den vollständigen DSGVO Check
+const completeDsgvoCheckSchema = Joi.object({
+  question: Joi.string().min(10).max(5000).required().messages({
+    'string.min': 'Die Frage muss mindestens 10 Zeichen lang sein',
+    'string.max': 'Die Frage darf maximal 5.000 Zeichen lang sein',
+    'any.required': 'Eine Benutzerfrage ist erforderlich'
+  }),
+  language: Joi.string().valid('de', 'en', 'fr', 'it').default('de'),
+  includeContext: Joi.boolean().default(true),
+  maxSources: Joi.number().integer().min(3).max(15).default(10)
+});
+
+
+const similaritySearchSchema = Joi.object({
+  text: Joi.string().min(10).max(10000).required(),
+  indexName: Joi.string().default('legal-texts'),
+  namespace: Joi.string().default('legal-regulations'),
+  topK: Joi.number().integer().min(1).max(20).default(5)
+});
+
 const paginationSchema = Joi.object({
   page: Joi.number().integer().min(1).default(1),
   limit: Joi.number().integer().min(1).max(100).default(20),
@@ -161,5 +181,19 @@ router.post('/dsgvo-check',
   ValidationMiddleware.validate({ body: dsgvoCheckSchema }),
   documentController.checkDSGVOCompliance.bind(documentController)
 );
+
+// Vollständiger DSGVO Check mit ChatGPT/LangChain Integration
+router.post('/dsgvo-check-complete',
+  ValidationMiddleware.validate({ body: completeDsgvoCheckSchema }),
+  documentController.completeDSGVOCheck.bind(documentController)
+);
+
+
+// Text Similarity Search
+router.post('/similarity-search',
+  ValidationMiddleware.validate({ body: similaritySearchSchema }),
+  documentController.textSimilaritySearch.bind(documentController)
+);
+
 
 export default router;

@@ -26,7 +26,7 @@ export class PineconeVectorStore {
   private readonly logger = Logger.getInstance();
   private pinecone!: PineconeClient; // Definitive Assignment Assertion
   private embeddingService: EmbeddingService;
-  private store?: PineconeStore;
+  store?: PineconeStore;
 
   constructor(embeddingService: EmbeddingService) {
     this.embeddingService = embeddingService;
@@ -67,8 +67,6 @@ export class PineconeVectorStore {
       try {
         const pineconeIndex = this.pinecone.Index(config.indexName);
 
-        console.log('pineconeIndex', pineconeIndex);
-        
         this.store = await PineconeStore.fromExistingIndex(
           this.embeddingService.getEmbeddingModel(),
           {
