@@ -897,13 +897,7 @@ export class DocumentController extends BaseController {
     }
   }
 
-  /**
-   * Complete DSGVO/DSG Check mit LangChain Integration
-   * Nutzt bereits befüllte Swiss DSG Vector Database
-   * POST /api/documents/complete-dsgvo-check
-   */
   public async completeDSGVOCheck(req: Request, res: Response, next: NextFunction): Promise<void> {
-    this.logger.debug('jetzt gehts los hier');
     const startTime = Date.now();
     try {
       const userId = this.getUserId(req);
@@ -978,7 +972,7 @@ Da die Vector Database bereits vollständig indexiert ist, optimiere die Suchbeg
 
 Suchbegriffe:`;
 
-      this.logger.info('DSG Check Step 1: Generating optimized search queries for pre-populated DSG database', {
+      this.logger.debug('DSG Check Step 1: Generating optimized search queries for pre-populated DSG database', {
         userId,
         promptLength: chatGptQueriesPrompt.length,
         step: 'query_generation_optimized',
@@ -990,7 +984,7 @@ Suchbegriffe:`;
       const chatGptResponse = await this.callChatGPT(chatGptQueriesPrompt);
       const step1Duration = Date.now() - step1StartTime;
 
-      this.logger.info('DSG Check Step 1: Optimized DSG queries generated successfully', {
+      this.logger.debug('DSG Check Step 1: Optimized DSG queries generated successfully', {
         userId,
         responseLength: chatGptResponse.length,
         duration: step1Duration,
@@ -1018,7 +1012,7 @@ Suchbegriffe:`;
         return;
       }
 
-      this.logger.info('DSG Check Step 1: Swiss DSG search queries parsed and validated', {
+      this.logger.debug('DSG Check Step 1: Swiss DSG search queries parsed and validated', {
         userId,
         queriesCount: queries.length,
         queries: queries,
@@ -1031,7 +1025,7 @@ Suchbegriffe:`;
       // SCHRITT 2: Similarity Search in bereits befüllter Swiss DSG Vector Store
       // ==========================================
       const step2StartTime = Date.now();
-      this.logger.info('DSG Check Step 2: Starting parallel similarity search in pre-populated Swiss DSG database', {
+      this.logger.debug('DSG Check Step 2: Starting parallel similarity search in pre-populated Swiss DSG database', {
         userId,
         queriesCount: queries.length,
         maxResultsPerQuery: Math.ceil(maxSources / queries.length) + 1,
@@ -1045,7 +1039,7 @@ Suchbegriffe:`;
           const queryStartTime = Date.now();
           const resultsPerQuery = Math.ceil(maxSources / queries.length) + 1;
 
-          this.logger.info('DSG Check Step 2: Processing query in pre-indexed DSG database', {
+          this.logger.debug('DSG Check Step 2: Processing query in pre-indexed DSG database', {
             userId,
             queryIndex: index,
             query: query,
@@ -1058,8 +1052,7 @@ Suchbegriffe:`;
           const results = await this.analysisService.similaritySearch(query, resultsPerQuery);
           const queryDuration = Date.now() - queryStartTime;
 
-
-          this.logger.info('DSG Check Step 2: Query results from pre-indexed DSG database', {
+          this.logger.debug('DSG Check Step 2: Query results from pre-indexed DSG database', {
             userId,
             queryIndex: index,
             query: query,
@@ -1094,7 +1087,7 @@ Suchbegriffe:`;
 
           if (item.score) relevanceScores.push(item.score);
 
-          this.logger.info('DSG Check Step 2: Added unique Swiss DSG result from pre-populated database', {
+          this.logger.debug('DSG Check Step 2: Added unique Swiss DSG result from pre-populated database', {
             userId,
             resultId: item.id,
             resultIndex: index,
@@ -1112,7 +1105,7 @@ Suchbegriffe:`;
       const avgRelevanceScore = relevanceScores.length > 0 ?
         relevanceScores.reduce((a, b) => a + b, 0) / relevanceScores.length : 0;
 
-      this.logger.info('DSG Check Step 2: Swiss DSG vector search in pre-populated database completed', {
+      this.logger.debug('DSG Check Step 2: Swiss DSG vector search in pre-populated database completed', {
         userId,
         totalRawResults: allResults.flat().length,
         uniqueResults: vectorSearchResults.length,
@@ -1154,7 +1147,7 @@ Suchbegriffe:`;
           const articleInfo = article ? ` (${article})` : '';
           const score = doc.score ? ` [Relevanz: ${(doc.score * 100).toFixed(1)}%]` : '';
 
-          this.logger.info('DSG Check Step 3: Processing Swiss DSG context document from pre-populated database', {
+          this.logger.debug('DSG Check Step 3: Processing Swiss DSG context document from pre-populated database', {
             userId,
             docIndex: index,
             docId: doc.id,
@@ -1171,7 +1164,7 @@ Suchbegriffe:`;
         .join('\n\n');
       }
 
-      this.logger.info('DSG Check Step 3: Swiss DSG context from pre-populated database prepared', {
+      this.logger.debug('DSG Check Step 3: Swiss DSG context from pre-populated database prepared', {
         userId,
         contextLength: contextText.length,
         documentsIncluded: vectorSearchResults.length,
@@ -1223,7 +1216,7 @@ ANTWORT-STRUKTUR:
 
 STIL: Professionell, präzise, praxisorientiert für Schweizer Kontext`;
 
-      this.logger.info('DSG Check Step 4: Starting comprehensive Swiss DSG analysis with LangChain', {
+      this.logger.debug('DSG Check Step 4: Starting comprehensive Swiss DSG analysis with LangChain', {
         userId,
         finalPromptLength: finalAnalysisPrompt.length,
         estimatedTokens: Math.ceil(finalAnalysisPrompt.length / 4),
@@ -1235,7 +1228,7 @@ STIL: Professionell, präzise, praxisorientiert für Schweizer Kontext`;
       const finalAnalysis = await this.callChatGPT(finalAnalysisPrompt);
       const step3Duration = Date.now() - step3StartTime;
 
-      this.logger.info('DSG Check Step 4: Comprehensive Swiss DSG analysis completed', {
+      this.logger.debug('DSG Check Step 4: Comprehensive Swiss DSG analysis completed', {
         userId,
         analysisLength: finalAnalysis.length,
         step3Duration,
@@ -1268,7 +1261,7 @@ STIL: Professionell, präzise, praxisorientiert für Schweizer Kontext`;
           sources: vectorSearchResults.map((doc, index) => {
             const article = doc.metadata?.article || doc.metadata?.section || 'DSG Bestimmung';
 
-            this.logger.info('DSG Check: Preparing Swiss DSG source for response', {
+            this.logger.debug('DSG Check: Preparing Swiss DSG source for response', {
               userId,
               sourceIndex: index,
               sourceId: doc.id,
