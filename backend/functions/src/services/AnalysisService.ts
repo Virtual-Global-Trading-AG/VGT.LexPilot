@@ -1101,15 +1101,11 @@ export class AnalysisService {
    * Führt parallele Similarity Searches für mehrere Queries durch
    * und gibt eindeutige Ergebnisse zurück
    */
-  public async parallelizeSimilaritySearch(
+  public async similaritySearch(
     text: string,
     k: number = 5
   ): Promise<DocumentInterface[]> {
     const vectorstore = await this.getVectorStore();
-
-    /*const results = await Promise.all(
-      texts.map((query) => vectorstore.store!.similaritySearch(text, k))
-    );*/
 
     const results = await vectorstore.store!.similaritySearch(text, k);
 
@@ -1121,24 +1117,6 @@ export class AnalysisService {
     });
 
     return Array.from(uniqueResults.values());
-  }
-
-  createJuridicalAssistant(options?: {
-    temperature?: number;
-    model?: string;
-  }): ChatOpenAI {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-      throw new Error('OPENAI_API_KEY environment variable is required');
-    }
-
-    return new ChatOpenAI({
-      apiKey,
-      model: options?.model || 'gpt-4', // ✅ Dein gewünschtes Modell
-      temperature: options?.temperature || 0.3, // ✅ Niedrige Temperatur für präzise Antworten
-      maxTokens: 2000,
-      timeout: 60000
-    });
   }
 
 

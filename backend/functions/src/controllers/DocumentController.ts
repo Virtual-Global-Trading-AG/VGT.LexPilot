@@ -832,54 +832,6 @@ export class DocumentController extends BaseController {
   }
 
   /**
-   * Text Similarity Search
-   * POST /api/documents/similarity-search
-   */
-  public async textSimilaritySearch(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const userId = this.getUserId(req);
-      const { text } = req.body;
-
-      if (!text || typeof text !== 'string') {
-        this.sendError(res, 400, 'Text content is required');
-        return;
-      }
-
-      if (text.length > 10000) {
-        this.sendError(res, 400, 'Text content too long (max 10,000 characters)');
-        return;
-      }
-
-      // Perform similarity search
-      const results = await this.analysisService.parallelizeSimilaritySearch(text);
-
-      this.sendSuccess(res, {
-        results: results.map(doc => ({
-          content: doc.pageContent,
-          metadata: doc.metadata,
-          id: doc.id
-        })),
-        totalResults: results.length,
-        searchText: text.substring(0, 100) + (text.length > 100 ? '...' : ''),
-        timestamp: new Date().toISOString()
-      });
-
-      this.logger.info('Text similarity search completed', {
-        userId,
-        textLength: text.length,
-        resultsCount: results.length
-      });
-
-    } catch (error) {
-      this.logger.error('Text similarity search failed', error as Error, {
-        userId: this.getUserId(req),
-        textLength: req.body.text?.length || 0
-      });
-      next(error);
-    }
-  }
-
-  /**
    * DSGVO Compliance Check with Text Input
    * POST /api/documents/dsgvo-check
    */
@@ -951,6 +903,7 @@ export class DocumentController extends BaseController {
    * POST /api/documents/complete-dsgvo-check
    */
   public async completeDSGVOCheck(req: Request, res: Response, next: NextFunction): Promise<void> {
+    this.logger.debug('jetzt gehts los hier');
     const startTime = Date.now();
     try {
       const userId = this.getUserId(req);
@@ -1025,7 +978,7 @@ Da die Vector Database bereits vollständig indexiert ist, optimiere die Suchbeg
 
 Suchbegriffe:`;
 
-      this.logger.debug('DSG Check Step 1: Generating optimized search queries for pre-populated DSG database', {
+      this.logger.info('DSG Check Step 1: Generating optimized search queries for pre-populated DSG database', {
         userId,
         promptLength: chatGptQueriesPrompt.length,
         step: 'query_generation_optimized',
@@ -1037,7 +990,7 @@ Suchbegriffe:`;
       const chatGptResponse = await this.callChatGPT(chatGptQueriesPrompt);
       const step1Duration = Date.now() - step1StartTime;
 
-      this.logger.debug('DSG Check Step 1: Optimized DSG queries generated successfully', {
+      this.logger.info('DSG Check Step 1: Optimized DSG queries generated successfully', {
         userId,
         responseLength: chatGptResponse.length,
         duration: step1Duration,
@@ -1092,7 +1045,7 @@ Suchbegriffe:`;
           const queryStartTime = Date.now();
           const resultsPerQuery = Math.ceil(maxSources / queries.length) + 1;
 
-          this.logger.debug('DSG Check Step 2: Processing query in pre-indexed DSG database', {
+          this.logger.info('DSG Check Step 2: Processing query in pre-indexed DSG database', {
             userId,
             queryIndex: index,
             query: query,
@@ -1102,11 +1055,11 @@ Suchbegriffe:`;
           });
 
           // Hier wird Ihre bereits befüllte Swiss DSG Vector Database durchsucht
-          const results = await this.analysisService.parallelizeSimilaritySearch(query, resultsPerQuery);
+          const results = await this.analysisService.similaritySearch(query, resultsPerQuery);
           const queryDuration = Date.now() - queryStartTime;
 
 
-          this.logger.debug('DSG Check Step 2: Query results from pre-indexed DSG database', {
+          this.logger.info('DSG Check Step 2: Query results from pre-indexed DSG database', {
             userId,
             queryIndex: index,
             query: query,
@@ -1141,7 +1094,7 @@ Suchbegriffe:`;
 
           if (item.score) relevanceScores.push(item.score);
 
-          this.logger.debug('DSG Check Step 2: Added unique Swiss DSG result from pre-populated database', {
+          this.logger.info('DSG Check Step 2: Added unique Swiss DSG result from pre-populated database', {
             userId,
             resultId: item.id,
             resultIndex: index,
@@ -1201,7 +1154,7 @@ Suchbegriffe:`;
           const articleInfo = article ? ` (${article})` : '';
           const score = doc.score ? ` [Relevanz: ${(doc.score * 100).toFixed(1)}%]` : '';
 
-          this.logger.debug('DSG Check Step 3: Processing Swiss DSG context document from pre-populated database', {
+          this.logger.info('DSG Check Step 3: Processing Swiss DSG context document from pre-populated database', {
             userId,
             docIndex: index,
             docId: doc.id,
@@ -1270,7 +1223,7 @@ ANTWORT-STRUKTUR:
 
 STIL: Professionell, präzise, praxisorientiert für Schweizer Kontext`;
 
-      this.logger.debug('DSG Check Step 4: Starting comprehensive Swiss DSG analysis with LangChain', {
+      this.logger.info('DSG Check Step 4: Starting comprehensive Swiss DSG analysis with LangChain', {
         userId,
         finalPromptLength: finalAnalysisPrompt.length,
         estimatedTokens: Math.ceil(finalAnalysisPrompt.length / 4),
@@ -1282,7 +1235,7 @@ STIL: Professionell, präzise, praxisorientiert für Schweizer Kontext`;
       const finalAnalysis = await this.callChatGPT(finalAnalysisPrompt);
       const step3Duration = Date.now() - step3StartTime;
 
-      this.logger.debug('DSG Check Step 4: Comprehensive Swiss DSG analysis completed', {
+      this.logger.info('DSG Check Step 4: Comprehensive Swiss DSG analysis completed', {
         userId,
         analysisLength: finalAnalysis.length,
         step3Duration,
@@ -1315,7 +1268,7 @@ STIL: Professionell, präzise, praxisorientiert für Schweizer Kontext`;
           sources: vectorSearchResults.map((doc, index) => {
             const article = doc.metadata?.article || doc.metadata?.section || 'DSG Bestimmung';
 
-            this.logger.debug('DSG Check: Preparing Swiss DSG source for response', {
+            this.logger.info('DSG Check: Preparing Swiss DSG source for response', {
               userId,
               sourceIndex: index,
               sourceId: doc.id,
@@ -1489,7 +1442,7 @@ STIL: Professionell, präzise, praxisorientiert für Schweizer Kontext`;
         content: prompt
       });
 
-      this.logger.debug('ChatGPT Call: Sending request to OpenAI', {
+      this.logger.info('ChatGPT Call: Sending request to OpenAI', {
         promptPreview: prompt.substring(0, 200) + (prompt.length > 200 ? '...' : ''),
         messageType: 'HumanMessage',
         timestamp: new Date().toISOString()

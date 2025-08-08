@@ -188,12 +188,4 @@ router.post('/dsgvo-check-complete',
   documentController.completeDSGVOCheck.bind(documentController)
 );
 
-
-// Text Similarity Search
-router.post('/similarity-search',
-  ValidationMiddleware.validate({ body: similaritySearchSchema }),
-  documentController.textSimilaritySearch.bind(documentController)
-);
-
-
 export default router;
