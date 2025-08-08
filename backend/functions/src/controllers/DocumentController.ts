@@ -950,14 +950,14 @@ export class DocumentController extends BaseController {
       const step1StartTime = Date.now();
       const chatGptQueriesPrompt = `Frage: "${question}"
 
-KONTEXT: Es existiert bereits eine vollständig befüllte Vektor-Datenbank mit dem kompletten Datenschutzgesetz der Schweiz (DSG/nDSG), einschließlich aller Artikel, Absätze, Bestimmungen und Kommentare.
+KONTEXT: Es existiert bereits eine vollständig befüllte Vektor-Datenbank mit dem kompletten Datenschutzgesetz der Schweiz (DSG), einschließlich aller Artikel, Absätze, Bestimmungen und Kommentare.
 
 AUFGABE: Erstelle 2-3 präzise deutsche Suchbegriffe, die optimal für die semantische Suche in dieser bereits indexierten DSG-Schweiz-Datenbank geeignet sind:
 
 ANFORDERUNGEN:
 - Verwende exakte Schweizer Rechtsterminologie aus dem DSG/nDSG
 - Fokussiere auf spezifische DSG-Konzepte und -Artikel die in der Datenbank indexiert sind
-- Berücksichtige sowohl das alte DSG als auch das neue DSG (nDSG) von 2023
+- Berücksichtige sowohl das alte DSG wie auch das aktuellste
 - Wähle Begriffe, die in der Vektor-Datenbank hohe semantische Relevanz-Scores erzielen werden
 - Nutze Begriffe, die häufig in Schweizer Datenschutz-Dokumenten verwendet werden
 
@@ -1271,7 +1271,7 @@ STIL: Professionell, präzise, praxisorientiert für Schweizer Kontext`;
             });
 
             return {
-              content: doc.pageContent.substring(0, 250) + (doc.pageContent.length > 250 ? '...' : ''),
+              content: doc.pageContent,//doc.pageContent.substring(0, 250) + (doc.pageContent.length > 250 ? '...' : ''),
               metadata: {
                 ...doc.metadata,
                 law: 'Swiss DSG/nDSG',

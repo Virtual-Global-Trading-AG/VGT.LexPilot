@@ -8,6 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Shield,
   CheckCircle,
@@ -323,7 +324,77 @@ export default function DSGVOCheckPage() {
 
                 {parsedResults && (
                   <div className="space-y-4 mt-6">
-                    <Label>KI-Analyseergebnisse</Label>
+                    <div className="flex items-center justify-between mb-2">
+                      <Label className="text-lg font-semibold">KI-Analyseergebnisse</Label>
+                      {parsedResults.timestamp && (
+                        <p className="text-xs text-muted-foreground">
+                          Analyse durchgeführt am: {new Date(parsedResults.timestamp).toLocaleString('de-DE')}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Summary Card */}
+                    {(parsedResults.legalAssessment || parsedResults.swissLawAnswer) && (
+                      <Card className={`mb-4 bg-slate-50 ${
+                        parsedResults.legalAssessment?.includes("**Status:** KONFORM") 
+                          ? "border-l-4 border-l-green-500" 
+                          : parsedResults.legalAssessment?.includes("**Status:** NICHT KONFORM") 
+                            ? "border-l-4 border-l-red-500" 
+                            : parsedResults.legalAssessment?.includes("**Status:** TEILWEISE KONFORM") 
+                              ? "border-l-4 border-l-amber-500" 
+                              : ""
+                      }`}>
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-base">Zusammenfassung</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="flex flex-col space-y-3">
+                            {/* Status Badge */}
+                            {parsedResults.legalAssessment && (
+                              <div className="flex items-center">
+                                <span className="font-medium mr-2">Status:</span>
+                                {parsedResults.legalAssessment.includes("**Status:** KONFORM") ? (
+                                  <Badge variant="secondary" className="bg-green-100 text-green-800">KONFORM</Badge>
+                                ) : parsedResults.legalAssessment.includes("**Status:** NICHT KONFORM") ? (
+                                  <Badge variant="destructive">NICHT KONFORM</Badge>
+                                ) : parsedResults.legalAssessment.includes("**Status:** TEILWEISE KONFORM") ? (
+                                  <Badge variant="default" className="bg-yellow-100 text-yellow-800">TEILWEISE KONFORM</Badge>
+                                ) : (
+                                  <Badge variant="outline">UNBEKANNT</Badge>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Brief Answer */}
+                            {parsedResults.swissLawAnswer && (
+                              <div>
+                                <span className="font-medium">Antwort:</span>
+                                <p className="text-sm mt-1">
+                                  {parsedResults.swissLawAnswer
+                                    .replace(/^## ✅\s*Antwort\s*basierend\s*auf\s*Schweizer\s*Recht.*?\n/s, '')
+                                    .replace(/^✅\s*Antwort\s*basierend\s*auf\s*Schweizer\s*Recht.*?\n/s, '')
+                                    .split('\n')[0]}
+                                </p>
+                              </div>
+                            )}
+
+                            {/* Key Recommendation */}
+                            {parsedResults.recommendations && (
+                              <div>
+                                <span className="font-medium">Empfehlung:</span>
+                                <p className="text-sm mt-1">
+                                  {parsedResults.recommendations
+                                    .replace(/^## 🎯\s*Konkrete\s*Empfehlungen.*?\n/s, '')
+                                    .replace(/^🎯\s*Konkrete\s*Empfehlungen.*?\n/s, '')
+                                    .split('\n')[0]
+                                    .replace(/^- /, '')}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
 
                     {/* Main Analysis - Only show if no specific sections are available */}
                     {(!parsedResults.legalBasis && !parsedResults.swissLawAnswer && 
@@ -344,235 +415,259 @@ export default function DSGVOCheckPage() {
                       </Card>
                     )}
 
-                    {/* Rechtliche Grundlage */}
-                    {parsedResults.legalBasis && (
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="flex items-center">
-                            <Building className="h-5 w-5 mr-2" />
-                            Rechtliche Grundlage (DSG Schweiz)
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="whitespace-pre-wrap text-sm">
-                            {parsedResults.legalBasis.replace(/^## 🏛️\s*Rechtliche\s*Grundlage.*?\n/s, '').replace(/^🏛️\s*Rechtliche\s*Grundlage.*?\n/s, '')}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )}
+                    {/* Tabbed interface for structured analysis results */}
+                    {(parsedResults.legalBasis || parsedResults.swissLawAnswer || 
+                      parsedResults.legalAssessment || parsedResults.recommendations || 
+                      parsedResults.importantNotes || parsedResults.references) && (
+                      <Tabs defaultValue="rechtliche-analyse" className="w-full">
+                        <TabsList className="w-full mb-2">
+                          <TabsTrigger value="rechtliche-analyse" className="flex-1 relative">
+                            <Scale className="h-4 w-4 mr-2" />
+                            <span>Rechtliche Analyse</span>
+                          </TabsTrigger>
+                          <TabsTrigger value="empfehlungen" className="flex-1 relative">
+                            <Target className="h-4 w-4 mr-2" />
+                            <span>Empfehlungen & Hinweise</span>
+                          </TabsTrigger>
+                          <TabsTrigger value="referenzen" className="flex-1 relative">
+                            <BookOpen className="h-4 w-4 mr-2" />
+                            <span>Referenzen & Quellen</span>
+                          </TabsTrigger>
+                        </TabsList>
 
-                    {/* Combined Antwort basierend auf Schweizer Recht and Rechtliche Bewertung */}
-                    {parsedResults.swissLawAnswer && parsedResults.legalAssessment && (
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="flex items-center justify-between">
-                            <div className="flex items-center">
-                              <Scale className="h-5 w-5 mr-2" />
-                              Rechtliche Bewertung
-                            </div>
-                            {parsedResults.legalAssessment.includes("**Status:** KONFORM") ? (
-                              <Badge variant="secondary" className="bg-green-100 text-green-800">KONFORM</Badge>
-                            ) : parsedResults.legalAssessment.includes("**Status:** NICHT KONFORM") ? (
-                              <Badge variant="destructive">NICHT KONFORM</Badge>
-                            ) : parsedResults.legalAssessment.includes("**Status:** TEILWEISE KONFORM") ? (
-                              <Badge variant="default" className="bg-yellow-100 text-yellow-800">TEILWEISE KONFORM</Badge>
-                            ) : (
-                              <Badge variant="outline">UNBEKANNT</Badge>
-                            )}
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="whitespace-pre-wrap text-sm mb-4">
-                            {parsedResults.swissLawAnswer.replace(/^## ✅\s*Antwort\s*basierend\s*auf\s*Schweizer\s*Recht.*?\n/s, '').replace(/^✅\s*Antwort\s*basierend\s*auf\s*Schweizer\s*Recht.*?\n/s, '')}
-                          </div>
-                          <div className="whitespace-pre-wrap text-sm">
-                            {parsedResults.legalAssessment
-                              .replace(/^## ⚖️\s*Rechtliche\s*Bewertung.*?\n/s, '')
-                              .replace(/^⚖️\s*Rechtliche\s*Bewertung.*?\n/s, '')
-                              .replace(/\*\*Status:\*\*.*?\n\n/s, '')
-                              .replace(/\*\*Begründung:\*\*\s*/s, '')}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )}
-
-                    {/* Antwort basierend auf Schweizer Recht (only shown if legalAssessment is not available) */}
-                    {parsedResults.swissLawAnswer && !parsedResults.legalAssessment && (
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="flex items-center">
-                            <CheckCircle className="h-5 w-5 mr-2" />
-                            Antwort basierend auf Schweizer Recht
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="whitespace-pre-wrap text-sm">
-                            {parsedResults.swissLawAnswer.replace(/^## ✅\s*Antwort\s*basierend\s*auf\s*Schweizer\s*Recht.*?\n/s, '').replace(/^✅\s*Antwort\s*basierend\s*auf\s*Schweizer\s*Recht.*?\n/s, '')}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )}
-
-                    {/* Rechtliche Bewertung (only shown if swissLawAnswer is not available) */}
-                    {parsedResults.legalAssessment && !parsedResults.swissLawAnswer && (
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="flex items-center justify-between">
-                            <div className="flex items-center">
-                              <Scale className="h-5 w-5 mr-2" />
-                              Rechtliche Bewertung
-                            </div>
-                            {parsedResults.legalAssessment.includes("**Status:** KONFORM") ? (
-                              <Badge variant="secondary" className="bg-green-100 text-green-800">KONFORM</Badge>
-                            ) : parsedResults.legalAssessment.includes("**Status:** NICHT KONFORM") ? (
-                              <Badge variant="destructive">NICHT KONFORM</Badge>
-                            ) : parsedResults.legalAssessment.includes("**Status:** TEILWEISE KONFORM") ? (
-                              <Badge variant="default" className="bg-yellow-100 text-yellow-800">TEILWEISE KONFORM</Badge>
-                            ) : (
-                              <Badge variant="outline">UNBEKANNT</Badge>
-                            )}
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="whitespace-pre-wrap text-sm">
-                            {parsedResults.legalAssessment
-                              .replace(/^## ⚖️\s*Rechtliche\s*Bewertung.*?\n/s, '')
-                              .replace(/^⚖️\s*Rechtliche\s*Bewertung.*?\n/s, '')
-                              .replace(/\*\*Status:\*\*.*?\n\n/s, '')
-                              .replace(/\*\*Begründung:\*\*\s*/s, '')}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )}
-
-                    {/* Konkrete Empfehlungen */}
-                    {parsedResults.recommendations && (
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="flex items-center">
-                            <Target className="h-5 w-5 mr-2" />
-                            Konkrete Empfehlungen
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="whitespace-pre-wrap text-sm">
-                            {parsedResults.recommendations.replace(/^## 🎯\s*Konkrete\s*Empfehlungen.*?\n/s, '').replace(/^🎯\s*Konkrete\s*Empfehlungen.*?\n/s, '')}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )}
-
-                    {/* Wichtige Hinweise */}
-                    {parsedResults.importantNotes && (
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="flex items-center">
-                            <AlertTriangle className="h-5 w-5 mr-2" />
-                            Wichtige Hinweise
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="whitespace-pre-wrap text-sm">
-                            {parsedResults.importantNotes.replace(/^## ⚠️\s*Wichtige\s*Hinweise.*?\n/s, '').replace(/^⚠️\s*Wichtige\s*Hinweise.*?\n/s, '')}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )}
-
-                    {/* Referenzen */}
-                    {parsedResults.references && (
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="flex items-center">
-                            <BookOpen className="h-5 w-5 mr-2" />
-                            Referenzen
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="whitespace-pre-wrap text-sm">
-                            {parsedResults.references.replace(/^## 📚\s*Referenzen.*?\n/s, '').replace(/^📚\s*Referenzen.*?\n/s, '')}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )}
-
-                    {/* Sources */}
-                    {parsedResults.foundSources && parsedResults.foundSources.count > 0 && (
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="flex items-center">
-                            <Info className="h-5 w-5 mr-2" />
-                            Verwendete Quellen ({parsedResults.foundSources.count})
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="space-y-3">
-                            {parsedResults.foundSources.sources.map((source, index) => (
-                              <div key={index} className="p-3 bg-slate-50 rounded-md">
-                                <p className="text-sm font-medium mb-1">Quelle {index + 1}</p>
-                                <p className="text-sm">{source.content}</p>
-                                {source.metadata?.source && (
-                                  <p className="text-xs text-muted-foreground mt-1">
-                                    Quelle: {source.metadata.source}
-                                  </p>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )}
-
-                    {/* Search Queries */}
-                    {parsedResults.searchQueries && parsedResults.searchQueries.length > 0 && (
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="flex items-center">
-                            <Zap className="h-5 w-5 mr-2" />
-                            Verwendete Suchbegriffe
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="flex flex-wrap gap-2">
-                            {parsedResults.searchQueries.map((query, index) => (
-                              <Badge key={index} variant="secondary" className="text-sm">
-                                {query}
-                              </Badge>
-                            ))}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )}
-
-                    {/* Processing Steps */}
-                    {parsedResults.processingSteps && Object.keys(parsedResults.processingSteps).length > 0 && (
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="flex items-center">
-                            <CheckCircle className="h-5 w-5 mr-2" />
-                            Verarbeitungsschritte
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <ul className="space-y-2">
-                            {Object.entries(parsedResults.processingSteps).map(([key, value], index) => (
-                              <li key={index} className="flex items-start">
-                                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-sky-100 flex items-center justify-center text-xs font-medium text-sky-600 mr-2">
-                                  {index + 1}
+                        {/* Tab 1: Rechtliche Analyse */}
+                        <TabsContent value="rechtliche-analyse" className="space-y-4">
+                          {/* Rechtliche Grundlage */}
+                          {parsedResults.legalBasis && (
+                            <Card>
+                              <CardHeader>
+                                <CardTitle className="flex items-center">
+                                  <Building className="h-5 w-5 mr-2" />
+                                  Rechtliche Grundlage (DSG Schweiz)
+                                </CardTitle>
+                              </CardHeader>
+                              <CardContent>
+                                <div className="whitespace-pre-wrap text-sm">
+                                  {parsedResults.legalBasis.replace(/^## 🏛️\s*Rechtliche\s*Grundlage.*?\n/s, '').replace(/^🏛️\s*Rechtliche\s*Grundlage.*?\n/s, '')}
                                 </div>
-                                <span className="text-sm">{value}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </CardContent>
-                      </Card>
-                    )}
+                              </CardContent>
+                            </Card>
+                          )}
 
-                    {/* Timestamp */}
-                    {parsedResults.timestamp && (
-                      <p className="text-xs text-muted-foreground text-right">
-                        Analyse durchgeführt am: {new Date(parsedResults.timestamp).toLocaleString('de-DE')}
-                      </p>
+                          {/* Combined Antwort basierend auf Schweizer Recht and Rechtliche Bewertung */}
+                          {parsedResults.swissLawAnswer && parsedResults.legalAssessment && (
+                            <Card>
+                              <CardHeader>
+                                <CardTitle className="flex items-center justify-between">
+                                  <div className="flex items-center">
+                                    <Scale className="h-5 w-5 mr-2" />
+                                    Rechtliche Bewertung
+                                  </div>
+                                  {parsedResults.legalAssessment.includes("**Status:** KONFORM") ? (
+                                    <Badge variant="secondary" className="bg-green-100 text-green-800">KONFORM</Badge>
+                                  ) : parsedResults.legalAssessment.includes("**Status:** NICHT KONFORM") ? (
+                                    <Badge variant="destructive">NICHT KONFORM</Badge>
+                                  ) : parsedResults.legalAssessment.includes("**Status:** TEILWEISE KONFORM") ? (
+                                    <Badge variant="default" className="bg-yellow-100 text-yellow-800">TEILWEISE KONFORM</Badge>
+                                  ) : (
+                                    <Badge variant="outline">UNBEKANNT</Badge>
+                                  )}
+                                </CardTitle>
+                              </CardHeader>
+                              <CardContent>
+                                <div className="whitespace-pre-wrap text-sm mb-4">
+                                  {parsedResults.swissLawAnswer.replace(/^## ✅\s*Antwort\s*basierend\s*auf\s*Schweizer\s*Recht.*?\n/s, '').replace(/^✅\s*Antwort\s*basierend\s*auf\s*Schweizer\s*Recht.*?\n/s, '')}
+                                </div>
+                                <div className="whitespace-pre-wrap text-sm">
+                                  {parsedResults.legalAssessment
+                                    .replace(/^## ⚖️\s*Rechtliche\s*Bewertung.*?\n/s, '')
+                                    .replace(/^⚖️\s*Rechtliche\s*Bewertung.*?\n/s, '')
+                                    .replace(/\*\*Status:\*\*.*?\n\n/s, '')
+                                    .replace(/\*\*Begründung:\*\*\s*/s, '')}
+                                </div>
+                              </CardContent>
+                            </Card>
+                          )}
+
+                          {/* Antwort basierend auf Schweizer Recht (only shown if legalAssessment is not available) */}
+                          {parsedResults.swissLawAnswer && !parsedResults.legalAssessment && (
+                            <Card>
+                              <CardHeader>
+                                <CardTitle className="flex items-center">
+                                  <CheckCircle className="h-5 w-5 mr-2" />
+                                  Antwort basierend auf Schweizer Recht
+                                </CardTitle>
+                              </CardHeader>
+                              <CardContent>
+                                <div className="whitespace-pre-wrap text-sm">
+                                  {parsedResults.swissLawAnswer.replace(/^## ✅\s*Antwort\s*basierend\s*auf\s*Schweizer\s*Recht.*?\n/s, '').replace(/^✅\s*Antwort\s*basierend\s*auf\s*Schweizer\s*Recht.*?\n/s, '')}
+                                </div>
+                              </CardContent>
+                            </Card>
+                          )}
+
+                          {/* Rechtliche Bewertung (only shown if swissLawAnswer is not available) */}
+                          {parsedResults.legalAssessment && !parsedResults.swissLawAnswer && (
+                            <Card>
+                              <CardHeader>
+                                <CardTitle className="flex items-center justify-between">
+                                  <div className="flex items-center">
+                                    <Scale className="h-5 w-5 mr-2" />
+                                    Rechtliche Bewertung
+                                  </div>
+                                  {parsedResults.legalAssessment.includes("**Status:** KONFORM") ? (
+                                    <Badge variant="secondary" className="bg-green-100 text-green-800">KONFORM</Badge>
+                                  ) : parsedResults.legalAssessment.includes("**Status:** NICHT KONFORM") ? (
+                                    <Badge variant="destructive">NICHT KONFORM</Badge>
+                                  ) : parsedResults.legalAssessment.includes("**Status:** TEILWEISE KONFORM") ? (
+                                    <Badge variant="default" className="bg-yellow-100 text-yellow-800">TEILWEISE KONFORM</Badge>
+                                  ) : (
+                                    <Badge variant="outline">UNBEKANNT</Badge>
+                                  )}
+                                </CardTitle>
+                              </CardHeader>
+                              <CardContent>
+                                <div className="whitespace-pre-wrap text-sm">
+                                  {parsedResults.legalAssessment
+                                    .replace(/^## ⚖️\s*Rechtliche\s*Bewertung.*?\n/s, '')
+                                    .replace(/^⚖️\s*Rechtliche\s*Bewertung.*?\n/s, '')
+                                    .replace(/\*\*Status:\*\*.*?\n\n/s, '')
+                                    .replace(/\*\*Begründung:\*\*\s*/s, '')}
+                                </div>
+                              </CardContent>
+                            </Card>
+                          )}
+                        </TabsContent>
+
+                        {/* Tab 2: Empfehlungen & Hinweise */}
+                        <TabsContent value="empfehlungen" className="space-y-4">
+                          {/* Konkrete Empfehlungen */}
+                          {parsedResults.recommendations && (
+                            <Card>
+                              <CardHeader>
+                                <CardTitle className="flex items-center">
+                                  <Target className="h-5 w-5 mr-2" />
+                                  Konkrete Empfehlungen
+                                </CardTitle>
+                              </CardHeader>
+                              <CardContent>
+                                <div className="whitespace-pre-wrap text-sm">
+                                  {parsedResults.recommendations.replace(/^## 🎯\s*Konkrete\s*Empfehlungen.*?\n/s, '').replace(/^🎯\s*Konkrete\s*Empfehlungen.*?\n/s, '')}
+                                </div>
+                              </CardContent>
+                            </Card>
+                          )}
+
+                          {/* Wichtige Hinweise */}
+                          {parsedResults.importantNotes && (
+                            <Card>
+                              <CardHeader>
+                                <CardTitle className="flex items-center">
+                                  <AlertTriangle className="h-5 w-5 mr-2" />
+                                  Wichtige Hinweise
+                                </CardTitle>
+                              </CardHeader>
+                              <CardContent>
+                                <div className="whitespace-pre-wrap text-sm">
+                                  {parsedResults.importantNotes.replace(/^## ⚠️\s*Wichtige\s*Hinweise.*?\n/s, '').replace(/^⚠️\s*Wichtige\s*Hinweise.*?\n/s, '')}
+                                </div>
+                              </CardContent>
+                            </Card>
+                          )}
+
+                          {/* Processing Steps */}
+                          {parsedResults.processingSteps && Object.keys(parsedResults.processingSteps).length > 0 && (
+                            <Card>
+                              <CardHeader>
+                                <CardTitle className="flex items-center">
+                                  <CheckCircle className="h-5 w-5 mr-2" />
+                                  Verarbeitungsschritte
+                                </CardTitle>
+                              </CardHeader>
+                              <CardContent>
+                                <ul className="space-y-2">
+                                  {Object.entries(parsedResults.processingSteps).map(([key, value], index) => (
+                                    <li key={index} className="flex items-start">
+                                      <div className="flex-shrink-0 w-6 h-6 rounded-full bg-sky-100 flex items-center justify-center text-xs font-medium text-sky-600 mr-2">
+                                        {index + 1}
+                                      </div>
+                                      <span className="text-sm">{value}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </CardContent>
+                            </Card>
+                          )}
+                        </TabsContent>
+
+                        {/* Tab 3: Referenzen & Quellen */}
+                        <TabsContent value="referenzen" className="space-y-4">
+                          {/* Referenzen */}
+                          {parsedResults.references && (
+                            <Card>
+                              <CardHeader>
+                                <CardTitle className="flex items-center">
+                                  <BookOpen className="h-5 w-5 mr-2" />
+                                  Referenzen
+                                </CardTitle>
+                              </CardHeader>
+                              <CardContent>
+                                <div className="whitespace-pre-wrap text-sm">
+                                  {parsedResults.references.replace(/^## 📚\s*Referenzen.*?\n/s, '').replace(/^📚\s*Referenzen.*?\n/s, '')}
+                                </div>
+                              </CardContent>
+                            </Card>
+                          )}
+
+                          {/* Sources */}
+                          {parsedResults.foundSources && parsedResults.foundSources.count > 0 && (
+                            <Card>
+                              <CardHeader>
+                                <CardTitle className="flex items-center">
+                                  <Info className="h-5 w-5 mr-2" />
+                                  Verwendete Quellen ({parsedResults.foundSources.count})
+                                </CardTitle>
+                              </CardHeader>
+                              <CardContent>
+                                <div className="space-y-3">
+                                  {parsedResults.foundSources.sources.map((source, index) => (
+                                    <div key={index} className="p-3 bg-slate-50 rounded-md">
+                                      <p className="text-sm font-medium mb-1">Quelle {index + 1}</p>
+                                      <p className="text-sm">{source.content}</p>
+                                      {source.metadata?.source && (
+                                        <p className="text-xs text-muted-foreground mt-1">
+                                          Quelle: {source.metadata.source}
+                                        </p>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </CardContent>
+                            </Card>
+                          )}
+
+                          {/* Search Queries */}
+                          {parsedResults.searchQueries && parsedResults.searchQueries.length > 0 && (
+                            <Card>
+                              <CardHeader>
+                                <CardTitle className="flex items-center">
+                                  <Zap className="h-5 w-5 mr-2" />
+                                  Verwendete Suchbegriffe
+                                </CardTitle>
+                              </CardHeader>
+                              <CardContent>
+                                <div className="flex flex-wrap gap-2">
+                                  {parsedResults.searchQueries.map((query, index) => (
+                                    <Badge key={index} variant="secondary" className="text-sm">
+                                      {query}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              </CardContent>
+                            </Card>
+                          )}
+                        </TabsContent>
+                      </Tabs>
                     )}
                   </div>
                 )}
