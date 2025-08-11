@@ -98,7 +98,7 @@ interface Source {
 
 interface AnalysisResult {
   legalBasis?: string; // 🏛️ Rechtliche Grundlage (DSG Schweiz)
-  swissLawAnswer?: string; // ✅ Antwort basierend auf Schweizer Recht
+  dataProtectionAnswer?: string; // ✅ Antwort basierend auf Schweizer Recht
   legalAssessment?: {
     status: string;
     reasoning: string;
@@ -150,7 +150,7 @@ export default function DSGVOCheckPage() {
 
         console.log('Structured analysis result:', {
           legalBasis: parsedResult.legalBasis,
-          swissLawAnswer: parsedResult.swissLawAnswer,
+          dataProtectionAnswer: parsedResult.dataProtectionAnswer,
           legalAssessment: parsedResult.legalAssessment,
           recommendations: parsedResult.recommendations,
           importantNotes: parsedResult.importantNotes,
@@ -162,8 +162,8 @@ export default function DSGVOCheckPage() {
 
         // Keep the old format for backward compatibility
         let formattedResults = `## DSGVO-Analyse\n\n`;
-        if (parsedResult.swissLawAnswer) {
-          formattedResults += `${parsedResult.swissLawAnswer}\n\n`;
+        if (parsedResult.dataProtectionAnswer) {
+          formattedResults += `${parsedResult.dataProtectionAnswer}\n\n`;
         }
 
         if (result.foundSources && result.foundSources.count > 0) {
@@ -278,7 +278,7 @@ export default function DSGVOCheckPage() {
                     </div>
 
                     {/* Summary Card */}
-                    {(parsedResults.legalAssessment || parsedResults.swissLawAnswer) && (
+                    {(parsedResults.legalAssessment || parsedResults.dataProtectionAnswer) && (
                       <Card className={`mb-4 bg-slate-50 ${
                         parsedResults.legalAssessment?.status === "KONFORM" 
                           ? "border-l-4 border-l-green-500" 
@@ -310,11 +310,11 @@ export default function DSGVOCheckPage() {
                             )}
 
                             {/* Brief Answer */}
-                            {parsedResults.swissLawAnswer && (
+                            {parsedResults.dataProtectionAnswer && (
                               <div>
                                 <span className="font-medium">Antwort:</span>
                                 <p className="text-sm mt-1">
-                                  {parsedResults.swissLawAnswer
+                                  {parsedResults.dataProtectionAnswer
                                     .replace(/^## ✅\s*Antwort\s*basierend\s*auf\s*Schweizer\s*Recht.*?\n/s, '')
                                     .replace(/^✅\s*Antwort\s*basierend\s*auf\s*Schweizer\s*Recht.*?\n/s, '')
                                     .split('\n')[0]}
@@ -337,7 +337,7 @@ export default function DSGVOCheckPage() {
                     )}
 
                     {/* Tabbed interface for structured analysis results */}
-                    {(parsedResults.legalBasis || parsedResults.swissLawAnswer || 
+                    {(parsedResults.legalBasis || parsedResults.dataProtectionAnswer ||
                       parsedResults.legalAssessment || parsedResults.recommendations || 
                       parsedResults.importantNotes || parsedResults.references) && (
                       <Tabs defaultValue="rechtliche-analyse" className="w-full">
@@ -364,7 +364,7 @@ export default function DSGVOCheckPage() {
                               <CardHeader>
                                 <CardTitle className="flex items-center">
                                   <Building className="h-5 w-5 mr-2" />
-                                  Rechtliche Grundlage (DSG Schweiz)
+                                  Rechtliche Grundlage
                                 </CardTitle>
                               </CardHeader>
                               <CardContent>
@@ -376,7 +376,7 @@ export default function DSGVOCheckPage() {
                           )}
 
                           {/* Combined Antwort basierend auf Schweizer Recht and Rechtliche Bewertung */}
-                          {parsedResults.swissLawAnswer && parsedResults.legalAssessment && (
+                          {parsedResults.dataProtectionAnswer && parsedResults.legalAssessment && (
                             <Card>
                               <CardHeader>
                                 <CardTitle className="flex items-center justify-between">
@@ -397,7 +397,7 @@ export default function DSGVOCheckPage() {
                               </CardHeader>
                               <CardContent>
                                 <div className="whitespace-pre-wrap text-sm mb-4">
-                                  {parsedResults.swissLawAnswer.replace(/^## ✅\s*Antwort\s*basierend\s*auf\s*Schweizer\s*Recht.*?\n/s, '').replace(/^✅\s*Antwort\s*basierend\s*auf\s*Schweizer\s*Recht.*?\n/s, '')}
+                                  {parsedResults.dataProtectionAnswer.replace(/^## ✅\s*Antwort\s*basierend\s*auf\s*Schweizer\s*Recht.*?\n/s, '').replace(/^✅\s*Antwort\s*basierend\s*auf\s*Schweizer\s*Recht.*?\n/s, '')}
                                 </div>
                                 <div className="whitespace-pre-wrap text-sm">
                                   {parsedResults.legalAssessment.reasoning}
@@ -407,7 +407,7 @@ export default function DSGVOCheckPage() {
                           )}
 
                           {/* Antwort basierend auf Schweizer Recht (only shown if legalAssessment is not available) */}
-                          {parsedResults.swissLawAnswer && !parsedResults.legalAssessment && (
+                          {parsedResults.dataProtectionAnswer && !parsedResults.legalAssessment && (
                             <Card>
                               <CardHeader>
                                 <CardTitle className="flex items-center">
@@ -417,14 +417,14 @@ export default function DSGVOCheckPage() {
                               </CardHeader>
                               <CardContent>
                                 <div className="whitespace-pre-wrap text-sm">
-                                  {parsedResults.swissLawAnswer.replace(/^## ✅\s*Antwort\s*basierend\s*auf\s*Schweizer\s*Recht.*?\n/s, '').replace(/^✅\s*Antwort\s*basierend\s*auf\s*Schweizer\s*Recht.*?\n/s, '')}
+                                  {parsedResults.dataProtectionAnswer.replace(/^## ✅\s*Antwort\s*basierend\s*auf\s*Schweizer\s*Recht.*?\n/s, '').replace(/^✅\s*Antwort\s*basierend\s*auf\s*Schweizer\s*Recht.*?\n/s, '')}
                                 </div>
                               </CardContent>
                             </Card>
                           )}
 
                           {/* Rechtliche Bewertung (only shown if swissLawAnswer is not available) */}
-                          {parsedResults.legalAssessment && !parsedResults.swissLawAnswer && (
+                          {parsedResults.legalAssessment && !parsedResults.dataProtectionAnswer  && (
                             <Card>
                               <CardHeader>
                                 <CardTitle className="flex items-center justify-between">
