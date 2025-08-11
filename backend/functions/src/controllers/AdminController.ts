@@ -1003,7 +1003,7 @@ export class AdminController extends BaseController {
    * Index Specific Legal Text (Admin Only)
    * POST /api/admin/legal-texts/index-specific
    *
-   * This endpoint reads a hardcoded PDF document and indexes it using the AnalysisService
+   * This endpoint reads hardcoded PDF documents and indexes them using the AnalysisService
    */
   public async indexSpecificLegalText(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
@@ -1012,19 +1012,34 @@ export class AdminController extends BaseController {
       this.logger.info('Starting specific legal text indexing', {});
 
       // Read the dsg.pdf file from the assets directory
-      const pdfPath = path.join(__dirname, '../../assets/dsg.pdf');
-      const pdfBuffer = fs.readFileSync(pdfPath);
-      const pdfData = await pdfParse(pdfBuffer);
-      const content = pdfData.text;
+      const dsgPdfPath = path.join(__dirname, '../../assets/dsg.pdf');
+      const dsgPdfBuffer = fs.readFileSync(dsgPdfPath);
+      const dsgPdfData = await pdfParse(dsgPdfBuffer);
+      const dsgContent = dsgPdfData.text;
 
-      // Create text object for indexing
-      const text = {
-        content: content,
-        title: 'DSG - Datenschutzgesetz',
-        source: 'DSG',
-        jurisdiction: 'CH',
-        legalArea: 'Datenschutzrecht'
-      };
+      // Read the dsgvo.pdf file from the assets directory
+      const dsgvoPdfPath = path.join(__dirname, '../../assets/dsgvo.pdf');
+      const dsgvoPdfBuffer = fs.readFileSync(dsgvoPdfPath);
+      const dsgvoPdfData = await pdfParse(dsgvoPdfBuffer);
+      const dsgvoContent = dsgvoPdfData.text;
+
+      // Create text objects for indexing
+      const texts = [
+        {
+          content: dsgContent,
+          title: 'DSG - Datenschutzgesetz',
+          source: 'DSG',
+          jurisdiction: 'CH',
+          legalArea: 'Datenschutzrecht'
+        },
+        {
+          content: dsgvoContent,
+          title: 'DSGVO - Datenschutz-Grundverordnung',
+          source: 'DSGVO',
+          jurisdiction: 'EU',
+          legalArea: 'Datenschutzrecht'
+        }
+      ];
 
       // Import AnalysisService dynamically to avoid circular dependency
       const { AnalysisService } = await import('../services/AnalysisService');
@@ -1032,7 +1047,7 @@ export class AdminController extends BaseController {
 
       this.logger.info('Starting specific legal text indexing', {
         userId,
-        document: text.title
+        documents: texts.map(t => t.title)
       });
 
       let progress = 0;
@@ -1041,17 +1056,17 @@ export class AdminController extends BaseController {
         this.logger.info('Indexing progress', { progress, status });
       };
 
-      await analysisService.indexLegalTexts([text], progressCallback);
+      await analysisService.indexLegalTexts(texts, progressCallback);
 
       this.sendSuccess(res, {
-        message: 'Specific legal text indexed successfully',
-        document: text.title,
+        message: 'Specific legal texts indexed successfully',
+        documents: texts.map(t => t.title),
         timestamp: new Date().toISOString()
       });
 
       this.logger.info('Specific legal text indexing completed', {
         userId,
-        document: text.title
+        documents: texts.map(t => t.title)
       });
 
     } catch (error) {

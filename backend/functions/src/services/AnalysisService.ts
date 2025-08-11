@@ -1121,7 +1121,7 @@ export class AnalysisService {
 
 
   /**
-   * Holt den Vector Store für den angegebenen Index
+   * Holt den Vector Store für die angegebene Jurisdiktion
    */
   private async getVectorStore() {
     const vectorConfig: VectorStoreConfig = {

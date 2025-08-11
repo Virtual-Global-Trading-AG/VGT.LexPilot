@@ -934,49 +934,49 @@ export class DocumentController extends BaseController {
         return;
       }
 
-      this.logger.info('DSG Check: Starting complete check with pre-populated Swiss DSG database', {
+      this.logger.info('Data Protection Check: Starting complete check with Swiss DSG and EU GDPR databases', {
         userId,
         questionLength: question.length,
         maxSources,
         language,
         includeContext,
         timestamp: new Date().toISOString(),
-        databaseStatus: 'Pre-populated Swiss DSG Vector Store'
+        databaseStatus: 'Pre-populated Swiss DSG and EU GDPR Vector Stores'
       });
 
       // ==========================================
-      // SCHRITT 1: Optimierte Suchbegriffe für befüllte DSG-Datenbank
+      // SCHRITT 1: Optimierte Suchbegriffe für befüllte Datenschutz-Datenbanken
       // ==========================================
       const step1StartTime = Date.now();
       const chatGptQueriesPrompt = `Frage: "${question}"
 
-KONTEXT: Es existiert bereits eine vollständig befüllte Vektor-Datenbank mit dem kompletten Datenschutzgesetz der Schweiz (DSG), einschließlich aller Artikel, Absätze, Bestimmungen und Kommentare.
+KONTEXT: Es existiert bereits eine vollständig befüllte Vektor-Datenbank mit dem kompletten Datenschutzgesetz der Schweiz (DSG) und der EU-Datenschutz-Grundverordnung (DSGVO), einschließlich aller Artikel, Absätze, Bestimmungen und Kommentare.
 
-AUFGABE: Erstelle 2-3 präzise deutsche Suchbegriffe, die optimal für die semantische Suche in dieser bereits indexierten DSG-Schweiz-Datenbank geeignet sind:
+AUFGABE: Erstelle 2-3 präzise deutsche Suchbegriffe, die optimal für die semantische Suche in beiden Datenbanken (Schweizer DSG und EU DSGVO) geeignet sind:
 
 ANFORDERUNGEN:
-- Verwende exakte Schweizer Rechtsterminologie aus dem DSG/nDSG
-- Fokussiere auf spezifische DSG-Konzepte und -Artikel die in der Datenbank indexiert sind
-- Berücksichtige sowohl das alte DSG wie auch das aktuellste
-- Wähle Begriffe, die in der Vektor-Datenbank hohe semantische Relevanz-Scores erzielen werden
-- Nutze Begriffe, die häufig in Schweizer Datenschutz-Dokumenten verwendet werden
+- Verwende Rechtsterminologie, die sowohl im Schweizer DSG als auch in der EU DSGVO verwendet wird
+- Fokussiere auf Datenschutzkonzepte, die in beiden Rechtssystemen relevant sind
+- Berücksichtige sowohl schweizer als auch europäische Datenschutzterminologie
+- Wähle Begriffe, die in beiden Vektor-Datenbanken hohe semantische Relevanz-Scores erzielen werden
+- Nutze Begriffe, die häufig in Datenschutz-Dokumenten beider Jurisdiktionen verwendet werden
 
 BEISPIELE für optimale Suchbegriffe:
-- "Personendaten Bearbeitung" (statt nur "Daten")
-- "Auskunftsrecht Betroffene" (statt nur "Auskunft")
-- "Datenschutzerklärung Informationspflicht" (statt nur "Information")
-- "Einwilligung Datenbearbeitung" (statt nur "Zustimmung")
-- "Datensicherheit Schutzmassnahmen" (statt nur "Sicherheit")
+- "Personendaten Verarbeitung" (DSG: Bearbeitung, DSGVO: Verarbeitung)
+- "Auskunftsrecht Betroffene" (in beiden Gesetzen relevant)
+- "Datenschutzerklärung Informationspflicht" (in beiden Gesetzen relevant)
+- "Einwilligung Datenverarbeitung" (in beiden Gesetzen relevant)
+- "Datensicherheit Schutzmassnahmen" (in beiden Gesetzen relevant)
 
-Da die Vector Database bereits vollständig indexiert ist, optimiere die Suchbegriffe für maximale semantische Übereinstimmung mit dem DSG-Inhalt:
+Da beide Vector Databases bereits vollständig indexiert sind, optimiere die Suchbegriffe für maximale semantische Übereinstimmung mit DSG- und DSGVO-Inhalten:
 
 Suchbegriffe:`;
 
-      this.logger.debug('DSG Check Step 1: Generating optimized search queries for pre-populated DSG database', {
+      this.logger.debug('Data Protection Check Step 1: Generating optimized search queries for both DSG and GDPR databases', {
         userId,
         promptLength: chatGptQueriesPrompt.length,
         step: 'query_generation_optimized',
-        targetDatabase: 'Pre-populated Swiss DSG Vector Store',
+        targetDatabases: 'Pre-populated Swiss DSG and EU GDPR Vector Stores',
         databaseStatus: 'fully_indexed_and_ready',
         estimatedTokens: Math.ceil(chatGptQueriesPrompt.length / 4)
       });
@@ -984,7 +984,7 @@ Suchbegriffe:`;
       const chatGptResponse = await this.callChatGPT(chatGptQueriesPrompt);
       const step1Duration = Date.now() - step1StartTime;
 
-      this.logger.debug('DSG Check Step 1: Optimized DSG queries generated successfully', {
+      this.logger.debug('Data Protection Check Step 1: Optimized queries for DSG and GDPR generated successfully', {
         userId,
         responseLength: chatGptResponse.length,
         duration: step1Duration,
@@ -1003,7 +1003,7 @@ Suchbegriffe:`;
       .slice(0, 3); // Max 3 queries
 
       if (queries.length === 0) {
-        this.logger.error('DSG Check Step 1: No valid search queries generated', undefined, {
+        this.logger.error('Data Protection Check Step 1: No valid search queries generated', undefined, {
           userId,
           rawResponse: chatGptResponse,
           step1Duration
@@ -1012,26 +1012,27 @@ Suchbegriffe:`;
         return;
       }
 
-      this.logger.debug('DSG Check Step 1: Swiss DSG search queries parsed and validated', {
+      this.logger.debug('Data Protection Check Step 1: Search queries for DSG and GDPR parsed and validated', {
         userId,
         queriesCount: queries.length,
         queries: queries,
         step1Duration,
-        targetDatabase: 'Pre-populated Swiss DSG Vector Store',
-        queryOptimization: 'database_specific'
+        targetDatabases: 'Pre-populated Swiss DSG and EU GDPR Vector Stores',
+        queryOptimization: 'multi_jurisdiction_optimized'
       });
 
       // ==========================================
-      // SCHRITT 2: Similarity Search in bereits befüllter Swiss DSG Vector Store
+      // SCHRITT 2: Similarity Search in Swiss DSG und EU GDPR Vector Stores
       // ==========================================
       const step2StartTime = Date.now();
-      this.logger.debug('DSG Check Step 2: Starting parallel similarity search in pre-populated Swiss DSG database', {
+      this.logger.debug('Data Protection Check Step 2: Starting parallel similarity search in both DSG and GDPR databases', {
         userId,
         queriesCount: queries.length,
         maxResultsPerQuery: Math.ceil(maxSources / queries.length) + 1,
-        vectorStore: 'Pre-populated Swiss DSG/nDSG Database',
+        vectorStores: 'Pre-populated Swiss DSG and EU GDPR Databases',
         databaseStatus: 'Ready, Indexed, and Optimized',
-        searchStrategy: 'parallel_semantic_search'
+        searchStrategy: 'multi_jurisdiction_parallel_semantic_search',
+        jurisdictions: ['ch', 'eu']
       });
 
       const allResults = await Promise.all(
@@ -1039,20 +1040,20 @@ Suchbegriffe:`;
           const queryStartTime = Date.now();
           const resultsPerQuery = Math.ceil(maxSources / queries.length) + 1;
 
-          this.logger.debug('DSG Check Step 2: Processing query in pre-indexed DSG database', {
+          this.logger.debug('Data Protection Check Step 2: Processing query in both DSG and GDPR databases', {
             userId,
             queryIndex: index,
             query: query,
             resultsRequested: resultsPerQuery,
             timestamp: new Date().toISOString(),
-            searchContext: 'Pre-populated Swiss DSG Vector Store'
+            searchContext: 'Pre-populated Swiss DSG and EU GDPR Vector Stores',
           });
 
-          // Hier wird Ihre bereits befüllte Swiss DSG Vector Database durchsucht
+          // Suche in beiden Datenbanken: Swiss DSG und EU GDPR
           const results = await this.analysisService.similaritySearch(query, resultsPerQuery);
           const queryDuration = Date.now() - queryStartTime;
 
-          this.logger.debug('DSG Check Step 2: Query results from pre-indexed DSG database', {
+          this.logger.debug('Data Protection Check Step 2: Query results from both DSG and GDPR databases', {
             userId,
             queryIndex: index,
             query: query,
@@ -1070,31 +1071,37 @@ Suchbegriffe:`;
       const step2Duration = Date.now() - step2StartTime;
 
       // ==========================================
-      // SCHRITT 3: Eindeutige Swiss DSG Ergebnisse zusammenführen
+      // SCHRITT 3: Eindeutige Ergebnisse aus DSG und GDPR zusammenführen
       // ==========================================
       const uniqueResults = new Map<string, any>();
       const duplicateCount = { count: 0 };
-      const foundDSGArticles: string[] = [];
+      const foundArticles: string[] = [];
       const relevanceScores: number[] = [];
+      const jurisdictionStats = { ch: 0, eu: 0 };
 
       allResults.flat().forEach((item: any, index) => {
         if (item.id && !uniqueResults.has(item.id) && uniqueResults.size < maxSources) {
           uniqueResults.set(item.id, item);
 
-          // DSG-Artikel und Relevanz-Scores extrahieren
+          // Artikel und Relevanz-Scores extrahieren
           const article = item.metadata?.article || item.metadata?.section || `Sektion-${index}`;
-          if (article && !article.includes('Sektion-')) foundDSGArticles.push(article);
+            const jurisdiction = (item.metadata?.jurisdiction || 'unknown').toLowerCase();
+
+          if (article && !article.includes('Sektion-')) foundArticles.push(article);
+          if (jurisdiction === 'ch') jurisdictionStats.ch++;
+          if (jurisdiction === 'eu') jurisdictionStats.eu++;
 
           if (item.score) relevanceScores.push(item.score);
 
-          this.logger.debug('DSG Check Step 2: Added unique Swiss DSG result from pre-populated database', {
+          this.logger.debug('Data Protection Check Step 2: Added unique result from multi-jurisdiction database', {
             userId,
             resultId: item.id,
             resultIndex: index,
-            dsgArticle: article,
+            article: article,
+            jurisdiction: jurisdiction,
             relevanceScore: item.score,
             contentPreview: item.pageContent?.substring(0, 100) + '...',
-            source: 'Pre-populated Swiss DSG Vector Store'
+            source: `Pre-populated Vector Store`
           });
         } else if (item.id && uniqueResults.has(item.id)) {
           duplicateCount.count++;
@@ -1105,35 +1112,37 @@ Suchbegriffe:`;
       const avgRelevanceScore = relevanceScores.length > 0 ?
         relevanceScores.reduce((a, b) => a + b, 0) / relevanceScores.length : 0;
 
-      this.logger.debug('DSG Check Step 2: Swiss DSG vector search in pre-populated database completed', {
+      this.logger.debug('Data Protection Check Step 2: Multi-jurisdiction vector search completed', {
         userId,
         totalRawResults: allResults.flat().length,
         uniqueResults: vectorSearchResults.length,
         duplicatesFiltered: duplicateCount.count,
-        foundDSGArticles: [...new Set(foundDSGArticles)],
+        foundArticles: [...new Set(foundArticles)],
+        jurisdictionDistribution: jurisdictionStats,
         averageRelevanceScore: avgRelevanceScore,
         step2Duration,
         databasePerformance: {
           searchTime: step2Duration,
           resultsQuality: avgRelevanceScore > 0.8 ? 'excellent' : avgRelevanceScore > 0.6 ? 'good' : 'moderate',
-          databaseUtilization: 'pre_populated_optimized'
+          databaseUtilization: 'multi_jurisdiction_optimized'
         }
       });
 
       if (vectorSearchResults.length === 0) {
-        this.logger.warn('DSG Check Step 2: No results found in pre-populated DSG database', {
+        this.logger.warn('Data Protection Check Step 2: No results found in DSG and GDPR databases', {
           userId,
           queries: queries,
           databaseStatus: 'Pre-populated but no matches',
+          searchedJurisdictions: ['ch', 'eu'],
           possibleIssues: ['query_too_specific', 'database_content_mismatch', 'threshold_too_high']
         });
 
-        this.sendError(res, 404, 'Keine relevanten DSG-Artikel in der Datenbank gefunden. Möglicherweise ist die Anfrage zu spezifisch.');
+        this.sendError(res, 404, 'Keine relevanten Datenschutz-Artikel in den Datenbanken gefunden. Möglicherweise ist die Anfrage zu spezifisch.');
         return;
       }
 
       // ==========================================
-      // SCHRITT 4: Context-Aufbereitung mit Swiss DSG spezifischen Informationen
+      // SCHRITT 4: Context-Aufbereitung mit DSG und GDPR Informationen
       // ==========================================
       const step3StartTime = Date.now();
 
@@ -1143,83 +1152,94 @@ Suchbegriffe:`;
         .map((doc, index) => {
           const contentLength = Math.min(doc.pageContent.length, 300); // Längerer Context für bessere Analyse
           const shortContent = doc.pageContent.substring(0, contentLength);
-          const article = doc.metadata?.article || doc.metadata?.section || 'DSG Bestimmung';
-          const articleInfo = article ? ` (${article})` : '';
+          const article = doc.metadata?.article || doc.metadata?.section || 'Datenschutz-Bestimmung';
+          const jurisdiction = (doc.metadata?.jurisdiction || 'unknown').toLowerCase();
+          const jurisdictionLabel = jurisdiction === 'ch' ? 'DSG' : jurisdiction === 'eu' ? 'GDPR' : 'Unbekannt';
+          const articleInfo = article ? ` (${jurisdictionLabel}: ${article})` : '';
           const score = doc.score ? ` [Relevanz: ${(doc.score * 100).toFixed(1)}%]` : '';
 
-          this.logger.debug('DSG Check Step 3: Processing Swiss DSG context document from pre-populated database', {
+          this.logger.debug('Data Protection Check Step 3: Processing context document from multi-jurisdiction database', {
             userId,
             docIndex: index,
             docId: doc.id,
-            dsgArticle: article,
+            article: article,
+            jurisdiction: jurisdiction,
             relevanceScore: doc.score,
             originalLength: doc.pageContent.length,
             includedLength: contentLength,
             metadata: doc.metadata,
-            source: 'Pre-populated Swiss DSG Database'
+            source: `Pre-populated ${jurisdiction === 'ch' ? 'Swiss DSG' : jurisdiction === 'eu' ? 'EU GDPR' : 'Unknown'} Database`
           });
 
-          return `${index + 1}. ${article}${score}:\n${shortContent}${contentLength < doc.pageContent.length ? '...' : ''}`;
+          return `${index + 1}. ${article}${score} [${jurisdictionLabel}]:\n${shortContent}${contentLength < doc.pageContent.length ? '...' : ''}`;
         })
         .join('\n\n');
       }
 
-      this.logger.debug('DSG Check Step 3: Swiss DSG context from pre-populated database prepared', {
+      this.logger.debug('Data Protection Check Step 3: Multi-jurisdiction context prepared', {
         userId,
         contextLength: contextText.length,
         documentsIncluded: vectorSearchResults.length,
-        contextSource: 'Pre-populated Swiss DSG Vector Database',
+        contextSources: 'Pre-populated Swiss DSG and EU GDPR Vector Databases',
+        jurisdictionDistribution: jurisdictionStats,
         includeContext,
         avgContextLength: contextText.length / Math.max(vectorSearchResults.length, 1)
       });
 
       // ==========================================
-      // SCHRITT 5: Finale Swiss DSG Analyse mit LangChain
+      // SCHRITT 5: Finale Datenschutz-Analyse mit DSG und DSGVO
       // ==========================================
       const finalAnalysisPrompt = `Benutzerfrage: "${question}"
 
-${includeContext && contextText ? `SCHWEIZER DSG-KONTEXT aus der indexierten Datenbank:
+${includeContext && contextText ? `DATENSCHUTZ-KONTEXT aus den indexierten Datenbanken (DSG Schweiz & DSGVO (EU)):
 ${contextText}
 
-` : ''}AUFGABE: Analysiere die Benutzerfrage basierend auf dem Schweizer Datenschutzgesetz (DSG) und gib eine strukturierte, professionelle Antwort als JSON zurück:
+` : ''}AUFGABE: Analysiere die Benutzerfrage basierend auf dem Schweizer Datenschutzgesetz (DSG) und dem EU-Datenschutzgesetz (DSGVO bez. GDPR) und gib eine strukturierte, professionelle Antwort als JSON zurück:
 
 ANALYSE-FOKUS:
-- Schweizer Datenschutzrecht (DSG 2023)
-- Relevante DSG-Artikel und Bestimmungen
-- Praktische Umsetzung in der Schweiz
-- Compliance-Anforderungen
+- Schweizer Dateschutzgesetz der Schweiz (DSG 2023) und EU-Datenschutz (DSGVO)
+- Relevante Artikel und Bestimmungen beider Rechtssysteme
+- Praktische Umsetzung in der Schweiz und EU
+- Compliance-Anforderungen für beide Jurisdiktionen
+- Gemeinsamkeiten und Unterschiede zwischen DSG und GDPR
 
 ANTWORT-STRUKTUR: Gib die Antwort als valides JSON-Objekt mit folgender Struktur zurück:
 
 {
-  "legalBasis": "Relevante Artikel des Schweizer DSG mit Bezug zur Frage",
-  "swissLawAnswer": "Direkte, präzise Antwort zur gestellten Frage",
+  "legalBasis": "Relevante Artikel des DSG und/oder GDPR mit Bezug zur Frage",
+  "dataProtectionAnswer": "Direkte, präzise Antwort zur gestellten Frage unter Berücksichtigung beider Rechtssysteme",
   "legalAssessment": {
     "status": "KONFORM | NICHT KONFORM | TEILWEISE KONFORM | UNKLARE RECHTSLAGE",
-    "reasoning": "Juristische Einschätzung basierend auf DSG"
+    "reasoning": "Juristische Einschätzung basierend auf DSG und GDPR"
   },
   "recommendations": [
-    "Spezifische Handlungsempfehlung 1 für die Schweiz",
-    "Spezifische Handlungsempfehlung 2 für die Schweiz",
-    "Spezifische Handlungsempfehlung 3 für die Schweiz"
+    "Spezifische Handlungsempfehlung 1 (DSG/GDPR)",
+    "Spezifische Handlungsempfehlung 2 (DSG/GDPR)",
+    "Spezifische Handlungsempfehlung 3 (DSG/GDPR)"
   ],
-  "importantNotes": "Besonderheiten des Schweizer Datenschutzrechts, Unterschiede zur DSGVO",
+  "importantNotes": "Besonderheiten und Unterschiede zwischen DSG und GDPR, praktische Hinweise",
+  "jurisdictionAnalysis": {
+    "ch": "Spezifische Aspekte nach Schweizer DSG",
+    "eu": "Spezifische Aspekte nach EU GDPR"
+  },
   "references": [
     {
-      "article": "DSG Art. X",
-      "description": "Kurzbeschreibung des Artikels"
+      "article": "DSG Art. X / GDPR Art. Y",
+      "description": "Kurzbeschreibung des Artikels",
+      "jurisdiction": "ch | eu"
     }
   ]
 }
 
 WICHTIG: Gib NUR das JSON-Objekt zurück, ohne zusätzlichen Text oder Markdown-Formatierung.
-STIL: Professionell, präzise, praxisorientiert für Schweizer Kontext`;
+STIL: Professionell, präzise, praxisorientiert für beide Jurisdiktionen`;
 
-      this.logger.debug('DSG Check Step 4: Starting comprehensive Swiss DSG analysis with LangChain', {
+      this.logger.debug('Data Protection Check Step 4: Starting comprehensive DSG and GDPR analysis with LangChain', {
         userId,
         finalPromptLength: finalAnalysisPrompt.length,
         estimatedTokens: Math.ceil(finalAnalysisPrompt.length / 4),
-        analysisContext: 'Swiss DSG/nDSG with pre-populated database context',
+        analysisContext: 'Swiss DSG and EU GDPR with pre-populated database context',
+        jurisdictionDistribution: jurisdictionStats,
         includeContext,
         contextDocuments: vectorSearchResults.length
       });
@@ -1237,14 +1257,14 @@ STIL: Professionell, präzise, praxisorientiert für Schweizer Kontext`;
 
         parsedAnalysis = JSON.parse(jsonString);
 
-        this.logger.debug('DSG Check Step 4: JSON analysis successfully parsed', {
+        this.logger.debug('Data Protection Check Step 4: JSON analysis successfully parsed', {
           userId,
           rawAnalysisLength: finalAnalysisRaw.length,
           parsedStructure: Object.keys(parsedAnalysis),
           step3Duration
         });
       } catch (parseError) {
-        this.logger.warn('DSG Check Step 4: Failed to parse JSON response, using fallback structure', {
+        this.logger.warn('Data Protection Check Step 4: Failed to parse JSON response, using fallback structure', {
           userId,
           parseError: parseError instanceof Error ? parseError.message : String(parseError),
           rawResponse: finalAnalysisRaw.substring(0, 200) + '...'
@@ -1253,78 +1273,89 @@ STIL: Professionell, präzise, praxisorientiert für Schweizer Kontext`;
         // Fallback structure if JSON parsing fails
         parsedAnalysis = {
           legalBasis: "Fehler beim Parsen der Antwort",
-          swissLawAnswer: finalAnalysisRaw,
+          dataProtectionAnswer: finalAnalysisRaw,
           legalAssessment: {
             status: "UNKLARE RECHTSLAGE",
             reasoning: "Die Antwort konnte nicht korrekt strukturiert werden"
           },
           recommendations: ["Bitte versuchen Sie die Anfrage erneut"],
           importantNotes: "Technischer Fehler bei der Antwortverarbeitung",
+          jurisdictionAnalysis: {
+            ch: "Fehler bei der Analyse",
+            eu: "Fehler bei der Analyse"
+          },
           references: []
         };
       }
 
-      this.logger.debug('DSG Check Step 4: Comprehensive Swiss DSG analysis completed', {
+      this.logger.debug('Data Protection Check Step 4: Comprehensive DSG and GDPR analysis completed', {
         userId,
         analysisLength: finalAnalysisRaw.length,
         step3Duration,
         analysisQuality: finalAnalysisRaw.length > 500 ? 'comprehensive' : 'basic',
-        structuredResponse: true
+        structuredResponse: true,
+        jurisdictionDistribution: jurisdictionStats
       });
 
       // ==========================================
       // SCHRITT 6: Response zusammenstellen
       // ==========================================
       const totalDuration = Date.now() - startTime;
-      const uniqueDSGArticles = [...new Set(foundDSGArticles)];
+      const uniqueArticles = [...new Set(foundArticles)];
 
       const response = {
         question: question,
         searchQueries: {
           generated: queries,
           count: queries.length,
-          optimizedFor: 'Pre-populated Swiss DSG Vector Database'
+          optimizedFor: 'Pre-populated Swiss DSG and EU GDPR Vector Databases'
         },
         foundSources: {
           count: vectorSearchResults.length,
-          law: 'Datenschutzgesetz der Schweiz (DSG/nDSG)',
-          articles: uniqueDSGArticles,
+          laws: 'Schweizer Datenschutzgesetz (DSG) und EU-Datenschutz-Grundverordnung (GDPR)',
+          articles: uniqueArticles,
           averageRelevance: avgRelevanceScore,
+          jurisdictionDistribution: jurisdictionStats,
           database: {
-            type: 'Pre-populated Vector Store',
-            content: 'Complete Swiss DSG/nDSG',
+            type: 'Pre-populated Multi-Jurisdiction Vector Store',
+            content: 'Complete Swiss DSG and EU GDPR',
             status: 'Fully Indexed and Optimized'
           },
           sources: vectorSearchResults.map((doc, index) => {
-            const article = doc.metadata?.article || doc.metadata?.section || 'DSG Bestimmung';
+            const article = doc.metadata?.article || doc.metadata?.section || 'Datenschutz-Bestimmung';
+            const jurisdiction = doc.metadata?.jurisdiction || 'unknown';
+            const lawLabel = jurisdiction === 'ch' ? 'Swiss DSG' : jurisdiction === 'eu' ? 'EU GDPR' : 'Unknown';
 
-            this.logger.debug('DSG Check: Preparing Swiss DSG source for response', {
+            this.logger.debug('Data Protection Check: Preparing multi-jurisdiction source for response', {
               userId,
               sourceIndex: index,
               sourceId: doc.id,
-              dsgArticle: article,
+              article: article,
+              jurisdiction: jurisdiction,
               contentLength: doc.pageContent.length,
               relevanceScore: doc.score
             });
 
             return {
-              content: doc.pageContent,//doc.pageContent.substring(0, 250) + (doc.pageContent.length > 250 ? '...' : ''),
+              content: doc.pageContent,
               metadata: {
                 ...doc.metadata,
-                law: 'Swiss DSG/nDSG',
+                law: lawLabel,
                 article: article,
+                jurisdiction: jurisdiction,
                 relevanceScore: doc.score,
-                source: 'Pre-populated Vector Database'
+                source: 'Pre-populated Multi-Jurisdiction Vector Database'
               },
               id: doc.id
             };
           })
         },
         legalBasis: parsedAnalysis.legalBasis,
-        swissLawAnswer: parsedAnalysis.swissLawAnswer,
+        dataProtectionAnswer: parsedAnalysis.dataProtectionAnswer,
         legalAssessment: parsedAnalysis.legalAssessment,
         recommendations: parsedAnalysis.recommendations,
         importantNotes: parsedAnalysis.importantNotes,
+        jurisdictionAnalysis: parsedAnalysis.jurisdictionAnalysis,
         references: parsedAnalysis.references,
         timestamp: new Date().toISOString(),
         performance: {
@@ -1341,21 +1372,25 @@ STIL: Professionell, präzise, praxisorientiert für Schweizer Kontext`;
           efficiency: totalDuration < 10000 ? 'excellent' : totalDuration < 20000 ? 'good' : 'moderate'
         },
         processingSteps: {
-          step1: `Schweiz-spezifische DSG-Suchbegriffe für Vektor-DB optimiert (${queries.length} queries)`,
-          step2: `${vectorSearchResults.length} relevante DSG-Artikel aus befüllter Datenbank gefunden`,
-          step3: 'Vollständige DSG-Compliance-Analyse für die Schweiz erstellt'
+          step1: `Multi-jurisdiktionale Suchbegriffe für DSG und GDPR Vektor-DBs optimiert (${queries.length} queries)`,
+          step2: `${vectorSearchResults.length} relevante Artikel aus DSG und GDPR Datenbanken gefunden (Swiss: ${jurisdictionStats.ch}, EU: ${jurisdictionStats.eu})`,
+          step3: 'Vollständige Datenschutz-Compliance-Analyse für DSG und GDPR erstellt'
         },
         legalContext: {
-          jurisdiction: 'Switzerland',
-          law: 'Datenschutzgesetz (DSG/nDSG)',
-          framework: 'Swiss Data Protection Law',
-          effectiveDate: '2023-09-01',
+          jurisdictions: ['Switzerland', 'European Union'],
+          laws: 'Schweizer Datenschutzgesetz (DSG) und EU-Datenschutz-Grundverordnung (GDPR)',
+          frameworks: ['Swiss Data Protection Law', 'EU General Data Protection Regulation'],
+          effectiveDates: {
+            ch: '2023-09-01',
+            eu: '2018-05-25'
+          },
           vectorDatabase: {
-            name: 'Swiss DSG Vector Store',
+            name: 'Multi-Jurisdiction Data Protection Vector Store',
             status: 'Pre-populated and Fully Indexed',
-            content: 'Complete Swiss Data Protection Law with Articles and Commentary',
-            articlesFound: uniqueDSGArticles.length,
-            searchOptimization: 'Database-specific query generation'
+            content: 'Complete Swiss DSG and EU GDPR with Articles and Commentary',
+            articlesFound: uniqueArticles.length,
+            jurisdictionDistribution: jurisdictionStats,
+            searchOptimization: 'Multi-jurisdiction query generation'
           }
         },
         langchainIntegration: {
@@ -1364,9 +1399,9 @@ STIL: Professionell, präzise, praxisorientiert für Schweizer Kontext`;
           version: '0.3.67',
           totalTokensEstimated: Math.ceil((chatGptQueriesPrompt.length + finalAnalysisPrompt.length) / 4),
           databaseIntegration: {
-            type: 'Pre-populated Vector Store',
+            type: 'Pre-populated Multi-Jurisdiction Vector Store',
             searchMethod: 'Semantic Similarity',
-            optimization: 'Swiss DSG specific'
+            optimization: 'DSG and GDPR specific'
           }
         },
         config: {
@@ -1379,13 +1414,14 @@ STIL: Professionell, präzise, praxisorientiert für Schweizer Kontext`;
 
       this.sendSuccess(res, response);
 
-      this.logger.info('DSG Check: Complete Swiss DSG check with pre-populated database finished successfully', {
+      this.logger.info('Data Protection Check: Complete DSG and GDPR check with multi-jurisdiction database finished successfully', {
         userId,
         totalDuration,
         questionLength: question.length,
         queriesGenerated: queries.length,
         sourcesFound: vectorSearchResults.length,
-        dsgArticlesFound: uniqueDSGArticles,
+        articlesFound: uniqueArticles,
+        jurisdictionDistribution: jurisdictionStats,
         analysisLength: finalAnalysisRaw.length,
         responseSize: JSON.stringify(response).length,
         averageRelevance: avgRelevanceScore,
@@ -1397,27 +1433,30 @@ STIL: Professionell, präzise, praxisorientiert für Schweizer Kontext`;
           efficiency: totalDuration < 10000 ? 'excellent' : 'moderate'
         },
         databaseUtilization: {
-          type: 'Pre-populated Swiss DSG Vector Store',
+          type: 'Pre-populated Multi-Jurisdiction Vector Store',
           performance: 'optimized',
-          contentMatch: 'swiss_dsg_specific'
+          contentMatch: 'dsg_and_gdpr_specific',
+          jurisdictions: ['ch', 'eu']
         }
       });
 
     } catch (error) {
       const errorDuration = Date.now() - startTime;
 
-      this.logger.error('DSG Check: Complete Swiss DSG check with pre-populated database failed', error as Error, {
+      this.logger.error('Data Protection Check: Complete DSG and GDPR check with multi-jurisdiction database failed', error as Error, {
         userId: this.getUserId(req),
         questionLength: req.body.question?.length || 0,
         errorAfter: errorDuration,
         errorType: error instanceof Error ? error.constructor.name : typeof error,
         errorMessage: error instanceof Error ? error.message : String(error),
-        databaseStatus: 'Pre-populated Swiss DSG Vector Store',
+        databaseStatus: 'Pre-populated Multi-Jurisdiction DSG and GDPR Vector Store',
+        jurisdictions: ['ch', 'eu'],
         possibleCauses: [
           'vector_database_connection_failed',
           'chatgpt_api_error',
           'search_query_generation_failed',
-          'database_content_mismatch'
+          'database_content_mismatch',
+          'multi_jurisdiction_search_failed'
         ]
       });
 
@@ -1426,14 +1465,14 @@ STIL: Professionell, präzise, praxisorientiert für Schweizer Kontext`;
         if (error.message.includes('OPENAI_API_KEY')) {
           this.sendError(res, 500, 'OpenAI API-Konfiguration fehlt');
         } else if (error.message.includes('PINECONE') || error.message.includes('vector')) {
-          this.sendError(res, 500, 'Fehler beim Zugriff auf die DSG-Datenbank');
+          this.sendError(res, 500, 'Fehler beim Zugriff auf die Datenschutz-Datenbanken');
         } else if (error.message.includes('timeout')) {
           this.sendError(res, 504, 'Anfrage-Timeout - bitte versuchen Sie es erneut');
         } else {
-          this.sendError(res, 500, 'Fehler bei der DSG-Analyse');
+          this.sendError(res, 500, 'Fehler bei der Datenschutz-Analyse');
         }
       } else {
-        this.sendError(res, 500, 'Unerwarteter Fehler bei der DSG-Analyse');
+        this.sendError(res, 500, 'Unerwarteter Fehler bei der Datenschutz-Analyse');
       }
 
       next(error);
