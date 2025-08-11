@@ -97,13 +97,18 @@ interface Source {
 }
 
 interface AnalysisResult {
-  analysis: string;
   legalBasis?: string; // 🏛️ Rechtliche Grundlage (DSG Schweiz)
   swissLawAnswer?: string; // ✅ Antwort basierend auf Schweizer Recht
-  legalAssessment?: string; // ⚖️ Rechtliche Bewertung
-  recommendations?: string; // 🎯 Konkrete Empfehlungen
+  legalAssessment?: {
+    status: string;
+    reasoning: string;
+  }; // ⚖️ Rechtliche Bewertung
+  recommendations?: string[]; // 🎯 Konkrete Empfehlungen
   importantNotes?: string; // ⚠️ Wichtige Hinweise
-  references?: string; // 📚 Referenzen
+  references?: Array<{
+    article: string;
+    description: string;
+  }>; // 📚 Referenzen
   foundSources?: {
     count: number;
     sources: Source[];
@@ -139,88 +144,27 @@ export default function DSGVOCheckPage() {
 
       console.log('Complete DSGVO check result:', result);
 
-      if (result && result.analysis) {
-        // Parse the analysis text into sections if they're not already provided
+      if (result) {
+        // Use the structured data directly from the backend response
         const parsedResult = { ...result } as AnalysisResult;
 
-        // If the specific sections are not provided but the analysis contains section markers,
-        // try to parse them from the analysis text
-        if (!parsedResult.legalBasis && !parsedResult.swissLawAnswer && 
-            !parsedResult.legalAssessment && !parsedResult.recommendations && 
-            !parsedResult.importantNotes && !parsedResult.references) {
-
-          const analysis = parsedResult.analysis;
-
-          // Extract sections using regex patterns
-          // Use more flexible regex patterns to match the sections
-          const legalBasisMatch = analysis.match(/## 🏛️\s*Rechtliche\s*Grundlage.*?(?=\n\s*##\s*(?:✅|⚖️|🎯|⚠️|📚)|$)/s) || 
-                                  analysis.match(/🏛️\s*Rechtliche\s*Grundlage.*?(?=\n\s*(?:##\s*)?(?:✅|⚖️|🎯|⚠️|📚)|$)/s);
-
-          const swissLawMatch = analysis.match(/## ✅\s*Antwort\s*basierend\s*auf\s*Schweizer\s*Recht.*?(?=\n\s*##\s*(?:🏛️|⚖️|🎯|⚠️|📚)|$)/s) || 
-                               analysis.match(/✅\s*Antwort\s*basierend\s*auf\s*Schweizer\s*Recht.*?(?=\n\s*(?:##\s*)?(?:🏛️|⚖️|🎯|⚠️|📚)|$)/s);
-
-          const legalAssessmentMatch = analysis.match(/## ⚖️\s*Rechtliche\s*Bewertung.*?(?=\n\s*##\s*(?:🏛️|✅|🎯|⚠️|📚)|$)/s) || 
-                                      analysis.match(/⚖️\s*Rechtliche\s*Bewertung.*?(?=\n\s*(?:##\s*)?(?:🏛️|✅|🎯|⚠️|📚)|$)/s);
-
-          const recommendationsMatch = analysis.match(/## 🎯\s*Konkrete\s*Empfehlungen.*?(?=\n\s*##\s*(?:🏛️|✅|⚖️|⚠️|📚)|$)/s) || 
-                                      analysis.match(/🎯\s*Konkrete\s*Empfehlungen.*?(?=\n\s*(?:##\s*)?(?:🏛️|✅|⚖️|⚠️|📚)|$)/s);
-
-          const importantNotesMatch = analysis.match(/## ⚠️\s*Wichtige\s*Hinweise.*?(?=\n\s*##\s*(?:🏛️|✅|⚖️|🎯|📚)|$)/s) || 
-                                     analysis.match(/⚠️\s*Wichtige\s*Hinweise.*?(?=\n\s*(?:##\s*)?(?:🏛️|✅|⚖️|🎯|📚)|$)/s);
-
-          const referencesMatch = analysis.match(/## 📚\s*Referenzen.*?(?=\n\s*##\s*(?:🏛️|✅|⚖️|🎯|⚠️)|$)/s) || 
-                                 analysis.match(/📚\s*Referenzen.*?(?=\n\s*(?:##\s*)?(?:🏛️|✅|⚖️|🎯|⚠️)|$)/s);
-
-          // Log the extracted sections for debugging
-          console.log('Extracted sections:', {
-            legalBasis: legalBasisMatch ? legalBasisMatch[0] : null,
-            swissLaw: swissLawMatch ? swissLawMatch[0] : null,
-            legalAssessment: legalAssessmentMatch ? legalAssessmentMatch[0] : null,
-            recommendations: recommendationsMatch ? recommendationsMatch[0] : null,
-            importantNotes: importantNotesMatch ? importantNotesMatch[0] : null,
-            references: referencesMatch ? referencesMatch[0] : null
-          });
-
-          // Helper function to clean up section content
-          const cleanSectionContent = (content: string, sectionTitle: string) => {
-            // Remove the section header (both with and without ##)
-            let cleaned = content.replace(new RegExp(`^##\\s*${sectionTitle}.*?\\n`, 's'), '');
-            cleaned = cleaned.replace(new RegExp(`^${sectionTitle}.*?\\n`, 's'), '');
-            return cleaned.trim();
-          };
-
-          // Assign extracted sections to the parsed result
-          if (legalBasisMatch) {
-            parsedResult.legalBasis = cleanSectionContent(legalBasisMatch[0], "🏛️\\s*Rechtliche\\s*Grundlage");
-          }
-
-          if (swissLawMatch) {
-            parsedResult.swissLawAnswer = cleanSectionContent(swissLawMatch[0], "✅\\s*Antwort\\s*basierend\\s*auf\\s*Schweizer\\s*Recht");
-          }
-
-          if (legalAssessmentMatch) {
-            parsedResult.legalAssessment = cleanSectionContent(legalAssessmentMatch[0], "⚖️\\s*Rechtliche\\s*Bewertung");
-          }
-
-          if (recommendationsMatch) {
-            parsedResult.recommendations = cleanSectionContent(recommendationsMatch[0], "🎯\\s*Konkrete\\s*Empfehlungen");
-          }
-
-          if (importantNotesMatch) {
-            parsedResult.importantNotes = cleanSectionContent(importantNotesMatch[0], "⚠️\\s*Wichtige\\s*Hinweise");
-          }
-
-          if (referencesMatch) {
-            parsedResult.references = cleanSectionContent(referencesMatch[0], "📚\\s*Referenzen");
-          }
-        }
+        console.log('Structured analysis result:', {
+          legalBasis: parsedResult.legalBasis,
+          swissLawAnswer: parsedResult.swissLawAnswer,
+          legalAssessment: parsedResult.legalAssessment,
+          recommendations: parsedResult.recommendations,
+          importantNotes: parsedResult.importantNotes,
+          references: parsedResult.references
+        });
 
         // Store the parsed results
         setParsedResults(parsedResult);
 
         // Keep the old format for backward compatibility
         let formattedResults = `## DSGVO-Analyse\n\n`;
-        formattedResults += `${result.analysis}\n\n`;
+        if (parsedResult.swissLawAnswer) {
+          formattedResults += `${parsedResult.swissLawAnswer}\n\n`;
+        }
 
         if (result.foundSources && result.foundSources.count > 0) {
           formattedResults += `## Verwendete Quellen (${result.foundSources.count})\n\n`;
@@ -336,11 +280,11 @@ export default function DSGVOCheckPage() {
                     {/* Summary Card */}
                     {(parsedResults.legalAssessment || parsedResults.swissLawAnswer) && (
                       <Card className={`mb-4 bg-slate-50 ${
-                        parsedResults.legalAssessment?.includes("**Status:** KONFORM") 
+                        parsedResults.legalAssessment?.status === "KONFORM" 
                           ? "border-l-4 border-l-green-500" 
-                          : parsedResults.legalAssessment?.includes("**Status:** NICHT KONFORM") 
+                          : parsedResults.legalAssessment?.status === "NICHT KONFORM" 
                             ? "border-l-4 border-l-red-500" 
-                            : parsedResults.legalAssessment?.includes("**Status:** TEILWEISE KONFORM") 
+                            : parsedResults.legalAssessment?.status === "TEILWEISE KONFORM" 
                               ? "border-l-4 border-l-amber-500" 
                               : ""
                       }`}>
@@ -353,11 +297,11 @@ export default function DSGVOCheckPage() {
                             {parsedResults.legalAssessment && (
                               <div className="flex items-center">
                                 <span className="font-medium mr-2">Status:</span>
-                                {parsedResults.legalAssessment.includes("**Status:** KONFORM") ? (
+                                {parsedResults.legalAssessment.status === "KONFORM" ? (
                                   <Badge variant="secondary" className="bg-green-100 text-green-800">KONFORM</Badge>
-                                ) : parsedResults.legalAssessment.includes("**Status:** NICHT KONFORM") ? (
+                                ) : parsedResults.legalAssessment.status === "NICHT KONFORM" ? (
                                   <Badge variant="destructive">NICHT KONFORM</Badge>
-                                ) : parsedResults.legalAssessment.includes("**Status:** TEILWEISE KONFORM") ? (
+                                ) : parsedResults.legalAssessment.status === "TEILWEISE KONFORM" ? (
                                   <Badge variant="default" className="bg-yellow-100 text-yellow-800">TEILWEISE KONFORM</Badge>
                                 ) : (
                                   <Badge variant="outline">UNBEKANNT</Badge>
@@ -379,37 +323,14 @@ export default function DSGVOCheckPage() {
                             )}
 
                             {/* Key Recommendation */}
-                            {parsedResults.recommendations && (
+                            {parsedResults.recommendations && parsedResults.recommendations.length > 0 && (
                               <div>
                                 <span className="font-medium">Empfehlung:</span>
                                 <p className="text-sm mt-1">
-                                  {parsedResults.recommendations
-                                    .replace(/^## 🎯\s*Konkrete\s*Empfehlungen.*?\n/s, '')
-                                    .replace(/^🎯\s*Konkrete\s*Empfehlungen.*?\n/s, '')
-                                    .split('\n')[0]
-                                    .replace(/^- /, '')}
+                                  {parsedResults.recommendations[0]}
                                 </p>
                               </div>
                             )}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )}
-
-                    {/* Main Analysis - Only show if no specific sections are available */}
-                    {(!parsedResults.legalBasis && !parsedResults.swissLawAnswer && 
-                      !parsedResults.legalAssessment && !parsedResults.recommendations && 
-                      !parsedResults.importantNotes && !parsedResults.references) && (
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="flex items-center">
-                            <FileText className="h-5 w-5 mr-2" />
-                            DSGVO-Analyse
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="whitespace-pre-wrap text-sm">
-                            {parsedResults.analysis}
                           </div>
                         </CardContent>
                       </Card>
@@ -463,11 +384,11 @@ export default function DSGVOCheckPage() {
                                     <Scale className="h-5 w-5 mr-2" />
                                     Rechtliche Bewertung
                                   </div>
-                                  {parsedResults.legalAssessment.includes("**Status:** KONFORM") ? (
+                                  {parsedResults.legalAssessment.status === "KONFORM" ? (
                                     <Badge variant="secondary" className="bg-green-100 text-green-800">KONFORM</Badge>
-                                  ) : parsedResults.legalAssessment.includes("**Status:** NICHT KONFORM") ? (
+                                  ) : parsedResults.legalAssessment.status === "NICHT KONFORM" ? (
                                     <Badge variant="destructive">NICHT KONFORM</Badge>
-                                  ) : parsedResults.legalAssessment.includes("**Status:** TEILWEISE KONFORM") ? (
+                                  ) : parsedResults.legalAssessment.status === "TEILWEISE KONFORM" ? (
                                     <Badge variant="default" className="bg-yellow-100 text-yellow-800">TEILWEISE KONFORM</Badge>
                                   ) : (
                                     <Badge variant="outline">UNBEKANNT</Badge>
@@ -479,11 +400,7 @@ export default function DSGVOCheckPage() {
                                   {parsedResults.swissLawAnswer.replace(/^## ✅\s*Antwort\s*basierend\s*auf\s*Schweizer\s*Recht.*?\n/s, '').replace(/^✅\s*Antwort\s*basierend\s*auf\s*Schweizer\s*Recht.*?\n/s, '')}
                                 </div>
                                 <div className="whitespace-pre-wrap text-sm">
-                                  {parsedResults.legalAssessment
-                                    .replace(/^## ⚖️\s*Rechtliche\s*Bewertung.*?\n/s, '')
-                                    .replace(/^⚖️\s*Rechtliche\s*Bewertung.*?\n/s, '')
-                                    .replace(/\*\*Status:\*\*.*?\n\n/s, '')
-                                    .replace(/\*\*Begründung:\*\*\s*/s, '')}
+                                  {parsedResults.legalAssessment.reasoning}
                                 </div>
                               </CardContent>
                             </Card>
@@ -515,11 +432,11 @@ export default function DSGVOCheckPage() {
                                     <Scale className="h-5 w-5 mr-2" />
                                     Rechtliche Bewertung
                                   </div>
-                                  {parsedResults.legalAssessment.includes("**Status:** KONFORM") ? (
+                                  {parsedResults.legalAssessment.status === "KONFORM" ? (
                                     <Badge variant="secondary" className="bg-green-100 text-green-800">KONFORM</Badge>
-                                  ) : parsedResults.legalAssessment.includes("**Status:** NICHT KONFORM") ? (
+                                  ) : parsedResults.legalAssessment.status === "NICHT KONFORM" ? (
                                     <Badge variant="destructive">NICHT KONFORM</Badge>
-                                  ) : parsedResults.legalAssessment.includes("**Status:** TEILWEISE KONFORM") ? (
+                                  ) : parsedResults.legalAssessment.status === "TEILWEISE KONFORM" ? (
                                     <Badge variant="default" className="bg-yellow-100 text-yellow-800">TEILWEISE KONFORM</Badge>
                                   ) : (
                                     <Badge variant="outline">UNBEKANNT</Badge>
@@ -528,11 +445,7 @@ export default function DSGVOCheckPage() {
                               </CardHeader>
                               <CardContent>
                                 <div className="whitespace-pre-wrap text-sm">
-                                  {parsedResults.legalAssessment
-                                    .replace(/^## ⚖️\s*Rechtliche\s*Bewertung.*?\n/s, '')
-                                    .replace(/^⚖️\s*Rechtliche\s*Bewertung.*?\n/s, '')
-                                    .replace(/\*\*Status:\*\*.*?\n\n/s, '')
-                                    .replace(/\*\*Begründung:\*\*\s*/s, '')}
+                                  {parsedResults.legalAssessment.reasoning}
                                 </div>
                               </CardContent>
                             </Card>
@@ -551,9 +464,16 @@ export default function DSGVOCheckPage() {
                                 </CardTitle>
                               </CardHeader>
                               <CardContent>
-                                <div className="whitespace-pre-wrap text-sm">
-                                  {parsedResults.recommendations.replace(/^## 🎯\s*Konkrete\s*Empfehlungen.*?\n/s, '').replace(/^🎯\s*Konkrete\s*Empfehlungen.*?\n/s, '')}
-                                </div>
+                                <ul className="space-y-2">
+                                  {parsedResults.recommendations.map((recommendation, index) => (
+                                    <li key={index} className="flex items-start">
+                                      <div className="flex-shrink-0 w-6 h-6 rounded-full bg-green-100 flex items-center justify-center text-xs font-medium text-green-600 mr-2">
+                                        {index + 1}
+                                      </div>
+                                      <span className="text-sm">{recommendation}</span>
+                                    </li>
+                                  ))}
+                                </ul>
                               </CardContent>
                             </Card>
                           )}
@@ -612,8 +532,13 @@ export default function DSGVOCheckPage() {
                                 </CardTitle>
                               </CardHeader>
                               <CardContent>
-                                <div className="whitespace-pre-wrap text-sm">
-                                  {parsedResults.references.replace(/^## 📚\s*Referenzen.*?\n/s, '').replace(/^📚\s*Referenzen.*?\n/s, '')}
+                                <div className="space-y-3">
+                                  {parsedResults.references.map((reference, index) => (
+                                    <div key={index} className="p-3 bg-slate-50 rounded-md">
+                                      <p className="text-sm font-medium">{reference.article}</p>
+                                      <p className="text-xs text-muted-foreground mt-1">{reference.description}</p>
+                                    </div>
+                                  ))}
                                 </div>
                               </CardContent>
                             </Card>

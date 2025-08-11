@@ -31,7 +31,6 @@ export interface SimilaritySearchRequest {
 }
 
 export interface AnalysisResult {
-  analysis: any;
   legalContext: {
     sources: any[];
     relevanceScores: number[];

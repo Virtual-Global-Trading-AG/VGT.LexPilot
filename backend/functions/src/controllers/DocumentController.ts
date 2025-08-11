@@ -1181,7 +1181,7 @@ Suchbegriffe:`;
 ${includeContext && contextText ? `SCHWEIZER DSG-KONTEXT aus der indexierten Datenbank:
 ${contextText}
 
-` : ''}AUFGABE: Analysiere die Benutzerfrage basierend auf dem Schweizer Datenschutzgesetz (DSG/nDSG) und gib eine strukturierte, professionelle Antwort:
+` : ''}AUFGABE: Analysiere die Benutzerfrage basierend auf dem Schweizer Datenschutzgesetz (DSG) und gib eine strukturierte, professionelle Antwort als JSON zurück:
 
 ANALYSE-FOKUS:
 - Schweizer Datenschutzrecht (DSG 2023)
@@ -1189,31 +1189,30 @@ ANALYSE-FOKUS:
 - Praktische Umsetzung in der Schweiz
 - Compliance-Anforderungen
 
-ANTWORT-STRUKTUR:
+ANTWORT-STRUKTUR: Gib die Antwort als valides JSON-Objekt mit folgender Struktur zurück:
 
-## 🏛️ Rechtliche Grundlage (DSG Schweiz)
-[Relevante Artikel des Schweizer DSG mit Bezug zur Frage]
+{
+  "legalBasis": "Relevante Artikel des Schweizer DSG mit Bezug zur Frage",
+  "swissLawAnswer": "Direkte, präzise Antwort zur gestellten Frage",
+  "legalAssessment": {
+    "status": "KONFORM | NICHT KONFORM | TEILWEISE KONFORM | UNKLARE RECHTSLAGE",
+    "reasoning": "Juristische Einschätzung basierend auf DSG"
+  },
+  "recommendations": [
+    "Spezifische Handlungsempfehlung 1 für die Schweiz",
+    "Spezifische Handlungsempfehlung 2 für die Schweiz",
+    "Spezifische Handlungsempfehlung 3 für die Schweiz"
+  ],
+  "importantNotes": "Besonderheiten des Schweizer Datenschutzrechts, Unterschiede zur DSGVO",
+  "references": [
+    {
+      "article": "DSG Art. X",
+      "description": "Kurzbeschreibung des Artikels"
+    }
+  ]
+}
 
-## ✅ Antwort basierend auf Schweizer Recht
-[Direkte, präzise Antwort zur gestellten Frage]
-
-## ⚖️ Rechtliche Bewertung
-**Status:** [KONFORM / NICHT KONFORM / TEILWEISE KONFORM / UNKLARE RECHTSLAGE]
-
-**Begründung:** [Juristische Einschätzung basierend auf DSG]
-
-## 🎯 Konkrete Empfehlungen
-[Spezifische Handlungsempfehlungen für die Schweiz]
-- [Empfehlung 1]
-- [Empfehlung 2]
-- [Empfehlung 3]
-
-## ⚠️ Wichtige Hinweise
-[Besonderheiten des Schweizer Datenschutzrechts, Unterschiede zur DSGVO]
-
-## 📚 Referenzen
-[Erwähnte DSG-Artikel mit Kurzbeschreibung]
-
+WICHTIG: Gib NUR das JSON-Objekt zurück, ohne zusätzlichen Text oder Markdown-Formatierung.
 STIL: Professionell, präzise, praxisorientiert für Schweizer Kontext`;
 
       this.logger.debug('DSG Check Step 4: Starting comprehensive Swiss DSG analysis with LangChain', {
@@ -1225,14 +1224,52 @@ STIL: Professionell, präzise, praxisorientiert für Schweizer Kontext`;
         contextDocuments: vectorSearchResults.length
       });
 
-      const finalAnalysis = await this.callChatGPT(finalAnalysisPrompt);
+      const finalAnalysisRaw = await this.callChatGPT(finalAnalysisPrompt);
       const step3Duration = Date.now() - step3StartTime;
+
+      // Parse JSON response from ChatGPT
+      let parsedAnalysis;
+      try {
+        // Clean the response to extract only the JSON part
+        const cleanedResponse = finalAnalysisRaw.trim();
+        const jsonMatch = cleanedResponse.match(/\{[\s\S]*\}/);
+        const jsonString = jsonMatch ? jsonMatch[0] : cleanedResponse;
+
+        parsedAnalysis = JSON.parse(jsonString);
+
+        this.logger.debug('DSG Check Step 4: JSON analysis successfully parsed', {
+          userId,
+          rawAnalysisLength: finalAnalysisRaw.length,
+          parsedStructure: Object.keys(parsedAnalysis),
+          step3Duration
+        });
+      } catch (parseError) {
+        this.logger.warn('DSG Check Step 4: Failed to parse JSON response, using fallback structure', {
+          userId,
+          parseError: parseError instanceof Error ? parseError.message : String(parseError),
+          rawResponse: finalAnalysisRaw.substring(0, 200) + '...'
+        });
+
+        // Fallback structure if JSON parsing fails
+        parsedAnalysis = {
+          legalBasis: "Fehler beim Parsen der Antwort",
+          swissLawAnswer: finalAnalysisRaw,
+          legalAssessment: {
+            status: "UNKLARE RECHTSLAGE",
+            reasoning: "Die Antwort konnte nicht korrekt strukturiert werden"
+          },
+          recommendations: ["Bitte versuchen Sie die Anfrage erneut"],
+          importantNotes: "Technischer Fehler bei der Antwortverarbeitung",
+          references: []
+        };
+      }
 
       this.logger.debug('DSG Check Step 4: Comprehensive Swiss DSG analysis completed', {
         userId,
-        analysisLength: finalAnalysis.length,
+        analysisLength: finalAnalysisRaw.length,
         step3Duration,
-        analysisQuality: finalAnalysis.length > 500 ? 'comprehensive' : 'basic'
+        analysisQuality: finalAnalysisRaw.length > 500 ? 'comprehensive' : 'basic',
+        structuredResponse: true
       });
 
       // ==========================================
@@ -1283,7 +1320,12 @@ STIL: Professionell, präzise, praxisorientiert für Schweizer Kontext`;
             };
           })
         },
-        analysis: finalAnalysis,
+        legalBasis: parsedAnalysis.legalBasis,
+        swissLawAnswer: parsedAnalysis.swissLawAnswer,
+        legalAssessment: parsedAnalysis.legalAssessment,
+        recommendations: parsedAnalysis.recommendations,
+        importantNotes: parsedAnalysis.importantNotes,
+        references: parsedAnalysis.references,
         timestamp: new Date().toISOString(),
         performance: {
           totalDuration,
@@ -1344,7 +1386,7 @@ STIL: Professionell, präzise, praxisorientiert für Schweizer Kontext`;
         queriesGenerated: queries.length,
         sourcesFound: vectorSearchResults.length,
         dsgArticlesFound: uniqueDSGArticles,
-        analysisLength: finalAnalysis.length,
+        analysisLength: finalAnalysisRaw.length,
         responseSize: JSON.stringify(response).length,
         averageRelevance: avgRelevanceScore,
         performance: {
