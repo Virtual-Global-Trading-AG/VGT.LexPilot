@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import IndexDsgButton from '@/components/admin/IndexDsgButton';
 import {
   FileText,
   AlertTriangle,
@@ -65,6 +66,7 @@ export default function DashboardPage() {
               <Upload className="mr-2 h-4 w-4" />
               Vertrag hochladen
             </Button>
+            <IndexDsgButton />
           </div>
         </div>
 

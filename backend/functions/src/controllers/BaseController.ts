@@ -44,8 +44,8 @@ export abstract class BaseController {
   protected sendSuccess(res: Response, data: any, message?: string): void {
     res.json({
       success: true,
-      ...(message && { message }),
-      ...data
+      data,
+      ...(message && { message })
     });
   }
 

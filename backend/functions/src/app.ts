@@ -67,17 +67,25 @@ export class ExpressApp {
         const allowedOrigins = [
           'http://localhost:3000',
           'http://localhost:3001',
+          'https://vgt-lex-pilot.vercel.app',
           'https://vgt-lex-pilot.vercel.app/'
         ];
 
-        // Entwicklung: Erlaube alle Origins
-        if (config.monitoring.analyticsEnabled && !origin) {
+        // Entwicklung: Erlaube alle Origins wenn kein Origin (z.B. mobile apps, Postman)
+        if (!origin) {
           return callback(null, true);
         }
 
-        if (!origin || allowedOrigins.includes(origin)) {
+        // Vercel Preview URLs erlauben (dynamische Branch-Deployments)
+        if (origin.includes('vgt-lex-pilot') && origin.includes('vercel.app')) {
+          return callback(null, true);
+        }
+
+        // Prüfe explizit erlaubte Origins
+        if (allowedOrigins.includes(origin)) {
           callback(null, true);
         } else {
+          this.logger.warn(`CORS blocked origin: ${origin}`, { origin, allowedOrigins });
           callback(new Error('Not allowed by CORS'));
         }
       },

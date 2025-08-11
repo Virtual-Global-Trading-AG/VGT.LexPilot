@@ -1,8 +1,10 @@
-import { Request, Response, NextFunction } from 'express';
-import { getFirestore } from 'firebase-admin/firestore';
+import { NextFunction, Request, Response } from 'express';
 import { getAuth } from 'firebase-admin/auth';
+import { getFirestore } from 'firebase-admin/firestore';
+import * as fs from 'fs';
+import * as path from 'path';
+import pdfParse from 'pdf-parse';
 import { BaseController } from './BaseController';
-import { Logger } from '../utils/logger';
 
 interface AdminUserUpdateRequest {
   role?: 'user' | 'premium' | 'admin';
@@ -130,7 +132,7 @@ export class AdminController extends BaseController {
   static requireAdmin = (req: Request, res: Response, next: NextFunction): void => {
     try {
       const user = (req as any).user;
-      
+
       if (!user || !user.customClaims || user.customClaims.role !== 'admin') {
         res.status(403).json({
           error: 'Forbidden',
@@ -196,18 +198,18 @@ export class AdminController extends BaseController {
    */
   public async listUsers(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { 
-        page = 1, 
-        limit = 20, 
-        role, 
-        status, 
+      const {
+        page = 1,
+        limit = 20,
+        role,
+        status,
         search,
         sortBy = 'createdAt',
         sortOrder = 'desc'
       } = req.query;
 
       const pagination = this.getPaginationParams({ page, limit });
-      
+
       this.logger.info('Admin user list requested', {
         adminId: this.getUserId(req),
         filters: { role, status, search },
@@ -225,17 +227,17 @@ export class AdminController extends BaseController {
       }
 
       // Sortierung
-      const sortField = ['createdAt', 'lastLogin', 'email'].includes(sortBy as string) 
-        ? sortBy as string 
+      const sortField = ['createdAt', 'lastLogin', 'email'].includes(sortBy as string)
+        ? sortBy as string
         : 'createdAt';
       const order = sortOrder === 'asc' ? 'asc' : 'desc';
-      
+
       query = query.orderBy(sortField, order);
 
       // Pagination
       const totalQuery = await query.get();
       const total = totalQuery.size;
-      
+
       const usersSnapshot = await query
         .limit(pagination.limit)
         .offset(pagination.offset)
@@ -254,7 +256,7 @@ export class AdminController extends BaseController {
       // Textsuche auf Client-Seite (da Firestore keine Volltext-Suche hat)
       if (search) {
         const searchTerm = (search as string).toLowerCase();
-        users = users.filter((user: any) => 
+        users = users.filter((user: any) =>
           user.email?.toLowerCase().includes(searchTerm) ||
           user.displayName?.toLowerCase().includes(searchTerm) ||
           user.firstName?.toLowerCase().includes(searchTerm) ||
@@ -290,7 +292,7 @@ export class AdminController extends BaseController {
   public async getUserDetails(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { userId } = req.params;
-      
+
       if (!userId) {
         this.sendError(res, 400, 'Missing userId parameter');
         return;
@@ -303,7 +305,7 @@ export class AdminController extends BaseController {
 
       // Firestore Benutzerdaten
       const userDoc = await this.db.collection('users').doc(userId).get();
-      
+
       if (!userDoc.exists) {
         this.sendError(res, 404, 'User not found');
         return;
@@ -476,11 +478,11 @@ export class AdminController extends BaseController {
    */
   public async getAuditLogs(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { 
-        page = 1, 
-        limit = 50, 
-        level, 
-        userId, 
+      const {
+        page = 1,
+        limit = 50,
+        level,
+        userId,
         action,
         startDate,
         endDate
@@ -642,7 +644,7 @@ export class AdminController extends BaseController {
       const data = doc.data();
       const amount = data.amount || 0;
       totalThisMonth += amount;
-      
+
       const userId = data.userId;
       if (userId) {
         userCosts.set(userId, (userCosts.get(userId) || 0) + amount);
@@ -675,7 +677,7 @@ export class AdminController extends BaseController {
     const snapshot = await this.db.collection('costs')
       .where('userId', '==', userId)
       .get();
-    
+
     return snapshot.docs.reduce((total, doc) => {
       return total + (doc.data().amount || 0);
     }, 0);
@@ -686,12 +688,12 @@ export class AdminController extends BaseController {
 
     // Alle Benutzer-Collections löschen
     const collections = ['documents', 'analyses', 'notifications', 'costs', 'rateLimits'];
-    
+
     for (const collectionName of collections) {
       const snapshot = await this.db.collection(collectionName)
         .where('userId', '==', userId)
         .get();
-      
+
       snapshot.docs.forEach(doc => {
         batch.delete(doc.ref);
       });
@@ -712,7 +714,7 @@ export class AdminController extends BaseController {
       const dbStart = Date.now();
       await this.db.collection('health').limit(1).get();
       const dbTime = Date.now() - dbStart;
-      
+
       checks.push({
         name: 'database',
         status: dbTime < 1000 ? 'healthy' : 'degraded',
@@ -727,7 +729,7 @@ export class AdminController extends BaseController {
         const authStart = Date.now();
         await getAuth().listUsers(1);
         const authTime = Date.now() - authStart;
-        
+
         checks.push({
           name: 'auth',
           status: authTime < 500 ? 'healthy' : 'degraded',
@@ -749,7 +751,7 @@ export class AdminController extends BaseController {
       // Memory usage check
       const memUsage = process.memoryUsage();
       const memUsagePercent = (memUsage.heapUsed / memUsage.heapTotal) * 100;
-      
+
       checks.push({
         name: 'memory',
         status: memUsagePercent < 80 ? 'healthy' : memUsagePercent < 95 ? 'degraded' : 'unhealthy',
@@ -785,10 +787,10 @@ export class AdminController extends BaseController {
     try {
       // TODO: Implement actual metrics collection based on granularity
       // This is a placeholder implementation
-      
+
       const timeDiff = to.getTime() - from.getTime();
-      const timePoints = granularity === 'hour' ? 
-        Math.ceil(timeDiff / (1000 * 60 * 60)) : 
+      const timePoints = granularity === 'hour' ?
+        Math.ceil(timeDiff / (1000 * 60 * 60)) :
         Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
 
       const metrics = {
@@ -831,7 +833,7 @@ export class AdminController extends BaseController {
       // Generate time series data points
       for (let i = 0; i < Math.min(timePoints, 100); i++) {
         const timestamp = new Date(from.getTime() + (i * timeDiff / timePoints));
-        
+
         metrics.timeseries.push({
           timestamp: timestamp.toISOString(),
           users: {
@@ -965,8 +967,8 @@ export class AdminController extends BaseController {
         results: {
           total: searchResults.totalResults,
           returned: searchResults.documents.length,
-          averageScore: searchResults.scores.length > 0 
-            ? searchResults.scores.reduce((a, b) => a + b, 0) / searchResults.scores.length 
+          averageScore: searchResults.scores.length > 0
+            ? searchResults.scores.reduce((a, b) => a + b, 0) / searchResults.scores.length
             : 0,
           documents: searchResults.documents.map((doc, index) => ({
             id: doc.metadata.id,
@@ -992,6 +994,84 @@ export class AdminController extends BaseController {
       this.logger.error('Legal context search failed', error as Error, {
         userId: this.getUserId(req),
         query: req.body.query?.substring(0, 100)
+      });
+      next(error);
+    }
+  }
+
+  /**
+   * Index Specific Legal Text (Admin Only)
+   * POST /api/admin/legal-texts/index-specific
+   *
+   * This endpoint reads hardcoded PDF documents and indexes them using the AnalysisService
+   */
+  public async indexSpecificLegalText(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = this.getUserId(req);
+
+      this.logger.info('Starting specific legal text indexing', {});
+
+      // Read the dsg.pdf file from the assets directory
+      const dsgPdfPath = path.join(__dirname, '../../assets/dsg.pdf');
+      const dsgPdfBuffer = fs.readFileSync(dsgPdfPath);
+      const dsgPdfData = await pdfParse(dsgPdfBuffer);
+      const dsgContent = dsgPdfData.text;
+
+      // Read the dsgvo.pdf file from the assets directory
+      const dsgvoPdfPath = path.join(__dirname, '../../assets/dsgvo.pdf');
+      const dsgvoPdfBuffer = fs.readFileSync(dsgvoPdfPath);
+      const dsgvoPdfData = await pdfParse(dsgvoPdfBuffer);
+      const dsgvoContent = dsgvoPdfData.text;
+
+      // Create text objects for indexing
+      const texts = [
+        {
+          content: dsgContent,
+          title: 'DSG - Datenschutzgesetz',
+          source: 'DSG',
+          jurisdiction: 'CH',
+          legalArea: 'Datenschutzrecht'
+        },
+        {
+          content: dsgvoContent,
+          title: 'DSGVO - Datenschutz-Grundverordnung',
+          source: 'DSGVO',
+          jurisdiction: 'EU',
+          legalArea: 'Datenschutzrecht'
+        }
+      ];
+
+      // Import AnalysisService dynamically to avoid circular dependency
+      const { AnalysisService } = await import('../services/AnalysisService');
+      const analysisService = new AnalysisService();
+
+      this.logger.info('Starting specific legal text indexing', {
+        userId,
+        documents: texts.map(t => t.title)
+      });
+
+      let progress = 0;
+      const progressCallback = (progressPercent: number, status: string) => {
+        progress = progressPercent;
+        this.logger.info('Indexing progress', { progress, status });
+      };
+
+      await analysisService.indexLegalTexts(texts, progressCallback);
+
+      this.sendSuccess(res, {
+        message: 'Specific legal texts indexed successfully',
+        documents: texts.map(t => t.title),
+        timestamp: new Date().toISOString()
+      });
+
+      this.logger.info('Specific legal text indexing completed', {
+        userId,
+        documents: texts.map(t => t.title)
+      });
+
+    } catch (error) {
+      this.logger.error('Specific legal text indexing failed', error as Error, {
+        userId: this.getUserId(req)
       });
       next(error);
     }

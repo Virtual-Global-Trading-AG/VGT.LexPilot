@@ -1,14 +1,14 @@
-import { LLMChain } from 'langchain/chains';
-import { PromptTemplate } from '@langchain/core/prompts';
-import { Document } from 'langchain/document';
+import { ChatPromptTemplate } from '@langchain/core/prompts';
+import { Document as LangChainDocument } from 'langchain/document';
 import { Logger } from '../utils/logger';
 import { LLMFactory } from '../factories/LLMFactory';
 import { BaseLegalChain } from './BaseChain';
+import { RunnableSequence, Runnable } from '@langchain/core/runnables';
 
 export interface ComplianceCheck {
   name: string;
   description: string;
-  execute(document: Document, regulations: Document[]): Promise<ComplianceCheckResult>;
+  execute(document: LangChainDocument, regulations: LangChainDocument[]): Promise<ComplianceCheckResult>;
 }
 
 export interface ComplianceCheckResult {
@@ -32,7 +32,7 @@ export interface ComplianceReport {
 }
 
 /**
- * Basis-Klasse für GDPR/DSG Compliance Checks
+ * Basis-Klasse für GDPR/DSG Compliance Checks mit LCEL
  */
 abstract class BaseComplianceCheck implements ComplianceCheck {
   protected readonly logger = Logger.getInstance();
@@ -41,13 +41,12 @@ abstract class BaseComplianceCheck implements ComplianceCheck {
   abstract name: string;
   abstract description: string;
 
-  abstract execute(document: Document, regulations: Document[]): Promise<ComplianceCheckResult>;
+  abstract execute(document: LangChainDocument, regulations: LangChainDocument[]): Promise<ComplianceCheckResult>;
 
-  protected createComplianceChain(promptTemplate: string): LLMChain {
-    return new LLMChain({
-      llm: this.llmFactory.createAnalysisLLM(),
-      prompt: PromptTemplate.fromTemplate(promptTemplate)
-    });
+  protected createComplianceChain(promptTemplate: string): Runnable {
+    const prompt = ChatPromptTemplate.fromTemplate(promptTemplate);
+    const llm = this.llmFactory.createAnalysisLLM();
+    return RunnableSequence.from([prompt, llm]);
   }
 }
 
@@ -58,7 +57,7 @@ class DataMinimizationCheck extends BaseComplianceCheck {
   name = 'Datenminimierung';
   description = 'Prüft ob nur notwendige personenbezogene Daten verarbeitet werden';
 
-  async execute(document: Document, regulations: Document[]): Promise<ComplianceCheckResult> {
+  async execute(document: LangChainDocument, regulations: LangChainDocument[]): Promise<ComplianceCheckResult> {
     const chain = this.createComplianceChain(`
 Analysiere das Dokument auf Einhaltung des Datenminimierungsgrundsatzes.
 
@@ -85,12 +84,13 @@ Antworte im JSON-Format:
 }}
     `);
 
-    const result = await chain.call({
+    const result = await chain.invoke({
       document: document.pageContent,
       regulations: regulations.map(r => r.pageContent).join('\n\n')
     });
 
-    const parsed = JSON.parse(result.text);
+    const content = typeof result.content === 'string' ? result.content : JSON.stringify(result.content);
+    const parsed = JSON.parse(content);
     return {
       checkName: this.name,
       ...parsed
@@ -105,7 +105,7 @@ class LawfulBasisCheck extends BaseComplianceCheck {
   name = 'Rechtsgrundlage';
   description = 'Prüft ob eine gültige Rechtsgrundlage für Datenverarbeitung vorliegt';
 
-  async execute(document: Document, regulations: Document[]): Promise<ComplianceCheckResult> {
+  async execute(document: LangChainDocument, regulations: LangChainDocument[]): Promise<ComplianceCheckResult> {
     const chain = this.createComplianceChain(`
 Prüfe die Rechtsgrundlage für Datenverarbeitung nach DSGVO Art. 6 und DSG.
 
@@ -121,12 +121,13 @@ Prüfe:
 Antworte im JSON-Format mit status, score, findings, recommendations, riskLevel, evidence.
     `);
 
-    const result = await chain.call({
+    const result = await chain.invoke({
       document: document.pageContent,
       regulations: regulations.map(r => r.pageContent).join('\n\n')
     });
 
-    const parsed = JSON.parse(result.text);
+    const content = typeof result.content === 'string' ? result.content : JSON.stringify(result.content);
+    const parsed = JSON.parse(content);
     return {
       checkName: this.name,
       ...parsed
@@ -141,7 +142,7 @@ class ConsentMechanismCheck extends BaseComplianceCheck {
   name = 'Einwilligung';
   description = 'Prüft Einwilligungsmechanismen auf DSGVO-Konformität';
 
-  async execute(document: Document, regulations: Document[]): Promise<ComplianceCheckResult> {
+  async execute(document: LangChainDocument, regulations: LangChainDocument[]): Promise<ComplianceCheckResult> {
     const chain = this.createComplianceChain(`
 Analysiere Einwilligungsmechanismen nach DSGVO Art. 7.
 
@@ -157,12 +158,13 @@ Prüfe:
 Bewerte im JSON-Format.
     `);
 
-    const result = await chain.call({
+    const result = await chain.invoke({
       document: document.pageContent,
       regulations: regulations.map(r => r.pageContent).join('\n\n')
     });
 
-    const parsed = JSON.parse(result.text);
+    const content = typeof result.content === 'string' ? result.content : JSON.stringify(result.content);
+    const parsed = JSON.parse(content);
     return {
       checkName: this.name,
       ...parsed
@@ -177,7 +179,7 @@ class DataSubjectRightsCheck extends BaseComplianceCheck {
   name = 'Betroffenenrechte';
   description = 'Prüft Umsetzung der Betroffenenrechte nach DSGVO';
 
-  async execute(document: Document, regulations: Document[]): Promise<ComplianceCheckResult> {
+  async execute(document: LangChainDocument, regulations: LangChainDocument[]): Promise<ComplianceCheckResult> {
     const chain = this.createComplianceChain(`
 Prüfe Umsetzung der Betroffenenrechte (DSGVO Art. 15-22).
 
@@ -194,12 +196,13 @@ Prüfe ob folgende Rechte implementiert sind:
 Bewerte im JSON-Format.
     `);
 
-    const result = await chain.call({
+    const result = await chain.invoke({
       document: document.pageContent,
       regulations: regulations.map(r => r.pageContent).join('\n\n')
     });
 
-    const parsed = JSON.parse(result.text);
+    const content = typeof result.content === 'string' ? result.content : JSON.stringify(result.content);
+    const parsed = JSON.parse(content);
     return {
       checkName: this.name,
       ...parsed
@@ -208,7 +211,7 @@ Bewerte im JSON-Format.
 }
 
 /**
- * GDPR/DSG Compliance Chain mit Multi-Stage Validation
+ * GDPR/DSG Compliance Chain mit Multi-Stage Validation und LCEL
  */
 export class GDPRComplianceChain extends BaseLegalChain {
   readonly logger = Logger.getInstance();
@@ -227,7 +230,7 @@ export class GDPRComplianceChain extends BaseLegalChain {
   /**
    * Führt umfassende GDPR/DSG Compliance-Prüfung durch
    */
-  async analyze(document: Document): Promise<ComplianceReport> {
+  async analyze(document: LangChainDocument): Promise<ComplianceReport> {
     try {
       this.logger.info('Starting GDPR compliance analysis', {
         documentLength: document.pageContent.length,
@@ -278,15 +281,15 @@ export class GDPRComplianceChain extends BaseLegalChain {
   /**
    * Lädt relevante Regulationen (Mock - in Produktion aus Vector Store)
    */
-  private async getRelevantRegulations(document: Document): Promise<Document[]> {
+  private async getRelevantRegulations(document: LangChainDocument): Promise<LangChainDocument[]> {
     // Mock implementation - in Produktion würde hier der Vector Store abgefragt
     return [
-      new Document({
+      new LangChainDocument({
         pageContent: `DSGVO Art. 5 (Grundsätze für die Verarbeitung personenbezogener Daten):
         Personenbezogene Daten müssen auf rechtmäßige Weise, nach Treu und Glauben und in einer für die betroffene Person nachvollziehbaren Weise verarbeitet werden („Rechtmäßigkeit, Verarbeitung nach Treu und Glauben, Transparenz");`,
         metadata: { source: 'DSGVO', article: '5' }
       }),
-      new Document({
+      new LangChainDocument({
         pageContent: `DSG Art. 6 (Grundsätze):
         Personendaten müssen rechtmäßig bearbeitet werden. Ihre Bearbeitung hat nach Treu und Glauben und verhältnismäßig zu erfolgen.`,
         metadata: { source: 'DSG', article: '6' }
@@ -326,8 +329,8 @@ export class GDPRComplianceChain extends BaseLegalChain {
 
     // Sammle kritische Probleme
     const criticalIssues = checkResults
-      .filter(r => r.riskLevel === 'high')
-      .flatMap(r => r.findings);
+    .filter(r => r.riskLevel === 'high')
+    .flatMap(r => r.findings);
 
     // Priorisiere Empfehlungen
     const prioritizedRecommendations = this.prioritizeRecommendations(checkResults);
@@ -350,7 +353,7 @@ export class GDPRComplianceChain extends BaseLegalChain {
    * Priorisiert Empfehlungen nach Risiko und Aufwand
    */
   private prioritizeRecommendations(checkResults: ComplianceCheckResult[]): string[] {
-    const allRecommendations = checkResults.flatMap(result => 
+    const allRecommendations = checkResults.flatMap(result =>
       result.recommendations.map(rec => ({
         recommendation: rec,
         riskLevel: result.riskLevel,
@@ -360,11 +363,11 @@ export class GDPRComplianceChain extends BaseLegalChain {
 
     // Sortiere nach Risiko (high > medium > low)
     const priorityOrder = { high: 3, medium: 2, low: 1 };
-    
+
     return allRecommendations
-      .sort((a, b) => priorityOrder[b.riskLevel] - priorityOrder[a.riskLevel])
-      .map(item => `[${item.checkName}] ${item.recommendation}`)
-      .slice(0, 10); // Top 10 Empfehlungen
+    .sort((a, b) => priorityOrder[b.riskLevel] - priorityOrder[a.riskLevel])
+    .map(item => `[${item.checkName}] ${item.recommendation}`)
+    .slice(0, 10); // Top 10 Empfehlungen
   }
 
   /**
