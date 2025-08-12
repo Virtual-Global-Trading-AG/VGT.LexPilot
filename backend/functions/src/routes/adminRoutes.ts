@@ -1,9 +1,8 @@
 import { Router } from 'express';
-import { AdminController } from '../controllers/AdminController';
-import { AuthMiddleware, authMiddleware } from '../middleware/authMiddleware';
-import { ValidationMiddleware } from '../middleware/validationMiddleware';
-import { rateLimitMiddleware } from '../middleware/rateLimitMiddleware';
 import * as Joi from 'joi';
+import { AdminController } from '../controllers/AdminController';
+import { authMiddleware } from '../middleware/authMiddleware';
+import { ValidationMiddleware } from '../middleware/validationMiddleware';
 
 const router = Router();
 const adminController = new AdminController();
@@ -121,5 +120,6 @@ router.get('/vector-store/stats',
 router.post('/legal-texts/index-specific',
   adminController.indexSpecificLegalText.bind(adminController)
 );
+
 
 export default router;

@@ -724,6 +724,88 @@ export class AnalysisService {
     }
   }
 
+
+  /**
+   * Indexiert Gesetzestexte in einen spezifischen Index/Namespace
+   */
+  async indexLegalTextsToSpecificIndex(
+    texts: {
+      content: string;
+      title: string;
+      source: string;
+      jurisdiction: string;
+      legalArea: string;
+    }[],
+    vectorConfig: VectorStoreConfig,
+    progressCallback?: (progress: number, status: string) => void
+  ): Promise<void> {
+    try {
+      this.logger.info('Starting legal texts indexing to specific index', {
+        textsCount: texts.length,
+        indexName: vectorConfig.indexName,
+        namespace: vectorConfig.namespace
+      });
+
+      let allChunks: HierarchicalChunk[] = [];
+
+      for (let i = 0; i < texts.length; i++) {
+        const text = texts[i];
+        if (!text) continue;
+
+        progressCallback?.(Math.round((i / texts.length) * 50), `Processing ${text.title}`);
+
+        // Teile jeden Gesetzestext in Chunks auf
+        const document = new Document({
+          pageContent: text.content,
+          metadata: {
+            title: text.title,
+            source: text.source,
+            jurisdiction: text.jurisdiction,
+            legalArea: text.legalArea,
+            type: 'legal_regulation',
+            indexed_at: new Date().toISOString()
+          }
+        });
+
+        const chunks = await this.documentSplitter.splitDocument(document);
+
+        // Füge spezifische Metadaten für Rechtsgrundlagen hinzu
+        const enhancedChunks = chunks.map((chunk, index) => ({
+          ...chunk,
+          metadata: {
+            ...chunk.metadata,
+            id: `${text.source}-chunk-${index}`,
+            documentId: text.source,
+            chunkIndex: index,
+            legalReferences: this.extractLegalReferences(chunk.pageContent),
+            isLegalRegulation: true
+          }
+        }));
+
+        allChunks = allChunks.concat(enhancedChunks);
+      }
+
+      progressCallback?.(60, `Storing in vector database (${vectorConfig.indexName})`);
+
+      // Speichere alle Chunks im spezifischen Vector Store
+      await this.vectorStore.addDocuments(allChunks, vectorConfig, (progress, status) => {
+        const totalProgress = 60 + Math.round((progress / 100) * 40);
+        progressCallback?.(totalProgress, `${status} (${vectorConfig.namespace})`);
+      });
+
+      this.logger.info('Legal texts indexing to specific index completed', {
+        totalChunks: allChunks.length,
+        textsProcessed: texts.length,
+        indexName: vectorConfig.indexName,
+        namespace: vectorConfig.namespace
+      });
+
+    } catch (error) {
+      this.logger.error('Legal texts indexing to specific index failed', error as Error);
+      throw new Error(`Legal texts indexing failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
   /**
    * Führt semantische Suche in den Rechtsgrundlagen durch (RAG Schritt 2)
    */

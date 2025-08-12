@@ -1,6 +1,7 @@
 import { PineconeStore } from '@langchain/pinecone';
 import { Pinecone as PineconeClient } from "@pinecone-database/pinecone";
 import { Document } from '@langchain/core/documents';
+import { CreateIndexRequestMetricEnum } from '@pinecone-database/pinecone/dist/pinecone-generated-ts-fetch/db_control/models/CreateIndexRequest';
 import { EmbeddingService } from '../services/EmbeddingService';
 import { Logger } from '../utils/logger';
 import { HierarchicalChunk } from '../strategies/LegalDocumentSplitter';
@@ -8,6 +9,9 @@ import { HierarchicalChunk } from '../strategies/LegalDocumentSplitter';
 export interface VectorStoreConfig {
   indexName: string;
   namespace: string;
+  dimension?: number;
+  metric?: 'cosine' | 'euclidean' | 'dotproduct';
+  createIfNotExists?: boolean;
   topK?: number;
   scoreThreshold?: number;
 }
@@ -63,6 +67,15 @@ export class PineconeVectorStore {
     const maxRetries = 3;
     const baseDelay = 1000;
 
+    // Erstelle Index falls gewünscht und nicht vorhanden
+    if (config.createIfNotExists) {
+      await this.ensureIndexExists({
+        ...config,
+        dimension: config.dimension || 1024
+      });
+    }
+
+
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         const pineconeIndex = this.pinecone.Index(config.indexName);
@@ -71,8 +84,7 @@ export class PineconeVectorStore {
           this.embeddingService.getEmbeddingModel(),
           {
             pineconeIndex,
-            //namespace: config.namespace,
-            //textKey: 'text',
+            namespace: config.namespace,
           }
         );
 
@@ -313,4 +325,71 @@ export class PineconeVectorStore {
       return false;
     }
   }
+
+  /**
+   * Erstellt einen Pinecone Index, falls er nicht existiert
+   */
+  private async ensureIndexExists(config: VectorStoreConfig & {
+    dimension: number;
+    metric?: CreateIndexRequestMetricEnum;
+    spec?: any;
+  }): Promise<void> {
+    try {
+      // Prüfe ob Index bereits existiert
+      const existingIndexes = await this.pinecone.listIndexes();
+      const indexExists = existingIndexes.indexes?.some(index => index.name === config.indexName);
+
+      if (!indexExists) {
+        this.logger.info(`Creating new index: ${config.indexName}`);
+
+        await this.pinecone.createIndex({
+          name: config.indexName,
+          dimension: config.dimension, // z.B. 1536 für OpenAI Ada-002
+          metric: config.metric || 'cosine',
+          spec: config.spec || {
+            serverless: {
+              cloud: 'aws',
+              region: 'us-east-1'
+            }
+          }
+        });
+
+        // Warte bis Index bereit ist
+        await this.waitForIndexReady(config.indexName);
+
+        this.logger.info(`Index ${config.indexName} created successfully`);
+      } else {
+        this.logger.info(`Index ${config.indexName} already exists`);
+      }
+    } catch (error) {
+      this.logger.error('Failed to ensure index exists', error as Error);
+      throw new Error(`Index creation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Wartet bis der Index bereit für Operationen ist
+   */
+  private async waitForIndexReady(indexName: string, maxWaitTime = 60000): Promise<void> {
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < maxWaitTime) {
+      try {
+        const indexDescription = await this.pinecone.describeIndex(indexName);
+        if (indexDescription.status?.ready) {
+          return;
+        }
+
+        this.logger.debug(`Waiting for index ${indexName} to be ready...`);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      } catch (error) {
+        this.logger.warn(`Error checking index status: ${error instanceof Error ? error.message : 'Unknown'}`);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+    }
+
+    throw new Error(`Index ${indexName} not ready within ${maxWaitTime}ms`);
+  }
 }
+
+

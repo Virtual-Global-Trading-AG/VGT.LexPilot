@@ -999,74 +999,161 @@ export class AdminController extends BaseController {
     }
   }
 
-  /**
-   * Index Specific Legal Text (Admin Only)
-   * POST /api/admin/legal-texts/index-specific
-   *
-   * This endpoint reads hardcoded PDF documents and indexes them using the AnalysisService
-   */
   public async indexSpecificLegalText(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const userId = this.getUserId(req);
 
       this.logger.info('Starting specific legal text indexing', {});
 
+      // Datenschutzrecht - Index 1 (bestehende Dokumente)
+      const datenschutzTexts = [];
+
       // Read the dsg.pdf file from the assets directory
       const dsgPdfPath = path.join(__dirname, '../../assets/dsg.pdf');
-      const dsgPdfBuffer = fs.readFileSync(dsgPdfPath);
-      const dsgPdfData = await pdfParse(dsgPdfBuffer);
-      const dsgContent = dsgPdfData.text;
-
-      // Read the dsgvo.pdf file from the assets directory
-      const dsgvoPdfPath = path.join(__dirname, '../../assets/dsgvo.pdf');
-      const dsgvoPdfBuffer = fs.readFileSync(dsgvoPdfPath);
-      const dsgvoPdfData = await pdfParse(dsgvoPdfBuffer);
-      const dsgvoContent = dsgvoPdfData.text;
-
-      // Create text objects for indexing
-      const texts = [
-        {
-          content: dsgContent,
+      if (fs.existsSync(dsgPdfPath)) {
+        const dsgPdfBuffer = fs.readFileSync(dsgPdfPath);
+        const dsgPdfData = await pdfParse(dsgPdfBuffer);
+        datenschutzTexts.push({
+          content: dsgPdfData.text,
           title: 'DSG - Datenschutzgesetz',
           source: 'DSG',
           jurisdiction: 'CH',
           legalArea: 'Datenschutzrecht'
-        },
-        {
-          content: dsgvoContent,
+        });
+      }
+
+      // Read the dsgvo.pdf file from the assets directory
+      const dsgvoPdfPath = path.join(__dirname, '../../assets/dsgvo.pdf');
+      if (fs.existsSync(dsgvoPdfPath)) {
+        const dsgvoPdfBuffer = fs.readFileSync(dsgvoPdfPath);
+        const dsgvoPdfData = await pdfParse(dsgvoPdfBuffer);
+        datenschutzTexts.push({
+          content: dsgvoPdfData.text,
           title: 'DSGVO - Datenschutz-Grundverordnung',
           source: 'DSGVO',
           jurisdiction: 'EU',
           legalArea: 'Datenschutzrecht'
-        }
-      ];
+        });
+      }
+
+      // Obligationenrecht - Index 2 (neues Dokument)
+      const obligationenrechtTexts = [];
+
+      // Read the OR.pdf file from the assets directory
+      const orPdfPath = path.join(__dirname, '../../assets/OR.pdf');
+      if (fs.existsSync(orPdfPath)) {
+        const orPdfBuffer = fs.readFileSync(orPdfPath);
+        const orPdfData = await pdfParse(orPdfBuffer);
+        obligationenrechtTexts.push({
+          content: orPdfData.text,
+          title: 'OR - Obligationenrecht',
+          source: 'OR',
+          jurisdiction: 'CH',
+          legalArea: 'Obligationenrecht'
+        });
+      }
 
       // Import AnalysisService dynamically to avoid circular dependency
       const { AnalysisService } = await import('../services/AnalysisService');
       const analysisService = new AnalysisService();
 
-      this.logger.info('Starting specific legal text indexing', {
-        userId,
-        documents: texts.map(t => t.title)
-      });
+      const indexingPromises = [];
+      const indexedDocuments = [];
 
-      let progress = 0;
-      const progressCallback = (progressPercent: number, status: string) => {
-        progress = progressPercent;
-        this.logger.info('Indexing progress', { progress, status });
-      };
+      // Index Datenschutzrecht wenn Dokumente vorhanden
+      if (datenschutzTexts.length > 0) {
+        this.logger.info('Starting datenschutz legal text indexing', {
+          userId,
+          documents: datenschutzTexts.map(t => t.title),
+          index: 'legal-texts',
+          namespace: 'datenschutz-regulations'
+        });
 
-      await analysisService.indexLegalTexts(texts, progressCallback);
+        const datenschutzProgressCallback = (progressPercent: number, status: string) => {
+          this.logger.info('Datenschutz indexing progress', { progress: progressPercent, status });
+        };
+
+        indexingPromises.push(
+          analysisService.indexLegalTextsToSpecificIndex(
+            datenschutzTexts,
+            {
+              indexName: process.env.PINECONE_LEGAL_INDEX || 'legal-texts',
+              namespace: 'datenschutz-regulations',
+              createIfNotExists: true
+            },
+            datenschutzProgressCallback
+          )
+        );
+
+        indexedDocuments.push(...datenschutzTexts.map(t => ({
+          title: t.title,
+          index: 'legal-texts',
+          namespace: 'datenschutz-regulations'
+        })));
+      }
+
+      // Index Obligationenrecht wenn Dokument vorhanden
+      if (obligationenrechtTexts.length > 0) {
+        this.logger.info('Starting obligationenrecht legal text indexing', {
+          userId,
+          documents: obligationenrechtTexts.map(t => t.title),
+          index: 'obligationenrecht-texts',
+          namespace: 'obligationenrecht-regulations'
+        });
+
+        const orProgressCallback = (progressPercent: number, status: string) => {
+          this.logger.info('Obligationenrecht indexing progress', { progress: progressPercent, status });
+        };
+
+        indexingPromises.push(
+          analysisService.indexLegalTextsToSpecificIndex(
+            obligationenrechtTexts,
+            {
+              indexName: process.env.PINECONE_OR_INDEX || 'obligationenrecht-texts',
+              namespace: 'obligationenrecht-regulations',
+              createIfNotExists: true
+            },
+            orProgressCallback
+          )
+        );
+
+        indexedDocuments.push(...obligationenrechtTexts.map(t => ({
+          title: t.title,
+          index: 'obligationenrecht-texts',
+          namespace: 'obligationenrecht-regulations'
+        })));
+      }
+
+      if (indexingPromises.length === 0) {
+        this.sendError(res, 404, 'No legal text files found in assets directory');
+        return;
+      }
+
+      // Alle Indexierungen parallel ausführen
+      await Promise.all(indexingPromises);
 
       this.sendSuccess(res, {
-        message: 'Specific legal texts indexed successfully',
-        documents: texts.map(t => t.title),
+        message: 'All specific legal texts indexed successfully',
+        indexes: [
+          ...(datenschutzTexts.length > 0 ? [{
+            name: 'legal-texts',
+            namespace: 'datenschutz-regulations',
+            documents: datenschutzTexts.length
+          }] : []),
+          ...(obligationenrechtTexts.length > 0 ? [{
+            name: 'obligationenrecht-texts',
+            namespace: 'obligationenrecht-regulations',
+            documents: obligationenrechtTexts.length
+          }] : [])
+        ],
+        indexedDocuments,
         timestamp: new Date().toISOString()
       });
 
-      this.logger.info('Specific legal text indexing completed', {
+      this.logger.info('All specific legal text indexing completed', {
         userId,
-        documents: texts.map(t => t.title)
+        totalIndexes: indexingPromises.length,
+        indexedDocuments: indexedDocuments.length
       });
 
     } catch (error) {
@@ -1076,7 +1163,6 @@ export class AdminController extends BaseController {
       next(error);
     }
   }
-
   /**
    * Get Vector Store Statistics (Admin Only)
    * GET /api/admin/vector-store/stats
