@@ -1187,7 +1187,14 @@ export class AnalysisService {
     text: string,
     k: number = 5
   ): Promise<DocumentInterface[]> {
-    const vectorstore = await this.getVectorStore();
+
+    const vectorConfig: VectorStoreConfig = {
+      indexName: process.env.PINECONE_LEGAL_INDEX || 'legal-texts',
+      namespace: 'legal-regulations',
+      createIfNotExists: false
+    };
+
+    const vectorstore = await this.getVectorStore(vectorConfig);
 
     const results = await vectorstore.store!.similaritySearch(text, k);
 
@@ -1205,12 +1212,7 @@ export class AnalysisService {
   /**
    * Holt den Vector Store für die angegebene Jurisdiktion
    */
-  private async getVectorStore() {
-    const vectorConfig: VectorStoreConfig = {
-      indexName: process.env.PINECONE_LEGAL_INDEX || 'legal-texts',
-      namespace: 'legal-regulations'
-    };
-
+  private async getVectorStore(vectorConfig: VectorStoreConfig) {
     if (!this.vectorStore) {
       throw new Error('Vector store not initialized');
     }

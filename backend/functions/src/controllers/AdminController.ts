@@ -999,7 +999,7 @@ export class AdminController extends BaseController {
     }
   }
 
-  public async indexSpecificLegalText(req: Request, res: Response, next: NextFunction): Promise<void> {
+  public async indexLawTexts(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const userId = this.getUserId(req);
 
@@ -1053,14 +1053,15 @@ export class AdminController extends BaseController {
         });
       }
 
-      // Import AnalysisService dynamically to avoid circular dependency
-      const { AnalysisService } = await import('../services/AnalysisService');
-      const analysisService = new AnalysisService();
+      if (datenschutzTexts.length === 0 && obligationenrechtTexts.length === 0) {
+        this.sendError(res, 404, 'No legal text files found in assets directory');
+        return;
+      }
 
       const indexingPromises = [];
       const indexedDocuments = [];
 
-      // Index Datenschutzrecht wenn Dokumente vorhanden
+      // Index Datenschutzrecht mit separater Service-Instanz
       if (datenschutzTexts.length > 0) {
         this.logger.info('Starting datenschutz legal text indexing', {
           userId,
@@ -1073,8 +1074,12 @@ export class AdminController extends BaseController {
           this.logger.info('Datenschutz indexing progress', { progress: progressPercent, status });
         };
 
+        // Separate AnalysisService Instanz für Datenschutz
+        const { AnalysisService } = await import('../services/AnalysisService');
+        const datenschutzService = new AnalysisService();
+
         indexingPromises.push(
-          analysisService.indexLegalTextsToSpecificIndex(
+          datenschutzService. indexLegalTextsToSpecificIndex(
             datenschutzTexts,
             {
               indexName: process.env.PINECONE_LEGAL_INDEX || 'legal-texts',
@@ -1092,7 +1097,7 @@ export class AdminController extends BaseController {
         })));
       }
 
-      // Index Obligationenrecht wenn Dokument vorhanden
+      // Index Obligationenrecht mit separater Service-Instanz
       if (obligationenrechtTexts.length > 0) {
         this.logger.info('Starting obligationenrecht legal text indexing', {
           userId,
@@ -1105,8 +1110,12 @@ export class AdminController extends BaseController {
           this.logger.info('Obligationenrecht indexing progress', { progress: progressPercent, status });
         };
 
+        // Separate AnalysisService Instanz für Obligationenrecht
+        const { AnalysisService } = await import('../services/AnalysisService');
+        const orService = new AnalysisService(); // SEPARATE Instanz!
+
         indexingPromises.push(
-          analysisService.indexLegalTextsToSpecificIndex(
+          orService.indexLegalTextsToSpecificIndex(
             obligationenrechtTexts,
             {
               indexName: process.env.PINECONE_OR_INDEX || 'obligationenrecht-texts',
@@ -1124,12 +1133,11 @@ export class AdminController extends BaseController {
         })));
       }
 
-      if (indexingPromises.length === 0) {
-        this.sendError(res, 404, 'No legal text files found in assets directory');
-        return;
-      }
+      // Parallel ausführen mit separaten Service-Instanzen
+      this.logger.info('Starting parallel indexing with separate service instances', {
+        totalPromises: indexingPromises.length
+      });
 
-      // Alle Indexierungen parallel ausführen
       await Promise.all(indexingPromises);
 
       this.sendSuccess(res, {

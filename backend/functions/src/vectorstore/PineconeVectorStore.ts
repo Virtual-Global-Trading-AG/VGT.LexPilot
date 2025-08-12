@@ -84,7 +84,7 @@ export class PineconeVectorStore {
           this.embeddingService.getEmbeddingModel(),
           {
             pineconeIndex,
-            namespace: config.namespace,
+            // namespace: config.namespace,
           }
         );
 
