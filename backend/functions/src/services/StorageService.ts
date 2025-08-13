@@ -1,5 +1,6 @@
 import { Storage } from '@google-cloud/storage';
 import * as admin from 'firebase-admin';
+import { getDownloadURL } from 'firebase-admin/storage';
 import { Logger } from '../utils/logger';
 import { config } from '../config/environment';
 
@@ -138,6 +139,67 @@ export class StorageService {
         fileName
       });
       throw new Error('Failed to generate download URL');
+    }
+  }
+
+  /**
+   * Upload document directly from base64 content
+   */
+  async uploadDocumentDirect(
+    documentId: string,
+    fileName: string,
+    contentType: string,
+    base64Content: string,
+    userId: string
+  ): Promise<{ success: boolean; filePath: string; size: number }> {
+    try {
+      const filePath = this.getDocumentPath(userId, documentId, fileName);
+
+      this.logger.info('Uploading document directly', {
+        filePath
+      });
+
+      const file = this.bucket.file(filePath);
+
+      // Convert base64 to buffer
+      const buffer = Buffer.from(base64Content, 'base64');
+      const size = buffer.length;
+
+      // Validate file size
+      this.validateFileUpload(contentType, size);
+
+      // Upload the file directly
+      await file.save(buffer, {
+        metadata: {
+          contentType,
+          metadata: {
+            'user-id': userId,
+            'document-id': documentId,
+            'original-name': fileName,
+            'uploaded-at': new Date().toISOString()
+          }
+        }
+      });
+
+      const url = await getDownloadURL(this.bucket.file(filePath));
+
+      this.logger.info('Document uploaded directly', {
+        url,
+        documentId,
+        userId,
+        fileName,
+        size,
+        contentType
+      });
+
+      return { success: true, filePath, size };
+    } catch (error) {
+      this.logger.error('Failed to upload document directly', error as Error, {
+        documentId,
+        userId,
+        fileName
+      });
+      throw new Error('Failed to upload document directly');
     }
   }
 

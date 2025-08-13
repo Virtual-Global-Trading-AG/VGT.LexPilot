@@ -18,6 +18,7 @@ export interface User extends BaseEntity {
   lastLogin?: Date;
   settings: UserSettings;
   statistics: UserStatistics;
+  documentIds: string[];
 }
 
 export enum UserRole {

@@ -37,6 +37,32 @@ const uploadDocumentSchema = Joi.object({
   }).optional()
 });
 
+const uploadDocumentDirectSchema = Joi.object({
+  fileName: Joi.string().min(1).max(255).required()
+    .pattern(/^[a-zA-Z0-9._\-\s]+\.(pdf|docx|doc|txt|md|csv)$/i)
+    .messages({
+      'string.pattern.base': 'File name must have a valid extension (pdf, docx, doc, txt, md, csv)'
+    }),
+  contentType: Joi.string().valid(
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'text/plain',
+    'text/markdown',
+    'text/csv'
+  ).required(),
+  base64Content: Joi.string().required()
+    .pattern(/^[A-Za-z0-9+/]*={0,2}$/)
+    .messages({
+      'string.pattern.base': 'Invalid base64 content format'
+    }),
+  metadata: Joi.object({
+    category: Joi.string().valid('contract', 'legal_document', 'policy', 'other'),
+    description: Joi.string().max(1000),
+    tags: Joi.array().items(Joi.string().max(50)).max(10)
+  }).optional()
+});
+
 const updateDocumentSchema = Joi.object({
   title: Joi.string().min(1).max(255).optional(),
   description: Joi.string().max(1000).optional(),
@@ -109,6 +135,11 @@ const searchSchema = Joi.object({
 router.post('/', 
   ValidationMiddleware.validate({ body: uploadDocumentSchema }),
   documentController.uploadDocument.bind(documentController)
+);
+
+router.post('/upload-direct', 
+  ValidationMiddleware.validate({ body: uploadDocumentDirectSchema }),
+  documentController.uploadDocumentDirect.bind(documentController)
 );
 
 router.get('/', 

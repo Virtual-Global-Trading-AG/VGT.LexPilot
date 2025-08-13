@@ -23,7 +23,7 @@ class ApiClient {
     options: RequestInit = {}
   ): Promise<ApiResponse<T>> {
     const url = `${this.baseUrl}${endpoint}`;
-    
+
     const headers = {
       'Content-Type': 'application/json',
       ...AuthService.getAuthHeaders(),
@@ -116,8 +116,14 @@ class ApiClient {
   ): Promise<ApiResponse<T>> {
     return new Promise((resolve) => {
       const xhr = new XMLHttpRequest();
-      const formData = new FormData();
-      formData.append('file', file);
+      const isSignedUrl = endpoint.startsWith('http://') || endpoint.startsWith('https://');
+
+      // For signed URLs, send raw file data; for API endpoints, use FormData
+      const uploadData = isSignedUrl ? file : (() => {
+        const formData = new FormData();
+        formData.append('file', file);
+        return formData;
+      })();
 
       // Set up progress tracking
       if (onProgress) {
@@ -131,49 +137,112 @@ class ApiClient {
 
       // Set up response handler
       xhr.addEventListener('load', () => {
-        try {
-          const response = JSON.parse(xhr.responseText);
-          
+        if (isSignedUrl) {
+          // For signed URLs, success is indicated by 2xx status codes
           if (xhr.status >= 200 && xhr.status < 300) {
             resolve({
               success: true,
-              data: response.data,
-              message: response.message
+              data: null as T,
+              message: 'Upload successful'
             });
           } else {
+            console.error('Signed URL upload failed:', {
+              status: xhr.status,
+              statusText: xhr.statusText,
+              responseText: xhr.responseText,
+              uploadUrl: endpoint
+            });
             resolve({
               success: false,
-              error: response.error || response.message || 'Upload failed'
+              error: `Upload failed with status ${xhr.status}: ${xhr.statusText}${xhr.responseText ? ` - ${xhr.responseText}` : ''}`
             });
           }
-        } catch (error) {
-          resolve({
-            success: false,
-            error: 'Invalid response from server'
-          });
+        } else {
+          // For API endpoints, parse JSON response
+          try {
+            const response = JSON.parse(xhr.responseText);
+
+            if (xhr.status >= 200 && xhr.status < 300) {
+              resolve({
+                success: true,
+                data: response.data,
+                message: response.message
+              });
+            } else {
+              resolve({
+                success: false,
+                error: response.error || response.message || 'Upload failed'
+              });
+            }
+          } catch (error) {
+            resolve({
+              success: false,
+              error: 'Invalid response from server'
+            });
+          }
         }
       });
 
       // Set up error handler
       xhr.addEventListener('error', () => {
+        console.error('XMLHttpRequest error during upload:', {
+          readyState: xhr.readyState,
+          status: xhr.status,
+          statusText: xhr.statusText,
+          responseText: xhr.responseText,
+          uploadUrl: isSignedUrl ? endpoint : `${this.baseUrl}${endpoint}`,
+          isSignedUrl
+        });
         resolve({
           success: false,
-          error: 'Network error during upload'
+          error: `Network error during upload (Status: ${xhr.status})`
         });
       });
 
       // Set headers
-      const authHeaders = AuthService.getAuthHeaders();
-      Object.entries(authHeaders).forEach(([key, value]) => {
-        if (key !== 'Content-Type') { // Don't set Content-Type for FormData
-          xhr.setRequestHeader(key, value);
-        }
-      });
+      if (isSignedUrl) {
+        // For signed URLs, don't set Content-Type header manually
+        // The signed URL already includes the content type constraint
+        // and setting it manually can cause conflicts
+      } else {
+        // For API endpoints, set auth headers (don't set Content-Type for FormData)
+        const authHeaders = AuthService.getAuthHeaders();
+        Object.entries(authHeaders).forEach(([key, value]) => {
+          if (key !== 'Content-Type') {
+            xhr.setRequestHeader(key, value);
+          }
+        });
+      }
 
       // Start upload
-      xhr.open('POST', `${this.baseUrl}${endpoint}`);
-      xhr.send(formData);
+      const uploadUrl = isSignedUrl ? endpoint : `${this.baseUrl}${endpoint}`;
+      const method = isSignedUrl ? 'PUT' : 'POST'; // Use PUT for signed URLs, POST for API endpoints
+      xhr.open(method, uploadUrl);
+      xhr.send(uploadData);
     });
+  }
+
+  /**
+   * Upload file directly with base64 content
+   */
+  async uploadFileDirect<T = unknown>(
+    fileName: string,
+    contentType: string,
+    base64Content: string,
+    metadata?: {
+      category?: 'contract' | 'legal_document' | 'policy' | 'other';
+      description?: string;
+      tags?: string[];
+    }
+  ): Promise<ApiResponse<T>> {
+    const payload = {
+      fileName,
+      contentType,
+      base64Content,
+      metadata
+    };
+
+    return this.post<T>('/documents/upload-direct', payload);
   }
 
   /**

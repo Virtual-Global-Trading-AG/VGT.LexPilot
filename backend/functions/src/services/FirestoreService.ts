@@ -1,3 +1,4 @@
+import { UserRepository } from '@repositories/UserRepository';
 import * as admin from 'firebase-admin';
 import { Logger } from '../utils/logger';
 import { DocumentMetadata } from './StorageService';
@@ -30,9 +31,11 @@ export interface PaginatedResult<T> {
 export class FirestoreService {
   private readonly logger = Logger.getInstance();
   private readonly db: admin.firestore.Firestore;
+  private readonly userRepo;
 
   constructor() {
     this.db = admin.firestore();
+    this.userRepo = new UserRepository();
   }
 
   /**
@@ -40,31 +43,25 @@ export class FirestoreService {
    */
   async createDocument(userId: string, documentId: string, metadata: Partial<DocumentMetadata>): Promise<void> {
     try {
-      const docRef = this.db
-        .collection('users')
-        .doc(userId)
-        .collection('documents')
-        .doc(documentId);
 
-      const documentData: DocumentMetadata = {
-        userId,
-        fileName: metadata.fileName!,
-        contentType: metadata.contentType!,
-        size: metadata.size!,
-        uploadedAt: metadata.uploadedAt || new Date().toISOString(),
-        status: metadata.status || 'uploading',
-        category: metadata.category,
-        description: metadata.description,
-        tags: metadata.tags || [],
-        analyses: metadata.analyses || []
+      const user = await this.userRepo.findByUid(userId);
+      if (!user) {
+        throw new Error(`User not found: ${userId}`);
+      }
+
+      const updatedUser = {
+        ...user,
+        documentIds: [...user?.documentIds ?? [], documentId]
       };
 
-      await docRef.set(documentData);
+
+      this.userRepo.update(user!.id, updatedUser);
+
 
       this.logger.info('Document record created', {
         userId,
         documentId,
-        fileName: documentData.fileName
+        documentIds: updatedUser.documentIds
       });
     } catch (error) {
       this.logger.error('Failed to create document record', error as Error, {
@@ -94,7 +91,7 @@ export class FirestoreService {
       }
 
       const data = doc.data() as DocumentMetadata;
-      
+
       this.logger.debug('Document retrieved', {
         userId,
         documentId,
@@ -153,7 +150,7 @@ export class FirestoreService {
       // Apply pagination
       const offset = (pagination.page - 1) * pagination.limit;
       const paginatedQuery = query.offset(offset).limit(pagination.limit);
-      
+
       const snapshot = await paginatedQuery.get();
       const documents = snapshot.docs.map(doc => doc.data() as DocumentMetadata);
 
@@ -466,11 +463,11 @@ export class FirestoreService {
       // Simple text search in fileName and description
       // Note: Firestore doesn't support full-text search natively
       const snapshot = await query.get();
-      
+
       const searchLower = searchText.toLowerCase();
       const filteredDocuments = snapshot.docs
         .map(doc => doc.data() as DocumentMetadata)
-        .filter(doc => 
+        .filter(doc =>
           doc.fileName.toLowerCase().includes(searchLower) ||
           (doc.description && doc.description.toLowerCase().includes(searchLower)) ||
           (doc.tags && doc.tags.some(tag => tag.toLowerCase().includes(searchLower)))
@@ -512,7 +509,7 @@ export class FirestoreService {
   async saveDocument(path: string, data: any): Promise<void> {
     try {
       await this.db.doc(path).set(data, { merge: true });
-      
+
       this.logger.debug('Document saved successfully', {
         path,
         timestamp: new Date().toISOString()

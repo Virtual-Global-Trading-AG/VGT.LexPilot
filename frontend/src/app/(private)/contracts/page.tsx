@@ -1,8 +1,12 @@
+'use client';
+
 import MainLayout from '@/components/layouts/main-layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { useDocumentUpload } from '@/lib/hooks/useApi';
+import { useRef, useState } from 'react';
 import {
   Table,
   TableBody,
@@ -101,6 +105,79 @@ const getStatusText = (status: string) => {
 };
 
 export default function ContractsPage() {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { uploadDocumentDirect, uploading, uploadProgress, error, clearError } = useDocumentUpload();
+  const [dragActive, setDragActive] = useState(false);
+
+  const handleFileSelect = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+
+    const file = files[0];
+    if (!file) return;
+
+    handleFileUpload(file);
+  };
+
+  const handleFileUpload = async (file: File) => {
+    // Validate file type
+    const allowedTypes = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    ];
+
+    if (!allowedTypes.includes(file.type)) {
+      alert('Nur PDF und Word-Dokumente sind erlaubt.');
+      return;
+    }
+
+    // Validate file size (50MB max)
+    if (file.size > 52428800) {
+      alert('Die Datei ist zu groß. Maximale Größe: 50MB');
+      return;
+    }
+
+    try {
+      const result = await uploadDocumentDirect(file, {
+        category: 'contract',
+        description: `Hochgeladener Vertrag: ${file.name}`
+      });
+
+      if (result) {
+        alert('Vertrag erfolgreich hochgeladen!');
+        // Refresh the page or update the contracts list
+        window.location.reload();
+      }
+    } catch (err) {
+      console.error('Upload error:', err);
+      alert('Fehler beim Hochladen des Vertrags.');
+    }
+  };
+
+  const handleButtonClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === 'dragenter' || e.type === 'dragover') {
+      setDragActive(true);
+    } else if (e.type === 'dragleave') {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleFileSelect(e.dataTransfer.files);
+    }
+  };
+
   return (
     <MainLayout>
       <div className="space-y-6">
@@ -112,29 +189,63 @@ export default function ContractsPage() {
               Verwalten und analysieren Sie Ihre Rechtsdokumente
             </p>
           </div>
-          <Button>
+          <Button onClick={handleButtonClick} disabled={uploading}>
             <Upload className="mr-2 h-4 w-4" />
-            Vertrag hochladen
+            {uploading ? 'Wird hochgeladen...' : 'Vertrag hochladen'}
           </Button>
         </div>
 
         {/* Upload Area */}
         <Card>
           <CardContent className="p-8">
-            <div className="flex flex-col items-center justify-center space-y-4 text-center">
+            <div 
+              className={`flex flex-col items-center justify-center space-y-4 text-center border-2 border-dashed rounded-lg p-8 transition-colors ${
+                dragActive ? 'border-primary bg-primary/5' : 'border-muted-foreground/25'
+              } ${uploading ? 'opacity-50' : ''}`}
+              onDragEnter={handleDrag}
+              onDragLeave={handleDrag}
+              onDragOver={handleDrag}
+              onDrop={handleDrop}
+            >
               <div className="flex h-20 w-20 items-center justify-center rounded-full bg-muted">
                 <FileText className="h-10 w-10 text-muted-foreground" />
               </div>
               <div className="space-y-2">
-                <h3 className="text-lg font-semibold">Vertrag zur Analyse hochladen</h3>
+                <h3 className="text-lg font-semibold">
+                  {uploading ? 'Wird hochgeladen...' : 'Vertrag zur Analyse hochladen'}
+                </h3>
                 <p className="text-sm text-muted-foreground max-w-md">
-                  Ziehen Sie eine PDF-Datei hierher oder klicken Sie zum Auswählen
+                  {uploading 
+                    ? `Upload-Fortschritt: ${uploadProgress}%`
+                    : 'Ziehen Sie eine PDF-Datei hierher oder klicken Sie zum Auswählen'
+                  }
                 </p>
               </div>
-              <Button size="lg">
-                Datei auswählen
-              </Button>
+              {uploading ? (
+                <div className="w-full max-w-xs">
+                  <div className="bg-gray-200 rounded-full h-2">
+                    <div 
+                      className="bg-primary h-2 rounded-full transition-all duration-300" 
+                      style={{ width: `${uploadProgress}%` }}
+                    ></div>
+                  </div>
+                </div>
+              ) : (
+                <Button size="lg" onClick={handleButtonClick}>
+                  Datei auswählen
+                </Button>
+              )}
+              {error && (
+                <p className="text-sm text-red-600 mt-2">{error}</p>
+              )}
             </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.doc,.docx"
+              onChange={(e) => handleFileSelect(e.target.files)}
+              className="hidden"
+            />
           </CardContent>
         </Card>
 

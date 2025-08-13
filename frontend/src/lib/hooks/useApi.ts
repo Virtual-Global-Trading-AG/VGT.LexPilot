@@ -211,11 +211,11 @@ export function useDocumentUpload() {
       const uploadResponse = await apiClient.post<{
         documentId: string;
         uploadUrl: string;
-      }>('/documents/upload-url', {
-        filename: file.name,
+      }>('/documents', {
+        fileName: file.name,
         contentType: file.type,
         size: file.size,
-        ...metadata
+        metadata
       });
 
       if (!uploadResponse.success || !uploadResponse.data) {
@@ -247,8 +247,68 @@ export function useDocumentUpload() {
     }
   }, [isAuthenticated]);
 
+  const uploadDocumentDirect = useCallback(async (
+    file: File,
+    metadata?: {
+      category?: 'contract' | 'legal_document' | 'policy' | 'other';
+      description?: string;
+      tags?: string[];
+    }
+  ): Promise<{ documentId: string; fileName: string; size: number } | null> => {
+    if (!isAuthenticated) {
+      setError('Not authenticated');
+      return null;
+    }
+
+    setUploading(true);
+    setError(null);
+    setUploadProgress(0);
+
+    try {
+      // Convert file to base64
+      const base64Content = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result as string;
+          // Remove the data URL prefix (e.g., "data:application/pdf;base64,")
+          const base64 = result.split(',')[1];
+          resolve(base64);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      // Simulate progress for base64 conversion
+      setUploadProgress(50);
+
+      // Upload directly with base64 content
+      const uploadResult = await apiClient.uploadFileDirect(
+        file.name,
+        file.type,
+        base64Content,
+        metadata
+      );
+
+      setUploadProgress(100);
+
+      if (uploadResult.success && uploadResult.data) {
+        return uploadResult.data as { documentId: string; fileName: string; size: number };
+      } else {
+        setError(uploadResult.error || 'Direct upload failed');
+        return null;
+      }
+    } catch (err) {
+      setError('Network error during direct upload');
+      return null;
+    } finally {
+      setUploading(false);
+      setUploadProgress(0);
+    }
+  }, [isAuthenticated]);
+
   return {
     uploadDocument,
+    uploadDocumentDirect,
     uploading,
     uploadProgress,
     error,

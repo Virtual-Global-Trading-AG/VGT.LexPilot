@@ -113,6 +113,85 @@ export class DocumentController extends BaseController {
   }
 
   /**
+   * Upload document directly with base64 content
+   * POST /api/documents/upload-direct
+   */
+  public async uploadDocumentDirect(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = this.getUserId(req);
+      const { fileName, contentType, base64Content, metadata } = req.body;
+
+      // Validate request
+      const missingFields = this.validateRequiredFields(req.body, ['fileName', 'contentType', 'base64Content']);
+      if (missingFields.length > 0) {
+        this.sendError(res, 400, 'Missing required fields', `Required: ${missingFields.join(', ')}`);
+        return;
+      }
+
+      this.logger.info('Direct document upload requested', {
+        userId,
+        fileName,
+        contentType
+      });
+
+      // Calculate size from base64 content
+      const buffer = Buffer.from(base64Content, 'base64');
+      const size = buffer.length;
+
+      // Validate file type and size
+      this.storageService.validateFileUpload(contentType, size);
+
+      // Check user storage quota
+      const quotaInfo = await this.storageService.checkStorageQuota(userId, size);
+      if (quotaInfo.available < 0) {
+        this.sendError(res, 413, 'Storage quota exceeded', 
+          `Upload would exceed storage limit. Used: ${(quotaInfo.used / 1024 / 1024).toFixed(2)}MB, Limit: ${(quotaInfo.limit / 1024 / 1024).toFixed(2)}MB`);
+        return;
+      }
+
+      // Generate document ID and upload directly
+      const documentId = this.generateDocumentId();
+      const uploadResult = await this.storageService.uploadDocumentDirect(
+        documentId,
+        fileName,
+        contentType,
+        base64Content,
+        userId
+      );
+
+      // Create document record
+      await this.firestoreService.createDocument(userId, documentId, {
+        fileName,
+        contentType,
+        size,
+        uploadedAt: new Date().toISOString(),
+        status: 'uploaded',
+        ...metadata
+      });
+
+      this.sendSuccess(res, {
+        documentId,
+        fileName,
+        size,
+        status: 'uploaded',
+        quotaInfo: {
+          used: quotaInfo.used + size,
+          limit: quotaInfo.limit,
+          available: quotaInfo.available - size,
+          usagePercentage: Math.round(((quotaInfo.used + size) / quotaInfo.limit) * 100)
+        }
+      }, 'Document uploaded successfully');
+
+    } catch (error) {
+      this.logger.error('Direct document upload failed', error as Error, {
+        userId: this.getUserId(req),
+        fileName: req.body?.fileName
+      });
+      next(error);
+    }
+  }
+
+  /**
    * Get document details
    * GET /api/documents/:documentId
    */
