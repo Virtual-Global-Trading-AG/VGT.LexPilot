@@ -5,6 +5,7 @@ import { Logger } from '../utils/logger';
 import { config } from '../config/environment';
 
 export interface DocumentMetadata {
+  documentId: string;
   userId: string;
   fileName: string;
   contentType: string;
@@ -241,31 +242,36 @@ export class StorageService {
   }
 
   /**
-   * Delete document from storage
+   * Delete document from storage (deletes entire document directory)
    */
   async deleteDocument(
     documentId: string, 
-    fileName: string, 
     userId: string
   ): Promise<void> {
     try {
-      const filePath = this.getDocumentPath(userId, documentId, fileName);
-      const file = this.bucket.file(filePath);
+      const directoryPrefix = `users/${userId}/documents/${documentId}/`;
 
-      await file.delete({ ignoreNotFound: true });
+      // Get all files in the document directory
+      const [files] = await this.bucket.getFiles({
+        prefix: directoryPrefix
+      });
 
-      this.logger.info('Deleted document from storage', {
+      // Delete all files in the directory
+      const deletePromises = files.map((file: any) => file.delete({ ignoreNotFound: true }));
+      await Promise.all(deletePromises);
+
+      this.logger.info('Deleted document directory from storage', {
         documentId,
         userId,
-        fileName
+        filesDeleted: files.length,
+        directoryPrefix
       });
     } catch (error) {
-      this.logger.error('Failed to delete document', error as Error, {
+      this.logger.error('Failed to delete document directory', error as Error, {
         documentId,
-        userId,
-        fileName
+        userId
       });
-      throw new Error('Failed to delete document');
+      throw new Error('Failed to delete document directory');
     }
   }
 
@@ -410,6 +416,62 @@ export class StorageService {
         fileName
       });
       throw new Error('Failed to get document info');
+    }
+  }
+
+  /**
+   * Get document file info by documentId (finds the single file in the directory)
+   */
+  async getDocumentFileInfo(
+    documentId: string,
+    userId: string
+  ): Promise<{ fileName: string; size: number; contentType: string; uploadedAt: Date } | null> {
+    try {
+      const directoryPrefix = `users/${userId}/documents/${documentId}/`;
+
+      const [files] = await this.bucket.getFiles({
+        prefix: directoryPrefix
+      });
+
+      // Filter out directory entries and get actual files
+      const actualFiles = files.filter((file: any) => !file.name.endsWith('/'));
+
+      if (actualFiles.length === 0) {
+        this.logger.warn('No files found for document', {
+          documentId,
+          userId,
+          directoryPrefix
+        });
+        return null;
+      }
+
+      if (actualFiles.length > 1) {
+        this.logger.warn('Multiple files found for document, using first one', {
+          documentId,
+          userId,
+          fileCount: actualFiles.length,
+          files: actualFiles.map((f: any) => f.name)
+        });
+      }
+
+      const file = actualFiles[0];
+      const [metadata] = await file.getMetadata();
+
+      // Extract filename from full path
+      const fileName = file.name.split('/').pop() || 'unknown';
+
+      return {
+        fileName,
+        size: parseInt(metadata.size || '0'),
+        contentType: metadata.contentType || 'application/octet-stream',
+        uploadedAt: new Date(metadata.timeCreated || Date.now())
+      };
+    } catch (error) {
+      this.logger.error('Failed to get document file info', error as Error, {
+        documentId,
+        userId
+      });
+      return null;
     }
   }
 

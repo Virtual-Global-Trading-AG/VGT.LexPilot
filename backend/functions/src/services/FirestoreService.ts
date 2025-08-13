@@ -1,7 +1,7 @@
 import { UserRepository } from '@repositories/UserRepository';
 import * as admin from 'firebase-admin';
 import { Logger } from '../utils/logger';
-import { DocumentMetadata } from './StorageService';
+import { DocumentMetadata, StorageService } from './StorageService';
 
 export interface PaginationOptions {
   page: number;
@@ -32,10 +32,12 @@ export class FirestoreService {
   private readonly logger = Logger.getInstance();
   private readonly db: admin.firestore.Firestore;
   private readonly userRepo;
+  private readonly storageService;
 
   constructor() {
     this.db = admin.firestore();
     this.userRepo = new UserRepository();
+    this.storageService = new StorageService();
   }
 
   /**
@@ -118,44 +120,101 @@ export class FirestoreService {
     filters: DocumentFilters = {}
   ): Promise<PaginatedResult<DocumentMetadata>> {
     try {
-      let query: admin.firestore.Query = this.db
-        .collection('users')
-        .doc(userId)
-        .collection('documents');
+
+      // Get user document to retrieve documentIds array
+      const user = await this.userRepo.findByUid(userId);
+
+      if (!user) {
+        throw new Error('User not found');
+      }
+
+      const documentIds: string[] = user.documentIds || [];
+
+      if (documentIds.length === 0) {
+        return {
+          items: [],
+          page: pagination.page,
+          limit: pagination.limit,
+          total: 0,
+          totalPages: 0
+        };
+      }
+
+      // Fetch documents from storage by their IDs
+      const documentsPromises = documentIds.map(async (docId) => {
+        try {
+          // Get file information from storage
+          const fileInfo = await this.storageService.getDocumentFileInfo(docId, userId);
+
+          if (!fileInfo) {
+            this.logger.warn('No file found in storage for document', { docId, userId });
+            return null;
+          }
+
+          // Create DocumentMetadata from file information
+          const documentMetadata: DocumentMetadata = {
+            documentId: docId,
+            userId: userId,
+            fileName: fileInfo.fileName,
+            size: fileInfo.size,
+            contentType: fileInfo.contentType,
+            uploadedAt: fileInfo.uploadedAt.toISOString(),
+            status: 'uploaded', // Default status since we only have file info
+            tags: [],
+            description: ''
+          };
+
+          return documentMetadata;
+        } catch (error) {
+          this.logger.error('Failed to get file info for document', error as Error, { docId, userId });
+          return null;
+        }
+      });
+
+      const allDocuments = (await Promise.all(documentsPromises))
+        .filter((doc): doc is DocumentMetadata => doc !== null);
 
       // Apply filters
+      let filteredDocuments = allDocuments;
+
       if (filters.status) {
-        query = query.where('status', '==', filters.status);
+        filteredDocuments = filteredDocuments.filter(doc => doc.status === filters.status);
       }
 
       if (filters.category) {
-        query = query.where('category', '==', filters.category);
+        filteredDocuments = filteredDocuments.filter(doc => doc.category === filters.category);
       }
 
       if (filters.startDate) {
-        query = query.where('uploadedAt', '>=', filters.startDate);
+        filteredDocuments = filteredDocuments.filter(doc => 
+          new Date(doc.uploadedAt) >= new Date(filters.startDate!)
+        );
       }
 
       if (filters.endDate) {
-        query = query.where('uploadedAt', '<=', filters.endDate);
+        filteredDocuments = filteredDocuments.filter(doc => 
+          new Date(doc.uploadedAt) <= new Date(filters.endDate!)
+        );
       }
 
       // Apply sorting
-      query = query.orderBy(sort.field, sort.direction);
+      filteredDocuments.sort((a, b) => {
+        const aValue = a[sort.field as keyof DocumentMetadata];
+        const bValue = b[sort.field as keyof DocumentMetadata];
 
-      // Get total count for pagination
-      const totalSnapshot = await query.get();
-      const total = totalSnapshot.size;
+        if (!aValue < !bValue) return sort.direction === 'asc' ? -1 : 1;
+        if (!aValue > !bValue) return sort.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+
+      const total = filteredDocuments.length;
 
       // Apply pagination
       const offset = (pagination.page - 1) * pagination.limit;
-      const paginatedQuery = query.offset(offset).limit(pagination.limit);
-
-      const snapshot = await paginatedQuery.get();
-      const documents = snapshot.docs.map(doc => doc.data() as DocumentMetadata);
+      const paginatedDocuments = filteredDocuments.slice(offset, offset + pagination.limit);
 
       const result: PaginatedResult<DocumentMetadata> = {
-        items: documents,
+        items: paginatedDocuments,
         page: pagination.page,
         limit: pagination.limit,
         total,
@@ -164,7 +223,7 @@ export class FirestoreService {
 
       this.logger.debug('User documents retrieved', {
         userId,
-        count: documents.length,
+        count: paginatedDocuments.length,
         total,
         page: pagination.page
       });
@@ -217,21 +276,29 @@ export class FirestoreService {
   }
 
   /**
-   * Delete document record
+   * Delete document record (removes documentId from user's documentIds array)
    */
   async deleteDocument(documentId: string, userId: string): Promise<void> {
     try {
-      const docRef = this.db
-        .collection('users')
-        .doc(userId)
-        .collection('documents')
-        .doc(documentId);
+      // Get user document to retrieve current documentIds array
+      const user = await this.userRepo.findByUid(userId);
 
-      await docRef.delete();
+      if (!user) {
+        throw new Error('User not found');
+      }
 
-      this.logger.info('Document record deleted', {
+      // Remove documentId from the documentIds array
+      const updatedDocumentIds = (user.documentIds || []).filter(id => id !== documentId);
+
+      // Update user document with new documentIds array
+      await this.userRepo.update(user.id, {
+        documentIds: updatedDocumentIds
+      });
+
+      this.logger.info('Document record deleted from user documentIds', {
         userId,
-        documentId
+        documentId,
+        remainingDocuments: updatedDocumentIds.length
       });
     } catch (error) {
       this.logger.error('Failed to delete document record', error as Error, {

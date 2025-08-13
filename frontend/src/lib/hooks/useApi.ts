@@ -316,6 +316,96 @@ export function useDocumentUpload() {
   };
 }
 
+export function useDocuments() {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [documents, setDocuments] = useState<any[]>([]);
+  const [pagination, setPagination] = useState<any>(null);
+  const { isAuthenticated } = useAuthStore(state => state);
+
+  const getDocuments = useCallback(async (params?: {
+    page?: number;
+    limit?: number;
+    sortBy?: string;
+    sortOrder?: 'asc' | 'desc';
+    status?: string;
+    category?: string;
+  }): Promise<boolean> => {
+    if (!isAuthenticated) {
+      setError('Authentication required');
+      return false;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const queryParams = new URLSearchParams();
+      if (params?.page) queryParams.append('page', params.page.toString());
+      if (params?.limit) queryParams.append('limit', params.limit.toString());
+      if (params?.sortBy) queryParams.append('sortBy', params.sortBy);
+      if (params?.sortOrder) queryParams.append('sortOrder', params.sortOrder);
+      if (params?.status) queryParams.append('status', params.status);
+      if (params?.category) queryParams.append('category', params.category);
+
+      const endpoint = `/documents${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+      const response = await apiClient.get(endpoint);
+
+      if (response.success && response.data) {
+        setDocuments(response.data.documents || []);
+        setPagination(response.data.pagination || null);
+        return true;
+      } else {
+        setError(response.error || 'Failed to fetch documents');
+        return false;
+      }
+    } catch (err) {
+      setError('Network error while fetching documents');
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }, [isAuthenticated]);
+
+  const deleteDocument = useCallback(async (documentId: string): Promise<boolean> => {
+    if (!isAuthenticated) {
+      setError('Authentication required');
+      return false;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await apiClient.delete(`/documents/${documentId}`);
+
+      if (response.success) {
+        // Remove the deleted document from the local state
+        setDocuments(prevDocs => prevDocs.filter(doc => doc.id !== documentId));
+        return true;
+      } else {
+        setError(response.error || 'Failed to delete document');
+        return false;
+      }
+    } catch (err) {
+      setError('Network error while deleting document');
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }, [isAuthenticated]);
+
+  return {
+    getDocuments,
+    deleteDocument,
+    documents,
+    pagination,
+    loading,
+    error,
+    clearError: () => setError(null)
+  };
+}
+
 export function useAdminOperations() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

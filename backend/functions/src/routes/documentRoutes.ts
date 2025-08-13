@@ -131,12 +131,6 @@ const searchSchema = Joi.object({
   limit: Joi.number().min(1).max(100).default(10).optional()
 });
 
-// Document CRUD routes
-router.post('/', 
-  ValidationMiddleware.validate({ body: uploadDocumentSchema }),
-  documentController.uploadDocument.bind(documentController)
-);
-
 router.post('/upload-direct', 
   ValidationMiddleware.validate({ body: uploadDocumentDirectSchema }),
   documentController.uploadDocumentDirect.bind(documentController)

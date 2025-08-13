@@ -5,8 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { useDocumentUpload } from '@/lib/hooks/useApi';
-import { useRef, useState } from 'react';
+import { useDocumentUpload, useDocuments } from '@/lib/hooks/useApi';
+import { useRef, useState, useEffect } from 'react';
 import {
   Table,
   TableBody,
@@ -35,35 +35,6 @@ import {
   FileText,
 } from 'lucide-react';
 
-const contracts = [
-  {
-    id: '1',
-    title: 'Arbeitsvertrag_Schmidt_AG.pdf',
-    type: 'Arbeitsvertrag',
-    uploadDate: '15.8.2025',
-    status: 'analyzed',
-    risk: 'high',
-    size: '2.3 MB',
-  },
-  {
-    id: '2',
-    title: 'NDA_Startup_Kooperation.pdf',
-    type: 'Geheimhaltungsvereinbarung',
-    uploadDate: '30.9.2025',
-    status: 'analyzed',
-    risk: 'medium',
-    size: '1.8 MB',
-  },
-  {
-    id: '3',
-    title: 'AGB_Webshop_2025.pdf',
-    type: 'Allgemeine Geschäftsbedingungen',
-    uploadDate: '31.12.2025',
-    status: 'analyzed',
-    risk: 'low',
-    size: '4.1 MB',
-  },
-];
 
 const getRiskBadge = (risk: string) => {
   switch (risk) {
@@ -107,7 +78,18 @@ const getStatusText = (status: string) => {
 export default function ContractsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { uploadDocumentDirect, uploading, uploadProgress, error, clearError } = useDocumentUpload();
+  const { getDocuments, deleteDocument, documents, pagination, loading: documentsLoading, error: documentsError, clearError: clearDocumentsError } = useDocuments();
   const [dragActive, setDragActive] = useState(false);
+
+  // Fetch documents on component mount
+  useEffect(() => {
+    getDocuments({
+      page: 1,
+      limit: 10,
+      sortBy: 'uploadedAt',
+      sortOrder: 'desc'
+    });
+  }, [getDocuments]);
 
   const handleFileSelect = (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -145,8 +127,13 @@ export default function ContractsPage() {
 
       if (result) {
         alert('Vertrag erfolgreich hochgeladen!');
-        // Refresh the page or update the contracts list
-        window.location.reload();
+        // Refresh the documents list
+        getDocuments({
+          page: 1,
+          limit: 10,
+          sortBy: 'uploadedAt',
+          sortOrder: 'desc'
+        });
       }
     } catch (err) {
       console.error('Upload error:', err);
@@ -175,6 +162,24 @@ export default function ContractsPage() {
 
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       handleFileSelect(e.dataTransfer.files);
+    }
+  };
+
+  const handleDeleteDocument = async (documentId: string, fileName: string) => {
+    if (!confirm(`Sind Sie sicher, dass Sie "${fileName}" löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden.`)) {
+      return;
+    }
+
+    try {
+      const success = await deleteDocument(documentId);
+      if (success) {
+        alert('Dokument erfolgreich gelöscht!');
+      } else {
+        alert('Fehler beim Löschen des Dokuments.');
+      }
+    } catch (err) {
+      console.error('Delete error:', err);
+      alert('Fehler beim Löschen des Dokuments.');
     }
   };
 
@@ -272,69 +277,104 @@ export default function ContractsPage() {
             <CardTitle>Analysierte Verträge</CardTitle>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Titel</TableHead>
-                  <TableHead>Risiko</TableHead>
-                  <TableHead>Frist</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Aktionen</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {contracts.map((contract) => (
-                  <TableRow key={contract.id}>
-                    <TableCell>
-                      <div className="space-y-1">
-                        <div className="font-medium">{contract.title}</div>
-                        <div className="text-sm text-muted-foreground">
-                          {contract.uploadDate} • {contract.size}
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {getRiskBadge(contract.risk)}
-                    </TableCell>
-                    <TableCell>
-                      <div className="text-sm">
-                        {contract.uploadDate}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center space-x-2">
-                        {getStatusIcon(contract.status)}
-                        <span className="text-sm">{getStatusText(contract.status)}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" className="h-8 w-8 p-0">
-                            <span className="sr-only">Aktionen öffnen</span>
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem>
-                            <Eye className="mr-2 h-4 w-4" />
-                            Details
-                          </DropdownMenuItem>
-                          <DropdownMenuItem>
-                            <Download className="mr-2 h-4 w-4" />
-                            Herunterladen
-                          </DropdownMenuItem>
-                          <DropdownMenuItem className="text-red-600">
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Löschen
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
+            {documentsLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="text-sm text-muted-foreground">Lade Dokumente...</div>
+              </div>
+            ) : documentsError ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="text-sm text-red-600">
+                  Fehler beim Laden der Dokumente: {documentsError}
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="ml-2"
+                    onClick={() => {
+                      clearDocumentsError();
+                      getDocuments({
+                        page: 1,
+                        limit: 10,
+                        sortBy: 'uploadedAt',
+                        sortOrder: 'desc'
+                      });
+                    }}
+                  >
+                    Erneut versuchen
+                  </Button>
+                </div>
+              </div>
+            ) : documents.length === 0 ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="text-sm text-muted-foreground">Keine Dokumente gefunden</div>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Titel</TableHead>
+                    <TableHead>Risiko</TableHead>
+                    <TableHead>Hochgeladen</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Aktionen</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {documents.map((document) => (
+                    <TableRow key={document.documentId}>
+                      <TableCell>
+                        <div className="space-y-1">
+                          <div className="font-medium">{document.fileName || document.originalName || 'Unbekannt'}</div>
+                          <div className="text-sm text-muted-foreground">
+                            {document.uploadedAt ? new Date(document.uploadedAt).toLocaleDateString('de-DE') : 'Unbekannt'} • {document.size ? `${(document.size / 1024 / 1024).toFixed(1)} MB` : 'Unbekannt'}
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {getRiskBadge(document.riskLevel || 'unknown')}
+                      </TableCell>
+                      <TableCell>
+                        <div className="text-sm">
+                          {document.uploadedAt ? new Date(document.uploadedAt).toLocaleDateString('de-DE') : 'Unbekannt'}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center space-x-2">
+                          {getStatusIcon(document.status || 'unknown')}
+                          <span className="text-sm">{getStatusText(document.status || 'unknown')}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" className="h-8 w-8 p-0">
+                              <span className="sr-only">Aktionen öffnen</span>
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem>
+                              <Eye className="mr-2 h-4 w-4" />
+                              Details
+                            </DropdownMenuItem>
+                            <DropdownMenuItem>
+                              <Download className="mr-2 h-4 w-4" />
+                              Herunterladen
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              className="text-red-600"
+                              onClick={() => handleDeleteDocument(document.documentId, document.fileName || 'Unbekannt')}
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Löschen
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </CardContent>
         </Card>
       </div>

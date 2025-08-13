@@ -13,6 +13,7 @@ import {
   SortOptions,
   DocumentFilters 
 } from '../services';
+import { UserRepository } from '../repositories/UserRepository';
 
 interface DocumentUploadRequest {
   fileName: string;
@@ -29,87 +30,14 @@ export class DocumentController extends BaseController {
   private readonly storageService: StorageService;
   private readonly firestoreService: FirestoreService;
   private readonly analysisService: AnalysisService;
+  private readonly userRepository: UserRepository;
 
   constructor() {
     super();
     this.storageService = new StorageService();
     this.firestoreService = new FirestoreService();
     this.analysisService = new AnalysisService();
-  }
-
-  /**
-   * Upload document
-   * POST /api/documents/
-   */
-  public async uploadDocument(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const userId = this.getUserId(req);
-      const { fileName, contentType, size, metadata }: DocumentUploadRequest = req.body;
-
-      // Validate request
-      const missingFields = this.validateRequiredFields(req.body, ['fileName', 'contentType', 'size']);
-      if (missingFields.length > 0) {
-        this.sendError(res, 400, 'Missing required fields', `Required: ${missingFields.join(', ')}`);
-        return;
-      }
-
-      this.logger.info('Document upload requested', {
-        userId,
-        fileName,
-        contentType,
-        size
-      });
-
-      // Validate file type and size
-      this.storageService.validateFileUpload(contentType, size);
-
-      // Check user storage quota
-      const quotaInfo = await this.storageService.checkStorageQuota(userId, size);
-      if (quotaInfo.available < 0) {
-        this.sendError(res, 413, 'Storage quota exceeded', 
-          `Upload would exceed storage limit. Used: ${(quotaInfo.used / 1024 / 1024).toFixed(2)}MB, Limit: ${(quotaInfo.limit / 1024 / 1024).toFixed(2)}MB`);
-        return;
-      }
-
-      // Generate upload URL and document ID
-      const documentId = this.generateDocumentId();
-      const { uploadUrl, expiresAt } = await this.storageService.generateUploadUrl(
-        documentId, 
-        fileName, 
-        contentType, 
-        userId
-      );
-
-      // Create document record
-      await this.firestoreService.createDocument(userId, documentId, {
-        fileName,
-        contentType,
-        size,
-        uploadedAt: new Date().toISOString(),
-        status: 'uploading',
-        ...metadata
-      });
-
-      this.sendSuccess(res, {
-        documentId,
-        uploadUrl,
-        expiresAt: expiresAt.toISOString(),
-        expiresIn: 3600, // 1 hour
-        quotaInfo: {
-          used: quotaInfo.used,
-          limit: quotaInfo.limit,
-          available: quotaInfo.available,
-          usagePercentage: Math.round(quotaInfo.percentage * 100)
-        }
-      }, 'Upload URL generated successfully');
-
-    } catch (error) {
-      this.logger.error('Document upload failed', error as Error, {
-        userId: this.getUserId(req),
-        body: req.body
-      });
-      next(error);
-    }
+    this.userRepository = new UserRepository();
   }
 
   /**
@@ -333,9 +261,9 @@ export class DocumentController extends BaseController {
         return;
       }
 
-      // Check if document exists and user has access
-      const document = await this.firestoreService.getDocument(documentId, userId);
-      if (!document) {
+      // Check if user has access to this document by checking if documentId is in user's documentIds array
+      const user = await this.userRepository.findByUid(userId);
+      if (!user || !user.documentIds || !user.documentIds.includes(documentId)) {
         this.sendError(res, 404, 'Document not found');
         return;
       }
@@ -350,7 +278,7 @@ export class DocumentController extends BaseController {
 
       // Delete document from storage and database
       await Promise.all([
-        this.storageService.deleteDocument(documentId, document.fileName, userId),
+        this.storageService.deleteDocument(documentId, userId),
         this.firestoreService.deleteDocument(documentId, userId)
       ]);
 
