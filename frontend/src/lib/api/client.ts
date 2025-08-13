@@ -107,6 +107,16 @@ class ApiClient {
   }
 
   /**
+   * PATCH request
+   */
+  async patch<T = unknown>(endpoint: string, data?: unknown): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, {
+      method: 'PATCH',
+      body: data ? JSON.stringify(data) : undefined,
+    });
+  }
+
+  /**
    * Upload file with progress
    */
   async uploadFile<T = unknown>(
