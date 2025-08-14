@@ -57,7 +57,7 @@ const uploadDocumentDirectSchema = Joi.object({
       'string.pattern.base': 'Invalid base64 content format'
     }),
   metadata: Joi.object({
-    category: Joi.string().valid('contract', 'legal_document', 'policy', 'other'),
+    category: Joi.string().valid('contract', 'nda', 'other'),
     description: Joi.string().max(1000),
     tags: Joi.array().items(Joi.string().max(50)).max(10)
   }).optional()

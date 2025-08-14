@@ -17,12 +17,6 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -42,7 +36,6 @@ import {
   Upload,
   Search,
   Filter,
-  MoreHorizontal,
   Eye,
   Download,
   Trash2,
@@ -63,6 +56,32 @@ const getRiskBadge = (risk: string) => {
       return <Badge variant="secondary">Niedrig</Badge>;
     default:
       return <Badge variant="outline">Unbekannt</Badge>;
+  }
+};
+
+const getCategoryBadge = (category: string) => {
+  switch (category) {
+    case 'contract':
+      return <Badge variant="default">Vertrag</Badge>;
+    case 'nda':
+      return <Badge variant="secondary">NDA</Badge>;
+    case 'other':
+      return <Badge variant="outline">Sonstiges</Badge>;
+    default:
+      return <Badge variant="outline">Unbekannt</Badge>;
+  }
+};
+
+const getCategoryDisplayName = (category: string) => {
+  switch (category) {
+    case 'contract':
+      return 'Verträge';
+    case 'nda':
+      return 'Geheimhaltungsvereinbarungen (NDA)';
+    case 'other':
+      return 'Sonstige Dokumente';
+    default:
+      return 'Unbekannte Kategorie';
   }
 };
 
@@ -103,6 +122,16 @@ export default function ContractsPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<'contract' | 'nda' | 'other'>('contract');
   const { toast } = useToast();
+
+  // Group documents by category
+  const groupedDocuments = documents.reduce((groups: Record<string, any[]>, document) => {
+    const category = document.documentMetadata?.category || 'other';
+    if (!groups[category]) {
+      groups[category] = [];
+    }
+    groups[category].push(document);
+    return groups;
+  }, {});
 
   // Fetch documents on component mount
   useEffect(() => {
@@ -337,72 +366,77 @@ export default function ContractsPage() {
                 <div className="text-sm text-muted-foreground">Keine Dokumente gefunden</div>
               </div>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Titel</TableHead>
-                    <TableHead>Risiko</TableHead>
-                    <TableHead>Hochgeladen</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Aktionen</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {documents.map((document) => (
-                    <TableRow key={document.documentId}>
-                      <TableCell>
-                        <div className="space-y-1">
-                          <div className="font-medium">{document.documentMetadata.fileName || document.documentMetadata.originalName || 'Unbekannt'}</div>
-                          <div className="text-sm text-muted-foreground">
-                            {document.documentMetadata.uploadedAt ? new Date(document.documentMetadata.uploadedAt).toLocaleDateString('de-DE') : 'Unbekannt'} • {document.documentMetadata.size ? `${(document.documentMetadata.size / 1024 / 1024).toFixed(1)} MB` : 'Unbekannt'}
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {getRiskBadge(document.documentMetadata.riskLevel || 'unknown')}
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-sm">
-                          {document.documentMetadata.uploadedAt ? new Date(document.documentMetadata.uploadedAt).toLocaleDateString('de-DE') : 'Unbekannt'}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center space-x-2">
-                          {getStatusIcon(document.documentMetadata.status || 'unknown')}
-                          <span className="text-sm">{getStatusText(document.documentMetadata.status || 'unknown')}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" className="h-8 w-8 p-0">
-                              <span className="sr-only">Aktionen öffnen</span>
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem>
-                              <Eye className="mr-2 h-4 w-4" />
-                              Details
-                            </DropdownMenuItem>
-                            <DropdownMenuItem>
-                              <Download className="mr-2 h-4 w-4" />
-                              Herunterladen
-                            </DropdownMenuItem>
-                            <DropdownMenuItem 
-                              className="text-red-600"
-                              onClick={() => handleDeleteDocument(document.documentId, document.documentMetadata.fileName || 'Unbekannt')}
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              Löschen
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <div className="space-y-6">
+                {Object.entries(groupedDocuments).map(([category, categoryDocuments]) => (
+                  <div key={category} className="space-y-3">
+                    <div className="flex items-center space-x-2">
+                      <h3 className="text-lg font-semibold">{getCategoryDisplayName(category)}</h3>
+                      {getCategoryBadge(category)}
+                      <span className="text-sm text-muted-foreground">({categoryDocuments.length})</span>
+                    </div>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Titel</TableHead>
+                          <TableHead>Risiko</TableHead>
+                          <TableHead>Hochgeladen</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Aktionen</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {categoryDocuments.map((document) => (
+                          <TableRow key={document.documentId}>
+                            <TableCell>
+                              <div className="space-y-1">
+                                <div className="font-medium">{document.documentMetadata.fileName || document.documentMetadata.originalName || 'Unbekannt'}</div>
+                                <div className="text-sm text-muted-foreground">
+                                  {document.documentMetadata.uploadedAt ? new Date(document.documentMetadata.uploadedAt).toLocaleDateString('de-DE') : 'Unbekannt'} • {document.documentMetadata.size ? `${(document.documentMetadata.size / 1024 / 1024).toFixed(1)} MB` : 'Unbekannt'}
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {getRiskBadge(document.documentMetadata.riskLevel || 'unknown')}
+                            </TableCell>
+                            <TableCell>
+                              <div className="text-sm">
+                                {document.documentMetadata.uploadedAt ? new Date(document.documentMetadata.uploadedAt).toLocaleDateString('de-DE') : 'Unbekannt'}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center space-x-2">
+                                {getStatusIcon(document.documentMetadata.status || 'unknown')}
+                                <span className="text-sm">{getStatusText(document.documentMetadata.status || 'unknown')}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center space-x-2">
+                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                  <Eye className="h-4 w-4" />
+                                  <span className="sr-only">Details</span>
+                                </Button>
+                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                  <Download className="h-4 w-4" />
+                                  <span className="sr-only">Herunterladen</span>
+                                </Button>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                  onClick={() => handleDeleteDocument(document.documentId, document.documentMetadata.fileName || 'Unbekannt')}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                  <span className="sr-only">Löschen</span>
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ))}
+              </div>
             )}
           </CardContent>
         </Card>
