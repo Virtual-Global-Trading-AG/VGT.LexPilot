@@ -4,22 +4,36 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Database } from 'lucide-react';
 import apiClient from '@/lib/api/client';
+import { useToast } from '@/lib/hooks/use-toast';
 
 export default function IndexLawButton() {
   const [isLoading, setIsLoading] = useState(false);
+  const { toast } = useToast();
 
   const handleIndexDsg = async () => {
     setIsLoading(true);
     try {
       const response = await apiClient.post('/admin/law-texts/index');
-      
+
       if (response.success) {
-        alert('Gesetze wurden erfolgreich indexiert.');
+        toast({
+          variant: "success",
+          title: "Indexierung erfolgreich",
+          description: "Gesetze wurden erfolgreich indexiert."
+        });
       } else {
-        alert(`Fehler: ${response.error || 'Indexierung fehlgeschlagen.'}`);
+        toast({
+          variant: "destructive",
+          title: "Indexierung fehlgeschlagen",
+          description: response.error || 'Indexierung fehlgeschlagen.'
+        });
       }
     } catch (error) {
-      alert('Beim Indexieren ist ein Fehler aufgetreten.');
+      toast({
+        variant: "destructive",
+        title: "Indexierung fehlgeschlagen",
+        description: "Beim Indexieren ist ein Fehler aufgetreten."
+      });
       console.error('Error indexing Law:', error);
     } finally {
       setIsLoading(false);

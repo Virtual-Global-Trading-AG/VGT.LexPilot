@@ -250,7 +250,7 @@ export function useDocumentUpload() {
   const uploadDocumentDirect = useCallback(async (
     file: File,
     metadata?: {
-      category?: 'contract' | 'legal_document' | 'policy' | 'other';
+      category?: 'contract' | 'nda' | 'other';
       description?: string;
       tags?: string[];
     }

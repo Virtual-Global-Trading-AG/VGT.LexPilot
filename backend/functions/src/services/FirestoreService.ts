@@ -1,3 +1,4 @@
+import { UserDocument } from '@models/index';
 import { UserRepository } from '@repositories/UserRepository';
 import * as admin from 'firebase-admin';
 import { Logger } from '../utils/logger';
@@ -51,19 +52,38 @@ export class FirestoreService {
         throw new Error(`User not found: ${userId}`);
       }
 
-      const updatedUser = {
-        ...user,
-        documentIds: [...user?.documentIds ?? [], documentId]
+      const documentData: DocumentMetadata = {
+        fileName: metadata.fileName || '',
+        size: metadata.size || 0,
+        contentType: metadata.contentType || '',
+        uploadedAt: metadata.uploadedAt || new Date().toISOString(),
+        status: metadata.status || 'uploaded',
+        category: metadata.category,
+        description: metadata.description || '',
+        tags: metadata.tags || []
       };
 
 
-      this.userRepo.update(user!.id, updatedUser);
+      // Create UserDocument object with metadata
+      const userDocument: UserDocument = {
+        documentId,
+        documentMetadata: documentData,
+        addedAt: new Date().toISOString()
+      };
+
+      // Update user's documents array
+      const updatedUser = {
+        ...user,
+        documents: [...user?.documents ?? [], userDocument]
+      };
+
+      await this.userRepo.update(user!.id, updatedUser);
 
 
       this.logger.info('Document record created', {
         userId,
         documentId,
-        documentIds: updatedUser.documentIds
+        documentData
       });
     } catch (error) {
       this.logger.error('Failed to create document record', error as Error, {
@@ -76,41 +96,6 @@ export class FirestoreService {
   }
 
   /**
-   * Get document by ID
-   */
-  async getDocument(documentId: string, userId: string): Promise<DocumentMetadata | null> {
-    try {
-      const docRef = this.db
-        .collection('users')
-        .doc(userId)
-        .collection('documents')
-        .doc(documentId);
-
-      const doc = await docRef.get();
-
-      if (!doc.exists) {
-        return null;
-      }
-
-      const data = doc.data() as DocumentMetadata;
-
-      this.logger.debug('Document retrieved', {
-        userId,
-        documentId,
-        fileName: data.fileName
-      });
-
-      return data;
-    } catch (error) {
-      this.logger.error('Failed to get document', error as Error, {
-        userId,
-        documentId
-      });
-      throw new Error('Failed to get document');
-    }
-  }
-
-  /**
    * Get user documents with pagination and filtering
    */
   async getUserDocuments(
@@ -118,7 +103,7 @@ export class FirestoreService {
     pagination: PaginationOptions,
     sort: SortOptions,
     filters: DocumentFilters = {}
-  ): Promise<PaginatedResult<DocumentMetadata>> {
+  ): Promise<PaginatedResult<UserDocument>> {
     try {
 
       // Get user document to retrieve documentIds array
@@ -128,9 +113,9 @@ export class FirestoreService {
         throw new Error('User not found');
       }
 
-      const documentIds: string[] = user.documentIds || [];
+      const documents: UserDocument[] = user.documents || [];
 
-      if (documentIds.length === 0) {
+      if (documents.length === 0) {
         return {
           items: [],
           page: pagination.page,
@@ -141,66 +126,53 @@ export class FirestoreService {
       }
 
       // Fetch documents from storage by their IDs
-      const documentsPromises = documentIds.map(async (docId) => {
+      const documentsPromises = documents.map(async (doc) => {
         try {
           // Get file information from storage
-          const fileInfo = await this.storageService.getDocumentFileInfo(docId, userId);
+          const fileInfo = await this.storageService.getDocumentFileInfo(doc.documentId, userId);
 
           if (!fileInfo) {
-            this.logger.warn('No file found in storage for document', { docId, userId });
+            this.logger.warn('No file found in storage for document', { documentId: doc.documentId, userId });
             return null;
           }
 
-          // Create DocumentMetadata from file information
-          const documentMetadata: DocumentMetadata = {
-            documentId: docId,
-            userId: userId,
-            fileName: fileInfo.fileName,
-            size: fileInfo.size,
-            contentType: fileInfo.contentType,
-            uploadedAt: fileInfo.uploadedAt.toISOString(),
-            status: 'uploaded', // Default status since we only have file info
-            tags: [],
-            description: ''
-          };
-
-          return documentMetadata;
+          return doc;
         } catch (error) {
-          this.logger.error('Failed to get file info for document', error as Error, { docId, userId });
+          this.logger.error('Failed to get file info for document', error as Error, { docId: doc.documentId, userId });
           return null;
         }
       });
 
       const allDocuments = (await Promise.all(documentsPromises))
-        .filter((doc): doc is DocumentMetadata => doc !== null);
+        .filter((doc): doc is UserDocument => doc !== null);
 
       // Apply filters
       let filteredDocuments = allDocuments;
 
       if (filters.status) {
-        filteredDocuments = filteredDocuments.filter(doc => doc.status === filters.status);
+        filteredDocuments = filteredDocuments.filter(doc => doc.documentMetadata.status === filters.status);
       }
 
       if (filters.category) {
-        filteredDocuments = filteredDocuments.filter(doc => doc.category === filters.category);
+        filteredDocuments = filteredDocuments.filter(doc => doc.documentMetadata.category === filters.category);
       }
 
       if (filters.startDate) {
         filteredDocuments = filteredDocuments.filter(doc => 
-          new Date(doc.uploadedAt) >= new Date(filters.startDate!)
+          new Date(doc.documentMetadata.uploadedAt) >= new Date(filters.startDate!)
         );
       }
 
       if (filters.endDate) {
         filteredDocuments = filteredDocuments.filter(doc => 
-          new Date(doc.uploadedAt) <= new Date(filters.endDate!)
+          new Date(doc.documentMetadata.uploadedAt) <= new Date(filters.endDate!)
         );
       }
 
       // Apply sorting
       filteredDocuments.sort((a, b) => {
-        const aValue = a[sort.field as keyof DocumentMetadata];
-        const bValue = b[sort.field as keyof DocumentMetadata];
+        const aValue = a.documentMetadata[sort.field as keyof DocumentMetadata];
+        const bValue = b.documentMetadata[sort.field as keyof DocumentMetadata];
 
         if (!aValue < !bValue) return sort.direction === 'asc' ? -1 : 1;
         if (!aValue > !bValue) return sort.direction === 'asc' ? 1 : -1;
@@ -213,7 +185,7 @@ export class FirestoreService {
       const offset = (pagination.page - 1) * pagination.limit;
       const paginatedDocuments = filteredDocuments.slice(offset, offset + pagination.limit);
 
-      const result: PaginatedResult<DocumentMetadata> = {
+      const result: PaginatedResult<UserDocument> = {
         items: paginatedDocuments,
         page: pagination.page,
         limit: pagination.limit,
@@ -288,17 +260,17 @@ export class FirestoreService {
       }
 
       // Remove documentId from the documentIds array
-      const updatedDocumentIds = (user.documentIds || []).filter(id => id !== documentId);
+      const updatedDocuments = (user.documents || []).filter(doc => doc.documentId !== documentId);
 
       // Update user document with new documentIds array
       await this.userRepo.update(user.id, {
-        documentIds: updatedDocumentIds
+        documents: updatedDocuments
       });
 
       this.logger.info('Document record deleted from user documentIds', {
         userId,
         documentId,
-        remainingDocuments: updatedDocumentIds.length
+        remainingDocuments: updatedDocuments.length
       });
     } catch (error) {
       this.logger.error('Failed to delete document record', error as Error, {

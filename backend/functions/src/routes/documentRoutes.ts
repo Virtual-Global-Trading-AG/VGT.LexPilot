@@ -31,7 +31,7 @@ const uploadDocumentSchema = Joi.object({
   ).required(),
   size: Joi.number().min(1).max(52428800).required(), // Max 50MB
   metadata: Joi.object({
-    category: Joi.string().valid('contract', 'legal_document', 'policy', 'other'),
+    category: Joi.string().valid('nda', 'contract', 'other'),
     description: Joi.string().max(1000),
     tags: Joi.array().items(Joi.string().max(50)).max(10)
   }).optional()
@@ -149,42 +149,9 @@ router.get('/stats',
   documentController.getStorageStats.bind(documentController)
 );
 
-router.get('/:documentId', 
-  documentController.getDocument.bind(documentController)
-);
-
-router.put('/:documentId',
-  ValidationMiddleware.validate({ body: updateDocumentSchema }),
-  documentController.updateDocument.bind(documentController)
-);
-
-router.patch('/:documentId/status',
-  ValidationMiddleware.validate({ body: updateStatusSchema }),
-  documentController.updateDocumentStatus.bind(documentController)
-);
 
 router.delete('/:documentId', 
   documentController.deleteDocument.bind(documentController)
-);
-
-// Document content routes
-router.get('/:documentId/content', 
-  documentController.getDocumentContent.bind(documentController)
-);
-
-router.get('/:documentId/download', 
-  documentController.downloadDocument.bind(documentController)
-);
-
-// Document analysis routes
-router.post('/:documentId/analyze',
-  ValidationMiddleware.validate({ body: analyzeDocumentSchema }),
-  documentController.analyzeDocument.bind(documentController)
-);
-
-router.get('/:documentId/analyses',
-  ValidationMiddleware.validate({ query: paginationSchema }),
-  documentController.getDocumentAnalyses.bind(documentController)
 );
 
 router.get('/:documentId/analysis/:analysisId',
@@ -193,12 +160,6 @@ router.get('/:documentId/analysis/:analysisId',
 
 router.delete('/:documentId/analysis/:analysisId',
   documentController.cancelAnalysis.bind(documentController)
-);
-
-// RAG-Enhanced Analysis Routes
-router.post('/:documentId/analyze-rag',
-  ValidationMiddleware.validate({ body: ragAnalysisSchema }),
-  documentController.analyzeContractWithRAG.bind(documentController)
 );
 
 // DSGVO Compliance Check (Text Input)

@@ -129,7 +129,7 @@ export class UserRepository extends BaseRepository<User> {
             averageConfidence: 0,
             lastActivity: new Date()
           },
-          documentIds: []
+          documents: []
         });
 
         const newUser = await this.findById(newUserId);

@@ -5,15 +5,13 @@ import { Logger } from '../utils/logger';
 import { config } from '../config/environment';
 
 export interface DocumentMetadata {
-  documentId: string;
-  userId: string;
   fileName: string;
   contentType: string;
   size: number;
   uploadedAt: string;
   processedAt?: string;
   status: 'uploading' | 'uploaded' | 'processing' | 'processed' | 'error';
-  category?: 'contract' | 'legal_document' | 'policy' | 'other';
+  category?: 'contract' | 'nda' | 'other';
   description?: string;
   tags?: string[];
   analyses?: string[];

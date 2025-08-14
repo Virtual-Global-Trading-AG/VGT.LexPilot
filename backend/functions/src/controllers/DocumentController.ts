@@ -1,19 +1,9 @@
 import { HumanMessage } from '@langchain/core/messages';
 import { ChatOpenAI } from '@langchain/openai';
-import { Request, Response, NextFunction } from 'express';
-import { BaseController } from './BaseController';
-import { Logger } from '../utils/logger';
-import { 
-  StorageService, 
-  FirestoreService, 
-  AnalysisService,
-  DocumentMetadata,
-  StorageQuotaInfo,
-  PaginationOptions,
-  SortOptions,
-  DocumentFilters 
-} from '../services';
+import { NextFunction, Request, Response } from 'express';
 import { UserRepository } from '../repositories/UserRepository';
+import { AnalysisService, DocumentFilters, FirestoreService, PaginationOptions, SortOptions, StorageService } from '../services';
+import { BaseController } from './BaseController';
 
 interface DocumentUploadRequest {
   fileName: string;
@@ -120,50 +110,6 @@ export class DocumentController extends BaseController {
   }
 
   /**
-   * Get document details
-   * GET /api/documents/:documentId
-   */
-  public async getDocument(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const userId = this.getUserId(req);
-      const { documentId } = req.params;
-
-      if (!documentId) {
-        this.sendError(res, 400, 'Missing documentId parameter');
-        return;
-      }
-
-      const document = await this.firestoreService.getDocument(documentId, userId);
-
-      if (!document) {
-        this.sendError(res, 404, 'Document not found');
-        return;
-      }
-
-      this.sendSuccess(res, {
-        documentId,
-        fileName: document.fileName,
-        contentType: document.contentType,
-        size: document.size,
-        status: document.status,
-        uploadedAt: document.uploadedAt,
-        processedAt: document.processedAt,
-        category: document.category,
-        description: document.description,
-        tags: document.tags,
-        analyses: document.analyses || []
-      });
-
-    } catch (error) {
-      this.logger.error('Get document failed', error as Error, {
-        userId: this.getUserId(req),
-        documentId: req.params.documentId
-      });
-      next(error);
-    }
-  }
-
-  /**
    * List user documents
    * GET /api/documents
    */
@@ -203,51 +149,6 @@ export class DocumentController extends BaseController {
   }
 
   /**
-   * Update document metadata
-   * PUT /api/documents/:documentId
-   */
-  public async updateDocument(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const userId = this.getUserId(req);
-      const { documentId } = req.params;
-      const { title, description, tags, category } = req.body;
-
-      if (!documentId) {
-        this.sendError(res, 400, 'Missing documentId parameter');
-        return;
-      }
-
-      // Check if document exists and user has access
-      const document = await this.firestoreService.getDocument(documentId, userId);
-      if (!document) {
-        this.sendError(res, 404, 'Document not found');
-        return;
-      }
-
-      // Update document metadata
-      await this.firestoreService.updateDocument(documentId, userId, {
-        ...(title && { fileName: title }), // Allow renaming via title
-        ...(description && { description }),
-        ...(tags && { tags }),
-        ...(category && { category })
-      });
-
-      this.sendSuccess(res, {
-        documentId,
-        message: 'Document updated successfully'
-      });
-
-    } catch (error) {
-      this.logger.error('Update document failed', error as Error, {
-        userId: this.getUserId(req),
-        documentId: req.params.documentId,
-        body: req.body
-      });
-      next(error);
-    }
-  }
-
-  /**
    * Delete document
    * DELETE /api/documents/:documentId
    */
@@ -263,7 +164,7 @@ export class DocumentController extends BaseController {
 
       // Check if user has access to this document by checking if documentId is in user's documentIds array
       const user = await this.userRepository.findByUid(userId);
-      if (!user || !user.documentIds || !user.documentIds.includes(documentId)) {
+      if (!user || !user.documents || !user.documents.some(document => document.documentId === documentId)) {
         this.sendError(res, 404, 'Document not found');
         return;
       }
@@ -289,102 +190,6 @@ export class DocumentController extends BaseController {
 
     } catch (error) {
       this.logger.error('Delete document failed', error as Error, {
-        userId: this.getUserId(req),
-        documentId: req.params.documentId
-      });
-      next(error);
-    }
-  }
-
-  /**
-   * Get document content
-   * GET /api/documents/:documentId/content
-   */
-  public async getDocumentContent(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const userId = this.getUserId(req);
-      const { documentId } = req.params;
-
-      if (!documentId) {
-        this.sendError(res, 400, 'Missing documentId parameter');
-        return;
-      }
-
-      const document = await this.firestoreService.getDocument(documentId, userId);
-      if (!document) {
-        this.sendError(res, 404, 'Document not found');
-        return;
-      }
-
-      // Get document content from storage
-      let content: string | null = null;
-      try {
-        const buffer = await this.storageService.getDocumentContent(documentId, document.fileName, userId);
-        content = buffer.toString('utf-8');
-      } catch (error) {
-        this.logger.warn('Failed to get document content from storage', {
-          documentId,
-          userId,
-          error: (error as Error).message
-        });
-      }
-
-      this.sendSuccess(res, {
-        documentId,
-        content,
-        contentType: document.contentType,
-        isProcessed: document.status === 'processed',
-        fileName: document.fileName,
-        size: document.size
-      });
-
-    } catch (error) {
-      this.logger.error('Get document content failed', error as Error, {
-        userId: this.getUserId(req),
-        documentId: req.params.documentId
-      });
-      next(error);
-    }
-  }
-
-  /**
-   * Download document
-   * GET /api/documents/:documentId/download
-   */
-  public async downloadDocument(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const userId = this.getUserId(req);
-      const { documentId } = req.params;
-
-      if (!documentId) {
-        this.sendError(res, 400, 'Missing documentId parameter');
-        return;
-      }
-
-      const document = await this.firestoreService.getDocument(documentId, userId);
-      if (!document) {
-        this.sendError(res, 404, 'Document not found');
-        return;
-      }
-
-      // Generate signed download URL
-      const { downloadUrl, expiresAt } = await this.storageService.generateDownloadUrl(
-        documentId, 
-        document.fileName, 
-        userId
-      );
-
-      this.sendSuccess(res, {
-        downloadUrl,
-        fileName: document.fileName,
-        contentType: document.contentType,
-        size: document.size,
-        expiresAt: expiresAt.toISOString(),
-        expiresIn: 3600 // 1 hour
-      });
-
-    } catch (error) {
-      this.logger.error('Download document failed', error as Error, {
         userId: this.getUserId(req),
         documentId: req.params.documentId
       });
@@ -482,138 +287,6 @@ export class DocumentController extends BaseController {
   }
 
   /**
-   * Update document status
-   * PATCH /api/documents/:documentId/status
-   */
-  public async updateDocumentStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const userId = this.getUserId(req);
-      const { documentId } = req.params;
-      const { status } = req.body;
-
-      if (!documentId) {
-        this.sendError(res, 400, 'Missing documentId parameter');
-        return;
-      }
-
-      if (!status) {
-        this.sendError(res, 400, 'Missing status in request body');
-        return;
-      }
-
-      const validStatuses: DocumentMetadata['status'][] = [
-        'uploading', 'uploaded', 'processing', 'processed', 'error'
-      ];
-
-      if (!validStatuses.includes(status)) {
-        this.sendError(res, 400, 'Invalid status', 
-          `Valid statuses: ${validStatuses.join(', ')}`);
-        return;
-      }
-
-      // Check if document exists and user has access
-      const document = await this.firestoreService.getDocument(documentId, userId);
-      if (!document) {
-        this.sendError(res, 404, 'Document not found');
-        return;
-      }
-
-      // Update document status
-      await this.firestoreService.updateDocumentStatus(documentId, userId, status);
-
-      this.sendSuccess(res, {
-        documentId,
-        status,
-        message: 'Document status updated successfully'
-      });
-
-    } catch (error) {
-      this.logger.error('Update document status failed', error as Error, {
-        userId: this.getUserId(req),
-        documentId: req.params.documentId,
-        body: req.body
-      });
-      next(error);
-    }
-  }
-
-  /**
-   * Start document analysis
-   * POST /api/documents/:documentId/analyze
-   */
-  public async analyzeDocument(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const userId = this.getUserId(req);
-      const { documentId } = req.params;
-      const { analysisType, options } = req.body;
-
-      // Validate request
-      if (!documentId) {
-        this.sendError(res, 400, 'Document ID is required');
-        return;
-      }
-
-      if (!analysisType || !['gdpr', 'contract_risk', 'legal_review'].includes(analysisType)) {
-        this.sendError(res, 400, 'Valid analysis type is required', 
-          'Supported types: gdpr, contract_risk, legal_review');
-        return;
-      }
-
-      // Check if document exists
-      const document = await this.firestoreService.getDocument(documentId, userId);
-      if (!document) {
-        this.sendError(res, 404, 'Document not found');
-        return;
-      }
-
-      // Check if document is processed
-      if (document.status !== 'uploaded' && document.status !== 'processed') {
-        this.sendError(res, 400, 'Document must be uploaded before analysis');
-        return;
-      }
-
-      this.logger.info('Starting document analysis', {
-        userId,
-        documentId,
-        analysisType,
-        options
-      });
-
-      // Start analysis
-      const analysisId = await this.analysisService.startAnalysis({
-        documentId,
-        userId,
-        analysisType,
-        options: {
-          priority: options?.priority || 'normal',
-          notifyByEmail: options?.notifyByEmail || false,
-          detailedReport: options?.detailedReport || true,
-          language: options?.language || 'de'
-        }
-      });
-
-      this.sendSuccess(res, {
-        analysisId,
-        documentId,
-        analysisType,
-        status: 'started',
-        message: 'Document analysis started successfully'
-      });
-
-      // Set status code manually
-      res.status(202);
-
-    } catch (error) {
-      this.logger.error('Document analysis start failed', error as Error, {
-        userId: this.getUserId(req),
-        documentId: req.params.documentId,
-        body: req.body
-      });
-      next(error);
-    }
-  }
-
-  /**
    * Get document analysis results
    * GET /api/documents/:documentId/analysis/:analysisId
    */
@@ -664,55 +337,6 @@ export class DocumentController extends BaseController {
   }
 
   /**
-   * List document analyses
-   * GET /api/documents/:documentId/analyses
-   */
-  public async getDocumentAnalyses(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const userId = this.getUserId(req);
-      const { documentId } = req.params;
-      const { status, type, page = 1, limit = 20 } = req.query;
-
-      // Validate request
-      if (!documentId) {
-        this.sendError(res, 400, 'Document ID is required');
-        return;
-      }
-
-      // Check if document exists
-      const document = await this.firestoreService.getDocument(documentId, userId);
-      if (!document) {
-        this.sendError(res, 404, 'Document not found');
-        return;
-      }
-
-      // Get analyses for this document
-      const analyses = await this.analysisService.listUserAnalyses(userId, {
-        status: status as string,
-        type: type as string,
-        page: parseInt(page as string),
-        limit: parseInt(limit as string)
-      });
-
-      // Filter by documentId (in production, this would be done in the query)
-      const filteredAnalyses = {
-        ...analyses,
-        items: analyses.items.filter(analysis => analysis.documentId === documentId)
-      };
-
-      this.sendSuccess(res, filteredAnalyses);
-
-    } catch (error) {
-      this.logger.error('Get document analyses failed', error as Error, {
-        userId: this.getUserId(req),
-        documentId: req.params.documentId,
-        query: req.query
-      });
-      next(error);
-    }
-  }
-
-  /**
    * Cancel document analysis
    * DELETE /api/documents/:documentId/analysis/:analysisId
    */
@@ -754,85 +378,6 @@ export class DocumentController extends BaseController {
         userId: this.getUserId(req),
         documentId: req.params.documentId,
         analysisId: req.params.analysisId
-      });
-      next(error);
-    }
-  }
-
-  /**
-   * RAG-Enhanced Contract Analysis
-   * POST /api/documents/:documentId/analyze-rag
-   */
-  public async analyzeContractWithRAG(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const userId = this.getUserId(req);
-      const { documentId } = req.params;
-      const { legalArea, jurisdiction, language } = req.body;
-
-      if (!documentId) {
-        this.sendError(res, 400, 'Document ID is required');
-        return;
-      }
-
-      // Validate document ownership
-      const document = await this.firestoreService.getDocument(documentId, userId);
-      if (!document) {
-        this.sendError(res, 404, 'Document not found');
-        return;
-      }
-
-      // Download document content
-      const downloadResult = await this.storageService.generateDownloadUrl(
-        documentId,
-        document.fileName,
-        userId
-      );
-
-      const response = await fetch(downloadResult.downloadUrl);
-      if (!response.ok) {
-        this.sendError(res, 500, 'Failed to download document content');
-        return;
-      }
-
-      const content = await response.text();
-
-      // Perform RAG-enhanced analysis
-      const result = await this.analysisService.analyzeContractWithRAG(
-        content,
-        userId,
-        { legalArea, jurisdiction, language }
-      );
-
-      this.sendSuccess(res, {
-        documentId,
-        analysis: result.analysis,
-        legalContext: {
-          foundSources: result.legalContext.documents.length,
-          averageRelevance: result.legalContext.scores.length > 0 
-            ? result.legalContext.scores.reduce((a, b) => a + b, 0) / result.legalContext.scores.length 
-            : 0,
-          sources: result.legalContext.documents.map(doc => ({
-            title: doc.metadata.title,
-            source: doc.metadata.source,
-            legalArea: doc.metadata.legalArea,
-            excerpt: doc.pageContent.substring(0, 200) + '...'
-          }))
-        },
-        recommendations: result.recommendations,
-        timestamp: new Date().toISOString()
-      });
-
-      this.logger.info('RAG contract analysis completed', {
-        userId,
-        documentId,
-        legalContextItems: result.legalContext.documents.length,
-        recommendationsCount: result.recommendations.length
-      });
-
-    } catch (error) {
-      this.logger.error('RAG contract analysis failed', error as Error, {
-        userId: this.getUserId(req),
-        documentId: req.params.documentId
       });
       next(error);
     }
