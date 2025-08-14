@@ -12,6 +12,7 @@ export interface DocumentMetadata {
   processedAt?: string;
   status: 'uploading' | 'uploaded' | 'processing' | 'processed' | 'error';
   category?: 'contract' | 'nda' | 'other';
+  anonymizedKeywords: string[];
   description?: string;
   tags?: string[];
   analyses?: string[];

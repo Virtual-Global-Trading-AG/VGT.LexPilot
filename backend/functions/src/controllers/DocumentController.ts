@@ -2,7 +2,7 @@ import { HumanMessage } from '@langchain/core/messages';
 import { ChatOpenAI } from '@langchain/openai';
 import { NextFunction, Request, Response } from 'express';
 import { UserRepository } from '../repositories/UserRepository';
-import { AnalysisService, DocumentFilters, FirestoreService, PaginationOptions, SortOptions, StorageService } from '../services';
+import { AnalysisService, DocumentFilters, FirestoreService, PaginationOptions, SortOptions, StorageService, TextExtractionService } from '../services';
 import { BaseController } from './BaseController';
 
 interface DocumentUploadRequest {
@@ -21,6 +21,7 @@ export class DocumentController extends BaseController {
   private readonly firestoreService: FirestoreService;
   private readonly analysisService: AnalysisService;
   private readonly userRepository: UserRepository;
+  private readonly textExtractionService: TextExtractionService;
 
   constructor() {
     super();
@@ -28,6 +29,7 @@ export class DocumentController extends BaseController {
     this.firestoreService = new FirestoreService();
     this.analysisService = new AnalysisService();
     this.userRepository = new UserRepository();
+    this.textExtractionService = new TextExtractionService();
   }
 
   /**
@@ -1025,6 +1027,101 @@ STIL: Professionell, präzise, praxisorientiert für beide Jurisdiktionen`;
         }
       } else {
         this.sendError(res, 500, 'Unerwarteter Fehler bei der Datenschutz-Analyse');
+      }
+
+      next(error);
+    }
+  }
+
+  /**
+   * Get document content as text by documentId
+   * GET /api/documents/:documentId/text
+   */
+  public async getDocumentAsText(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = this.getUserId(req);
+      const { documentId } = req.params;
+
+      if (!documentId) {
+        this.sendError(res, 400, 'Missing required parameter', 'documentId is required');
+        return;
+      }
+
+      this.logger.info('Document text extraction requested', {
+        userId,
+        documentId
+      });
+
+      // Get document metadata from Firestore
+      const document = await this.firestoreService.getDocument(documentId, userId);
+
+      if (!document) {
+        this.sendError(res, 404, 'Document not found', 'Document not found or access denied');
+        return;
+      }
+
+      // Get document content from storage
+      const documentBuffer = await this.storageService.getDocumentContent(
+        documentId,
+        document.fileName,
+        userId
+      );
+
+      // Extract text from document
+      const extractedText = await this.textExtractionService.extractText(
+        documentBuffer,
+        document.contentType,
+        document.fileName
+      );
+
+      // Clean and normalize the text
+      const cleanedText = extractedText; // this.textExtractionService.cleanText(extractedText);
+
+      // Replace specific texts from metadata or use generic replacement
+      let sanitizedText: string;
+      if (document.anonymizedKeywords?.length) {
+        sanitizedText = this.textExtractionService.replaceSpecificTexts(cleanedText, document.anonymizedKeywords);
+      } else {
+        this.logger.info('No anonymized keywords found, use unanonymized text', { cleanedTextLength: cleanedText.length});
+        sanitizedText = cleanedText;
+      }
+
+      this.logger.info('Document text extraction and sanitization completed', {
+        userId,
+        documentId,
+        fileName: document.fileName,
+        contentType: document.contentType,
+        originalLength: extractedText.length,
+        cleanedLength: cleanedText.length,
+        sanitizedLength: sanitizedText.length
+      });
+
+      this.sendSuccess(res, {
+        documentId,
+        fileName: document.fileName,
+        contentType: document.contentType,
+        size: document.size,
+        text: sanitizedText,
+        textLength: sanitizedText.length,
+        extractedAt: new Date().toISOString()
+      });
+
+    } catch (error) {
+      this.logger.error('Failed to extract document text', error as Error, {
+        userId: this.getUserId(req),
+        documentId: req.params.documentId
+      });
+
+      if (error instanceof Error) {
+        if (error.message.includes('not found')) {
+          this.sendError(res, 404, 'Document not found', error.message);
+        } else if (error.message.includes('Unsupported content type')) {
+          this.sendError(res, 400, 'Unsupported file type', error.message);
+        } else {
+          this.sendError(res, 500, 'Text extraction failed', error.message);
+        }
+      } else {
+        this.sendError(res, 500, 'Unexpected error during text extraction');
       }
 
       next(error);

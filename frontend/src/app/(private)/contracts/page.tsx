@@ -32,6 +32,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Upload,
   Search,
@@ -43,6 +44,9 @@ import {
   CheckCircle,
   Clock,
   FileText,
+  FileSearch,
+  X,
+  Plus,
 } from 'lucide-react';
 
 
@@ -114,14 +118,38 @@ const getStatusText = (status: string) => {
 export default function ContractsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { uploadDocumentDirect, uploading, uploadProgress, error, clearError } = useDocumentUpload();
-  const { getDocuments, deleteDocument, documents, pagination, loading: documentsLoading, error: documentsError, clearError: clearDocumentsError } = useDocuments();
+  const { getDocuments, deleteDocument, getDocumentText, documents, pagination, loading: documentsLoading, error: documentsError, clearError: clearDocumentsError } = useDocuments();
   const [dragActive, setDragActive] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [documentToDelete, setDocumentToDelete] = useState<{id: string, name: string} | null>(null);
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<'contract' | 'nda' | 'other'>('contract');
+  const [extractedText, setExtractedText] = useState<string>('');
+  const [extractingText, setExtractingText] = useState<boolean>(false);
+  const [extractedDocumentInfo, setExtractedDocumentInfo] = useState<{fileName: string, documentId: string} | null>(null);
+  const [anonymizedKeywords, setAnonymizedKeywords] = useState<string[]>([]);
+  const [currentTextInput, setCurrentTextInput] = useState('');
   const { toast } = useToast();
+
+  // Helper functions for managing texts to replace
+  const addTextToReplace = () => {
+    if (currentTextInput.trim() && !anonymizedKeywords.includes(currentTextInput.trim())) {
+      setAnonymizedKeywords([...anonymizedKeywords, currentTextInput.trim()]);
+      setCurrentTextInput('');
+    }
+  };
+
+  const removeTextToReplace = (index: number) => {
+    setAnonymizedKeywords(anonymizedKeywords.filter((_, i) => i !== index));
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      addTextToReplace();
+    }
+  };
 
   // Group documents by category
   const groupedDocuments = documents.reduce((groups: Record<string, any[]>, document) => {
@@ -183,7 +211,8 @@ export default function ContractsPage() {
     try {
       const result = await uploadDocumentDirect(file, {
         category: category,
-        description: `Hochgeladenes Dokument: ${file.name}`
+        description: `Hochgeladenes Dokument: ${file.name}`,
+        anonymizedKeywords: anonymizedKeywords.length > 0 ? anonymizedKeywords : undefined
       });
 
       if (result) {
@@ -192,6 +221,9 @@ export default function ContractsPage() {
           title: "Upload erfolgreich",
           description: "Vertrag wurde erfolgreich hochgeladen!"
         });
+        // Reset text replacement list
+        setAnonymizedKeywords([]);
+        setCurrentTextInput('');
         // Refresh the documents list
         getDocuments({
           page: 1,
@@ -222,6 +254,8 @@ export default function ContractsPage() {
     setCategoryDialogOpen(false);
     setSelectedFile(null);
     setSelectedCategory('contract');
+    setAnonymizedKeywords([]);
+    setCurrentTextInput('');
   };
 
   const handleButtonClick = () => {
@@ -292,6 +326,44 @@ export default function ContractsPage() {
     } finally {
       setDeleteDialogOpen(false);
       setDocumentToDelete(null);
+    }
+  };
+
+  const handleExtractText = async (documentId: string, fileName: string) => {
+    setExtractingText(true);
+    setExtractedText('');
+    setExtractedDocumentInfo(null);
+
+    try {
+      const result = await getDocumentText(documentId);
+
+      if (result.success && result.data) {
+        setExtractedText(result.data.text);
+        setExtractedDocumentInfo({
+          fileName: result.data.fileName,
+          documentId: result.data.documentId
+        });
+        toast({
+          variant: "success",
+          title: "Text extrahiert",
+          description: `Text wurde erfolgreich aus "${result.data.fileName}" extrahiert.`
+        });
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Textextraktion fehlgeschlagen",
+          description: result.error || "Fehler beim Extrahieren des Texts."
+        });
+      }
+    } catch (err) {
+      console.error('Text extraction error:', err);
+      toast({
+        variant: "destructive",
+        title: "Textextraktion fehlgeschlagen",
+        description: "Unerwarteter Fehler beim Extrahieren des Texts."
+      });
+    } finally {
+      setExtractingText(false);
     }
   };
 
@@ -422,6 +494,16 @@ export default function ContractsPage() {
                                 <Button 
                                   variant="ghost" 
                                   size="sm" 
+                                  className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                  onClick={() => handleExtractText(document.documentId, document.documentMetadata.fileName || 'Unbekannt')}
+                                  disabled={extractingText}
+                                >
+                                  <FileSearch className="h-4 w-4" />
+                                  <span className="sr-only">Text extrahieren</span>
+                                </Button>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
                                   className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
                                   onClick={() => handleDeleteDocument(document.documentId, document.documentMetadata.fileName || 'Unbekannt')}
                                 >
@@ -440,6 +522,62 @@ export default function ContractsPage() {
             )}
           </CardContent>
         </Card>
+
+        {/* Extracted Text Display */}
+        {extractedText && extractedDocumentInfo && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2">
+                <FileSearch className="h-5 w-5" />
+                <span>Extrahierter Text</span>
+              </CardTitle>
+              <div className="text-sm text-muted-foreground">
+                Dokument: {extractedDocumentInfo.fileName} • {extractedText.length} Zeichen
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                <Label htmlFor="extracted-text">Dokumentinhalt</Label>
+                <Textarea
+                  id="extracted-text"
+                  value={extractedText}
+                  readOnly
+                  className="min-h-[300px] font-mono text-sm"
+                  placeholder="Der extrahierte Text wird hier angezeigt..."
+                />
+                <div className="flex justify-between items-center text-xs text-muted-foreground">
+                  <span>Nur-Lesen Modus</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      navigator.clipboard.writeText(extractedText);
+                      toast({
+                        variant: "success",
+                        title: "Text kopiert",
+                        description: "Der extrahierte Text wurde in die Zwischenablage kopiert."
+                      });
+                    }}
+                  >
+                    Text kopieren
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Loading indicator for text extraction */}
+        {extractingText && (
+          <Card>
+            <CardContent className="py-8">
+              <div className="flex items-center justify-center space-x-2">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                <span className="text-sm text-muted-foreground">Text wird extrahiert...</span>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Delete Confirmation Dialog */}
@@ -532,6 +670,52 @@ export default function ContractsPage() {
                   <SelectItem value="other">Sonstiges</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+
+            {/* Text Replacement Section */}
+            <div className="space-y-2">
+              <Label>Texte zum Ersetzen (optional)</Label>
+              <p className="text-xs text-muted-foreground">
+                Geben Sie spezifische Texte an, die im Dokument durch Platzhalter ersetzt werden sollen.
+              </p>
+              <div className="flex space-x-2">
+                <Input
+                  placeholder="Text eingeben..."
+                  value={currentTextInput}
+                  onChange={(e) => setCurrentTextInput(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                  className="flex-1"
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={addTextToReplace}
+                  disabled={!currentTextInput.trim()}
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+              {anonymizedKeywords.length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-xs font-medium">Zu ersetzende Texte:</p>
+                  <div className="flex flex-wrap gap-1">
+                    {anonymizedKeywords.map((text, index) => (
+                      <Badge key={index} variant="secondary" className="text-xs">
+                        {text}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-auto p-0 ml-1"
+                          onClick={() => removeTextToReplace(index)}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter>

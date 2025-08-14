@@ -253,6 +253,7 @@ export function useDocumentUpload() {
       category?: 'contract' | 'nda' | 'other';
       description?: string;
       tags?: string[];
+      anonymizedKeywords?: string[];
     }
   ): Promise<{ documentId: string; fileName: string; size: number } | null> => {
     if (!isAuthenticated) {
@@ -395,9 +396,50 @@ export function useDocuments() {
     }
   }, [isAuthenticated]);
 
+  const getDocumentText = useCallback(async (documentId: string): Promise<{
+    success: boolean;
+    data?: {
+      documentId: string;
+      fileName: string;
+      contentType: string;
+      size: number;
+      text: string;
+      textLength: number;
+      extractedAt: string;
+    };
+    error?: string;
+  }> => {
+    if (!isAuthenticated) {
+      setError('Authentication required');
+      return { success: false, error: 'Authentication required' };
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await apiClient.get(`/documents/${documentId}/text`);
+
+      if (response.success && response.data) {
+        return { success: true, data: response.data };
+      } else {
+        const errorMsg = response.error || 'Failed to extract document text';
+        setError(errorMsg);
+        return { success: false, error: errorMsg };
+      }
+    } catch (err) {
+      const errorMsg = 'Network error while extracting document text';
+      setError(errorMsg);
+      return { success: false, error: errorMsg };
+    } finally {
+      setLoading(false);
+    }
+  }, [isAuthenticated]);
+
   return {
     getDocuments,
     deleteDocument,
+    getDocumentText,
     documents,
     pagination,
     loading,

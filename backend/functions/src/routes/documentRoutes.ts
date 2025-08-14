@@ -59,7 +59,8 @@ const uploadDocumentDirectSchema = Joi.object({
   metadata: Joi.object({
     category: Joi.string().valid('contract', 'nda', 'other'),
     description: Joi.string().max(1000),
-    tags: Joi.array().items(Joi.string().max(50)).max(10)
+    tags: Joi.array().items(Joi.string().max(50)).max(10),
+    anonymizedKeywords: Joi.array().items(Joi.string().min(1).max(500)).max(50)
   }).optional()
 });
 
@@ -152,6 +153,10 @@ router.get('/stats',
 
 router.delete('/:documentId', 
   documentController.deleteDocument.bind(documentController)
+);
+
+router.get('/:documentId/text',
+  documentController.getDocumentAsText.bind(documentController)
 );
 
 router.get('/:documentId/analysis/:analysisId',

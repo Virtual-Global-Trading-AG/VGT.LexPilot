@@ -59,6 +59,7 @@ export class FirestoreService {
         uploadedAt: metadata.uploadedAt || new Date().toISOString(),
         status: metadata.status || 'uploaded',
         category: metadata.category,
+        anonymizedKeywords: metadata.anonymizedKeywords || [],
         description: metadata.description || '',
         tags: metadata.tags || []
       };
@@ -209,6 +210,61 @@ export class FirestoreService {
         filters
       });
       throw new Error('Failed to get user documents');
+    }
+  }
+
+  /**
+   * Get a single document by ID
+   */
+  async getDocument(documentId: string, userId: string): Promise<any | null> {
+    try {
+      // Find the document in the user's documents array
+      const user = await this.userRepo.findByUid(userId);
+
+      if (!user) {
+        throw new Error('User not found');
+      }
+
+      const document = (user.documents || []).find(doc => doc.documentId === documentId);
+
+      if (!document) {
+        return null;
+      }
+
+      // Get additional file info from storage
+      const fileInfo = await this.storageService.getDocumentFileInfo(document.documentId, userId);
+
+      if (!fileInfo) {
+        return null;
+      }
+
+      const result = {
+        documentId: document.documentId,
+        fileName: fileInfo.fileName,
+        contentType: fileInfo.contentType,
+        size: fileInfo.size,
+        uploadedAt: document.documentMetadata.uploadedAt || fileInfo.uploadedAt.toISOString(),
+        status: document.documentMetadata.status || 'uploaded',
+        category: document.documentMetadata.category,
+        anonymizedKeywords: document.documentMetadata.anonymizedKeywords || [],
+        description: document.documentMetadata.description,
+        tags: document.documentMetadata.tags || [],
+        analyses: document.documentMetadata.analyses || [],
+      };
+
+      this.logger.debug('Document retrieved', {
+        userId,
+        documentId,
+        fileName: result.fileName
+      });
+
+      return result;
+    } catch (error) {
+      this.logger.error('Failed to get document', error as Error, {
+        userId,
+        documentId
+      });
+      throw new Error('Failed to get document');
     }
   }
 
