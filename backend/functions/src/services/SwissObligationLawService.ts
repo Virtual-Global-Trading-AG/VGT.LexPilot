@@ -22,6 +22,13 @@ export interface GeneratedQuery {
   relevanceScore?: number;
 }
 
+export interface DocumentContext {
+  documentType: string;
+  businessDomain: string;
+  keyTerms: string[];
+  contextDescription: string;
+}
+
 export interface SectionAnalysisResult {
   sectionId: string;
   sectionContent: string;
@@ -42,6 +49,7 @@ export interface SwissObligationAnalysisResult {
   analysisId: string;
   documentId: string;
   userId: string;
+  documentContext: DocumentContext;
   sections: SectionAnalysisResult[];
   overallCompliance: {
     isCompliant: boolean;
@@ -72,6 +80,67 @@ export class SwissObligationLawService {
   }
 
   /**
+   * Extract document context to understand the type and domain of the contract
+   */
+  private async extractDocumentContext(contractText: string): Promise<DocumentContext> {
+    const systemPrompt = `Du bist ein Experte für Vertragsanalyse. Analysiere den gegebenen Vertragstext und bestimme:
+
+1. Den Dokumenttyp (z.B. "Software-AGB", "Mietvertrag", "Arbeitsvertrag", "Kaufvertrag", "Dienstleistungsvertrag", etc.)
+2. Die Geschäftsdomäne (z.B. "Software/IT", "Immobilien", "Einzelhandel", "Beratung", etc.)
+3. Wichtige Schlüsselbegriffe, die den Kontext definieren
+4. Eine kurze Kontextbeschreibung
+
+Antworte im JSON-Format:
+{
+  "documentType": "Typ des Dokuments",
+  "businessDomain": "Geschäftsbereich",
+  "keyTerms": ["Begriff1", "Begriff2", "Begriff3"],
+  "contextDescription": "Kurze Beschreibung des Kontexts"
+}`;
+
+    const humanPrompt = `Analysiere diesen Vertragstext und bestimme den Kontext:
+
+"${contractText.slice(0, 2000)}..."
+
+Bestimme Dokumenttyp, Geschäftsdomäne und wichtige Schlüsselbegriffe:`;
+
+    try {
+      const response = await this.llm.invoke([
+        new SystemMessage(systemPrompt),
+        new HumanMessage(humanPrompt)
+      ]);
+
+      const content = response.content as string;
+
+      try {
+        const context = JSON.parse(content);
+        return {
+          documentType: context.documentType || 'Unbekannter Vertragstyp',
+          businessDomain: context.businessDomain || 'Unbekannte Domäne',
+          keyTerms: Array.isArray(context.keyTerms) ? context.keyTerms : [],
+          contextDescription: context.contextDescription || 'Keine Kontextbeschreibung verfügbar'
+        };
+      } catch (parseError) {
+        this.logger.warn('Failed to parse document context JSON, using fallback', { content });
+        return {
+          documentType: 'Allgemeiner Vertrag',
+          businessDomain: 'Allgemein',
+          keyTerms: [],
+          contextDescription: 'Automatische Kontextanalyse fehlgeschlagen'
+        };
+      }
+    } catch (error) {
+      this.logger.error('Error extracting document context', error as Error);
+      return {
+        documentType: 'Unbekannter Vertragstyp',
+        businessDomain: 'Unbekannte Domäne',
+        keyTerms: [],
+        contextDescription: 'Kontextanalyse nicht verfügbar'
+      };
+    }
+  }
+
+  /**
    * Main method to analyze a contract against Swiss obligation law
    */
   public async analyzeContractAgainstSwissLaw(
@@ -88,6 +157,15 @@ export class SwissObligationLawService {
         documentId,
         userId,
         textLength: contractText.length
+      });
+
+      // Step 0: Extract document context
+      progressCallback?.(5, 'Analyzing document context...');
+      const documentContext = await this.extractDocumentContext(contractText);
+
+      this.logger.info('Document context extracted', {
+        analysisId,
+        documentContext
       });
 
       // Step 1: Split contract into sections
@@ -113,7 +191,7 @@ export class SwissObligationLawService {
 
         progressCallback?.(sectionProgress, `Analyzing section ${i + 1} of ${totalSections}...`);
 
-        const sectionResult = await this.analyzeSectionAgainstSwissLaw(section, analysisId);
+        const sectionResult = await this.analyzeSectionAgainstSwissLaw(section, analysisId, documentContext);
         sectionResults.push(sectionResult);
       }
 
@@ -126,6 +204,7 @@ export class SwissObligationLawService {
         analysisId,
         documentId,
         userId,
+        documentContext,
         sections: sectionResults,
         overallCompliance,
         createdAt: new Date(),
@@ -399,10 +478,10 @@ export class SwissObligationLawService {
   /**
    * Analyze a single section against Swiss obligation law
    */
-  private async analyzeSectionAgainstSwissLaw(section: ContractSection, analysisId: string): Promise<SectionAnalysisResult> {
+  private async analyzeSectionAgainstSwissLaw(section: ContractSection, analysisId: string, documentContext: DocumentContext): Promise<SectionAnalysisResult> {
     try {
       // Step 1: Generate 3 queries for this section using ChatGPT
-      const queries = await this.generateQueriesForSection(section);
+      const queries = await this.generateQueriesForSection(section, documentContext);
 
       this.logger.info('Generated queries for section', {queries})
 
@@ -437,7 +516,8 @@ export class SwissObligationLawService {
       const complianceAnalysis = await this.analyzeComplianceWithContext(
         section,
         queries,
-        legalContext
+        legalContext,
+        documentContext
       );
 
       // Step 4: Generate findings and recommendations
@@ -465,22 +545,34 @@ export class SwissObligationLawService {
   /**
    * Generate 3 queries for a contract section using ChatGPT
    */
-  private async generateQueriesForSection(section: ContractSection): Promise<GeneratedQuery[]> {
+  private async generateQueriesForSection(section: ContractSection, documentContext: DocumentContext): Promise<GeneratedQuery[]> {
     const systemPrompt = `Du bist ein Experte für Schweizer Obligationenrecht. Du hast Zugang zu einer Vektordatenbank mit dem kompletten Schweizer Obligationenrecht.
 
 Deine Aufgabe ist es, für einen gegebenen Vertragsabschnitt 3 präzise Suchanfragen zu generieren, um relevante Artikel und Bestimmungen aus dem Obligationenrecht zu finden.
 
+WICHTIG: Berücksichtige dabei den spezifischen Kontext des Dokuments:
+- Dokumenttyp: ${documentContext.documentType}
+- Geschäftsbereich: ${documentContext.businessDomain}
+- Schlüsselbegriffe: ${documentContext.keyTerms.join(', ')}
+- Kontext: ${documentContext.contextDescription}
+
 Die Suchanfragen sollen:
-1. Spezifisch auf den Vertragsinhalt bezogen sein
-2. Relevante rechtliche Konzepte und Begriffe enthalten
-3. Verschiedene Aspekte des Abschnitts abdecken (z.B. Gültigkeit, Pflichten, Rechte)
+1. Spezifisch auf den Vertragsinhalt UND den Dokumentkontext bezogen sein
+2. Relevante rechtliche Konzepte für den spezifischen Geschäftsbereich enthalten
+3. Verschiedene Aspekte des Abschnitts im Kontext des Dokumenttyps abdecken
+4. Die Schlüsselbegriffe und den Geschäftsbereich in die Suche einbeziehen
 
 Antworte im JSON-Format mit einem Array von 3 Objekten, jedes mit "query" und "context" Feldern.`;
 
-    const humanPrompt = `Vertragsabschnitt:
+    const humanPrompt = `Dokumentkontext:
+- Typ: ${documentContext.documentType}
+- Geschäftsbereich: ${documentContext.businessDomain}
+- Beschreibung: ${documentContext.contextDescription}
+
+Vertragsabschnitt:
 "${section.content}"
 
-Generiere 3 Suchanfragen für die Obligationenrecht-Datenbank:`;
+Generiere 3 kontextspezifische Suchanfragen für die Obligationenrecht-Datenbank:`;
 
     try {
       const response = await this.llm.invoke([
@@ -504,32 +596,34 @@ Generiere 3 Suchanfragen für die Obligationenrecht-Datenbank:`;
       }
 
       // Fallback: generate basic queries
-      return this.generateFallbackQueries(section);
+      return this.generateFallbackQueries(section, documentContext);
 
     } catch (error) {
       this.logger.error('Error generating queries for section', error as Error, {
         sectionId: section.id
       });
-      return this.generateFallbackQueries(section);
+      return this.generateFallbackQueries(section, documentContext);
     }
   }
 
   /**
    * Generate fallback queries if ChatGPT fails
    */
-  private generateFallbackQueries(section: ContractSection): GeneratedQuery[] {
+  private generateFallbackQueries(section: ContractSection, documentContext: DocumentContext): GeneratedQuery[] {
+    const contextTerms = documentContext.keyTerms.length > 0 ? documentContext.keyTerms.join(' ') : documentContext.businessDomain;
+
     return [
       {
-        query: `Vertragsgültigkeit Obligationenrecht ${section.content.slice(0, 100)}`,
-        context: 'Prüfung der rechtlichen Gültigkeit des Vertragsabschnitts'
+        query: `${documentContext.documentType} Vertragsgültigkeit Obligationenrecht ${contextTerms} ${section.content.slice(0, 100)}`,
+        context: `Prüfung der rechtlichen Gültigkeit des Vertragsabschnitts im Kontext von ${documentContext.documentType}`
       },
       {
-        query: `Vertragspflichten Rechte Obligationen ${section.content.slice(0, 100)}`,
-        context: 'Analyse der Rechte und Pflichten der Vertragsparteien'
+        query: `${documentContext.businessDomain} Vertragspflichten Rechte Obligationen ${contextTerms} ${section.content.slice(0, 100)}`,
+        context: `Analyse der Rechte und Pflichten der Vertragsparteien im ${documentContext.businessDomain} Bereich`
       },
       {
-        query: `Vertragsbestimmungen Schweizer Recht ${section.content.slice(0, 100)}`,
-        context: 'Überprüfung der Vereinbarkeit mit Schweizer Obligationenrecht'
+        query: `${documentContext.documentType} ${documentContext.businessDomain} Vertragsbestimmungen Schweizer Recht ${section.content.slice(0, 100)}`,
+        context: `Überprüfung der Vereinbarkeit mit Schweizer Obligationenrecht für ${documentContext.documentType}`
       }
     ];
   }
@@ -540,24 +634,33 @@ Generiere 3 Suchanfragen für die Obligationenrecht-Datenbank:`;
   private async analyzeComplianceWithContext(
     section: ContractSection,
     queries: GeneratedQuery[],
-    legalContext: any[]
+    legalContext: any[],
+    documentContext: DocumentContext
   ): Promise<SectionAnalysisResult['complianceAnalysis']> {
     const systemPrompt = `Du bist ein Experte für Schweizer Obligationenrecht. Du analysierst Vertragsabschnitte auf ihre Rechtmässigkeit gemäss Schweizer Obligationenrecht.
 
+WICHTIGER DOKUMENTKONTEXT:
+- Dokumenttyp: ${documentContext.documentType}
+- Geschäftsbereich: ${documentContext.businessDomain}
+- Schlüsselbegriffe: ${documentContext.keyTerms.join(', ')}
+- Kontext: ${documentContext.contextDescription}
+
 Du erhältst:
-1. Einen Vertragsabschnitt
+1. Einen Vertragsabschnitt aus einem ${documentContext.documentType} im Bereich ${documentContext.businessDomain}
 2. Relevante Artikel aus dem Obligationenrecht als Kontext
 
 Deine Aufgabe ist es zu beurteilen:
-- Ist dieser Abschnitt gemäss Obligationenrecht zulässig?
-- Welche Verstösse gibt es (falls vorhanden)?
-- Welche Empfehlungen hast du?
+- Ist dieser Abschnitt gemäss Obligationenrecht zulässig, speziell im Kontext von ${documentContext.documentType}?
+- Welche Verstösse gibt es (falls vorhanden) unter Berücksichtigung des spezifischen Geschäftsbereichs?
+- Welche Empfehlungen hast du für diesen spezifischen Dokumenttyp und Geschäftsbereich?
+
+WICHTIG: Berücksichtige bei der Analyse den spezifischen Kontext des Dokuments. Vermeide Fehlanalysen durch falsche Kontextannahmen (z.B. Mietrecht bei Software-AGB).
 
 Antworte im JSON-Format mit folgender Struktur:
 {
   "isCompliant": boolean,
   "confidence": number (0-1),
-  "reasoning": "Detaillierte Begründung",
+  "reasoning": "Detaillierte Begründung unter Berücksichtigung des Dokumentkontexts",
   "violations": ["Liste von Verstössen"],
   "recommendations": ["Liste von Empfehlungen"]
 }`;
@@ -573,13 +676,19 @@ Antworte im JSON-Format mit folgender Struktur:
 
     this.logger.info('Legal context for compliance analysis', { contextText });
 
-    const humanPrompt = `Vertragsabschnitt:
+    const humanPrompt = `DOKUMENTKONTEXT:
+- Typ: ${documentContext.documentType}
+- Geschäftsbereich: ${documentContext.businessDomain}
+- Beschreibung: ${documentContext.contextDescription}
+- Schlüsselbegriffe: ${documentContext.keyTerms.join(', ')}
+
+VERTRAGSABSCHNITT:
 "${section.content}"
 
-Relevanter rechtlicher Kontext aus dem Obligationenrecht:
+RELEVANTER RECHTLICHER KONTEXT AUS DEM OBLIGATIONENRECHT:
 ${contextText}
 
-Analysiere die Rechtmässigkeit dieses Abschnitts:`;
+Analysiere die Rechtmässigkeit dieses Abschnitts unter Berücksichtigung des spezifischen Dokumentkontexts (${documentContext.documentType} im Bereich ${documentContext.businessDomain}):`;
 
     try {
       const response = await this.llm.invoke([

@@ -49,6 +49,7 @@ import {
   Plus,
   Scale,
 } from 'lucide-react';
+import { SwissObligationAnalysisResult, SwissObligationSectionResult } from '@/types';
 
 
 const getRiskBadge = (risk: string) => {
@@ -136,7 +137,7 @@ export default function ContractsPage() {
   const [anonymizedKeywords, setAnonymizedKeywords] = useState<string[]>([]);
   const [currentTextInput, setCurrentTextInput] = useState('');
   const [swissAnalysisLoading, setSwissAnalysisLoading] = useState<string | null>(null);
-  const [swissAnalysisResults, setSwissAnalysisResults] = useState<any>(null);
+  const [swissAnalysisResults, setSwissAnalysisResults] = useState<SwissObligationAnalysisResult | null>(null);
   const [analysisDetailsOpen, setAnalysisDetailsOpen] = useState(false);
   const { toast } = useToast();
 
@@ -658,6 +659,50 @@ export default function ContractsPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
+                {/* Document Context */}
+                {swissAnalysisResults.documentContext && (
+                  <div className="p-4 rounded-lg border bg-slate-50">
+                    <div className="flex items-center space-x-2 mb-3">
+                      <FileText className="h-4 w-4 text-slate-600" />
+                      <h3 className="font-semibold text-slate-800">Dokumentkontext</h3>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <div className="text-xs font-medium text-slate-600 mb-1">Dokumenttyp</div>
+                        <Badge variant="outline" className="text-xs">
+                          {swissAnalysisResults.documentContext.documentType}
+                        </Badge>
+                      </div>
+                      <div>
+                        <div className="text-xs font-medium text-slate-600 mb-1">Geschäftsbereich</div>
+                        <Badge variant="outline" className="text-xs">
+                          {swissAnalysisResults.documentContext.businessDomain}
+                        </Badge>
+                      </div>
+                    </div>
+                    {swissAnalysisResults.documentContext.keyTerms && swissAnalysisResults.documentContext.keyTerms.length > 0 && (
+                      <div className="mt-3">
+                        <div className="text-xs font-medium text-slate-600 mb-2">Schlüsselbegriffe</div>
+                        <div className="flex flex-wrap gap-1">
+                          {swissAnalysisResults.documentContext.keyTerms.map((term: string, index: number) => (
+                            <Badge key={index} variant="secondary" className="text-xs">
+                              {term}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {swissAnalysisResults.documentContext.contextDescription && (
+                      <div className="mt-3">
+                        <div className="text-xs font-medium text-slate-600 mb-1">Kontextbeschreibung</div>
+                        <p className="text-xs text-slate-700 bg-white p-2 rounded border">
+                          {swissAnalysisResults.documentContext.contextDescription}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Overall Compliance */}
                 <div className="p-4 rounded-lg border">
                   <div className="flex items-center justify-between mb-2">
@@ -699,7 +744,7 @@ export default function ContractsPage() {
                   <div className="space-y-2">
                     <h3 className="font-semibold">Abschnitte</h3>
                     <div className="space-y-2">
-                      {swissAnalysisResults.sections.map((section: any, index: number) => (
+                      {swissAnalysisResults.sections.map((section: SwissObligationSectionResult, index: number) => (
                         <div key={section.sectionId || index} className="border rounded-lg p-3 space-y-2">
                           <div className="flex items-center justify-between">
                             <div className="flex-1">
@@ -970,6 +1015,51 @@ export default function ContractsPage() {
                 </div>
               </div>
 
+              {/* Document Context Details */}
+              {swissAnalysisResults.documentContext && (
+                <div className="space-y-3">
+                  <h3 className="text-lg font-semibold">Dokumentkontext</h3>
+                  <div className="p-4 border rounded-lg bg-slate-50 space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">Dokumenttyp</Label>
+                        <Badge variant="outline" className="text-sm">
+                          {swissAnalysisResults.documentContext.documentType}
+                        </Badge>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">Geschäftsbereich</Label>
+                        <Badge variant="outline" className="text-sm">
+                          {swissAnalysisResults.documentContext.businessDomain}
+                        </Badge>
+                      </div>
+                    </div>
+
+                    {swissAnalysisResults.documentContext.keyTerms && swissAnalysisResults.documentContext.keyTerms.length > 0 && (
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">Schlüsselbegriffe</Label>
+                        <div className="flex flex-wrap gap-2">
+                          {swissAnalysisResults.documentContext.keyTerms.map((term: string, index: number) => (
+                            <Badge key={index} variant="secondary" className="text-sm">
+                              {term}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {swissAnalysisResults.documentContext.contextDescription && (
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">Kontextbeschreibung</Label>
+                        <p className="text-sm text-slate-700 bg-white p-3 rounded border">
+                          {swissAnalysisResults.documentContext.contextDescription}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Overall Compliance Details */}
               <div className="space-y-3">
                 <h3 className="text-lg font-semibold">Gesamtbewertung</h3>
@@ -996,7 +1086,7 @@ export default function ContractsPage() {
                 <div className="space-y-3">
                   <h3 className="text-lg font-semibold">Detaillierte Abschnitts-Analyse</h3>
                   <div className="space-y-4">
-                    {swissAnalysisResults.sections.map((section: any, index: number) => (
+                    {swissAnalysisResults.sections.map((section: SwissObligationSectionResult, index: number) => (
                       <div key={section.sectionId || index} className="border rounded-lg p-4 space-y-3">
                         <div className="flex items-center justify-between">
                           <h4 className="font-medium">Abschnitt {index + 1}</h4>

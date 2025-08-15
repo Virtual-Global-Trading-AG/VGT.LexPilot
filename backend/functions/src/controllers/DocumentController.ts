@@ -1220,6 +1220,7 @@ STIL: Professionell, präzise, praxisorientiert für beide Jurisdiktionen`;
       this.sendSuccess(res, {
         analysisId: analysisResult.analysisId,
         documentId: analysisResult.documentId,
+        documentContext: analysisResult.documentContext,
         sections: analysisResult.sections.map(section => ({
           sectionId: section.sectionId,
           title: section.sectionContent.slice(0, 100) + '...',
@@ -1323,6 +1324,10 @@ STIL: Professionell, präzise, praxisorientiert für beide Jurisdiktionen`;
         analyses: analyses.map(analysis => ({
           analysisId: analysis.analysisId,
           documentId: analysis.documentId,
+          documentContext: {
+            documentType: analysis.documentContext.documentType,
+            businessDomain: analysis.documentContext.businessDomain
+          },
           overallCompliance: analysis.overallCompliance,
           sectionCount: analysis.sections.length,
           createdAt: analysis.createdAt.toISOString(),

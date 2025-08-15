@@ -107,3 +107,67 @@ export interface ApiResponse<T> {
   error?: string;
   message?: string;
 }
+
+// Swiss Obligation Law Analysis Types
+export interface DocumentContext {
+  documentType: string;
+  businessDomain: string;
+  keyTerms: string[];
+  contextDescription: string;
+}
+
+export interface GeneratedQuery {
+  query: string;
+  context: string;
+  relevanceScore?: number;
+}
+
+export interface SectionComplianceAnalysis {
+  isCompliant: boolean;
+  confidence: number;
+  reasoning: string;
+  violations: string[];
+  recommendations: string[];
+}
+
+export interface SwissObligationSectionResult {
+  sectionId: string;
+  sectionContent: string;
+  title?: string;
+  queries: GeneratedQuery[];
+  legalContext: any[];
+  complianceAnalysis: SectionComplianceAnalysis;
+  findings: Finding[];
+  recommendations: Recommendation[];
+  // Computed properties for display
+  isCompliant: boolean;
+  confidence: number;
+  violationCount: number;
+  recommendationCount: number;
+  violations: string[];
+}
+
+export interface SwissObligationOverallCompliance {
+  isCompliant: boolean;
+  complianceScore: number;
+  summary: string;
+}
+
+export interface SwissObligationAnalysisSummary {
+  totalSections: number;
+  compliantSections: number;
+  totalViolations: number;
+  totalRecommendations: number;
+}
+
+export interface SwissObligationAnalysisResult {
+  analysisId: string;
+  documentId: string;
+  userId: string;
+  documentContext?: DocumentContext;
+  sections: SwissObligationSectionResult[];
+  overallCompliance: SwissObligationOverallCompliance;
+  summary?: SwissObligationAnalysisSummary;
+  createdAt: string;
+  completedAt?: string;
+}
