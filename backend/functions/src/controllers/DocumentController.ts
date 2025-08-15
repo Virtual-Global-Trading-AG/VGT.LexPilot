@@ -2,7 +2,7 @@ import { HumanMessage } from '@langchain/core/messages';
 import { ChatOpenAI } from '@langchain/openai';
 import { NextFunction, Request, Response } from 'express';
 import { UserRepository } from '../repositories/UserRepository';
-import { AnalysisService, DocumentFilters, FirestoreService, PaginationOptions, SortOptions, StorageService, TextExtractionService } from '../services';
+import { AnalysisService, DocumentFilters, FirestoreService, PaginationOptions, SortOptions, StorageService, SwissObligationLawService, TextExtractionService } from '../services';
 import { BaseController } from './BaseController';
 
 interface DocumentUploadRequest {
@@ -22,6 +22,7 @@ export class DocumentController extends BaseController {
   private readonly analysisService: AnalysisService;
   private readonly userRepository: UserRepository;
   private readonly textExtractionService: TextExtractionService;
+  private readonly swissObligationLawService: SwissObligationLawService;
 
   constructor() {
     super();
@@ -30,6 +31,11 @@ export class DocumentController extends BaseController {
     this.analysisService = new AnalysisService();
     this.userRepository = new UserRepository();
     this.textExtractionService = new TextExtractionService();
+    this.swissObligationLawService = new SwissObligationLawService(
+      this.analysisService,
+      this.textExtractionService,
+      this.firestoreService
+    );
   }
 
   /**
@@ -1124,6 +1130,213 @@ STIL: Professionell, präzise, praxisorientiert für beide Jurisdiktionen`;
         this.sendError(res, 500, 'Unexpected error during text extraction');
       }
 
+      next(error);
+    }
+  }
+
+  /**
+   * Analyze document against Swiss obligation law
+   * POST /api/documents/:documentId/analyze-swiss-obligation-law
+   */
+  public async analyzeSwissObligationLaw(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = this.getUserId(req);
+      const { documentId } = req.params;
+
+      if (!documentId) {
+        this.sendError(res, 400, 'Missing required parameter', 'documentId is required');
+        return;
+      }
+
+      this.logger.info('Swiss obligation law analysis requested', {
+        userId,
+        documentId
+      });
+
+      // Get document metadata from Firestore
+      const document = await this.firestoreService.getDocument(documentId, userId);
+
+      if (!document) {
+        this.sendError(res, 404, 'Document not found', 'Document not found or access denied');
+        return;
+      }
+
+      // Get document content from storage
+      const documentBuffer = await this.storageService.getDocumentContent(
+        documentId,
+        document.fileName,
+        userId
+      );
+
+      // Extract text from document
+      const extractedText = await this.textExtractionService.extractText(
+        documentBuffer,
+        document.contentType,
+        document.fileName
+      );
+
+      // Clean and sanitize the text
+      let contractText: string;
+      if (document.anonymizedKeywords?.length) {
+        contractText = this.textExtractionService.replaceSpecificTexts(extractedText, document.anonymizedKeywords);
+      } else {
+        contractText = extractedText;
+      }
+
+      this.logger.info('Starting Swiss obligation law analysis', {
+        userId,
+        documentId,
+        textLength: contractText.length
+      });
+
+      // Set up progress tracking via WebSocket
+      const progressCallback = (progress: number, message: string) => {
+        // You can implement WebSocket progress updates here if needed
+        this.logger.info('Swiss obligation law analysis progress', {
+          userId,
+          documentId,
+          progress,
+          message
+        });
+      };
+
+      // Perform Swiss obligation law analysis
+      const analysisResult = await this.swissObligationLawService.analyzeContractAgainstSwissLaw(
+        contractText,
+        documentId,
+        userId,
+        progressCallback
+      );
+
+      this.logger.info('Swiss obligation law analysis completed', {
+        userId,
+        documentId,
+        analysisId: analysisResult.analysisId,
+        sectionCount: analysisResult.sections.length,
+        overallCompliant: analysisResult.overallCompliance.isCompliant,
+        complianceScore: analysisResult.overallCompliance.complianceScore
+      });
+
+      this.sendSuccess(res, {
+        analysisId: analysisResult.analysisId,
+        documentId: analysisResult.documentId,
+        sections: analysisResult.sections.map(section => ({
+          sectionId: section.sectionId,
+          title: section.sectionContent.slice(0, 100) + '...',
+          isCompliant: section.complianceAnalysis.isCompliant,
+          confidence: section.complianceAnalysis.confidence,
+          violationCount: section.complianceAnalysis.violations.length,
+          recommendationCount: section.complianceAnalysis.recommendations.length,
+          violations: section.complianceAnalysis.violations,
+          recommendations: section.complianceAnalysis.recommendations,
+          reasoning: section.complianceAnalysis.reasoning
+        })),
+        overallCompliance: analysisResult.overallCompliance,
+        summary: {
+          totalSections: analysisResult.sections.length,
+          compliantSections: analysisResult.sections.filter(s => s.complianceAnalysis.isCompliant).length,
+          totalViolations: analysisResult.sections.reduce((sum, s) => sum + s.complianceAnalysis.violations.length, 0),
+          totalRecommendations: analysisResult.sections.reduce((sum, s) => sum + s.complianceAnalysis.recommendations.length, 0)
+        },
+        createdAt: analysisResult.createdAt.toISOString(),
+        completedAt: analysisResult.completedAt?.toISOString()
+      }, 'Swiss obligation law analysis completed successfully');
+
+    } catch (error) {
+      this.logger.error('Swiss obligation law analysis failed', error as Error, {
+        userId: this.getUserId(req),
+        documentId: req.params.documentId
+      });
+
+      if (error instanceof Error) {
+        if (error.message.includes('not found')) {
+          this.sendError(res, 404, 'Document not found', error.message);
+        } else if (error.message.includes('Unsupported content type')) {
+          this.sendError(res, 400, 'Unsupported file type', error.message);
+        } else {
+          this.sendError(res, 500, 'Swiss obligation law analysis failed', error.message);
+        }
+      } else {
+        this.sendError(res, 500, 'Unexpected error during Swiss obligation law analysis');
+      }
+
+      next(error);
+    }
+  }
+
+  /**
+   * Get Swiss obligation law analysis result
+   * GET /api/documents/swiss-obligation-analysis/:analysisId
+   */
+  public async getSwissObligationAnalysis(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = this.getUserId(req);
+      const { analysisId } = req.params;
+
+      if (!analysisId) {
+        this.sendError(res, 400, 'Missing required parameter', 'analysisId is required');
+        return;
+      }
+
+      this.logger.info('Swiss obligation law analysis result requested', {
+        userId,
+        analysisId
+      });
+
+      const analysisResult = await this.swissObligationLawService.getAnalysisResult(analysisId, userId);
+
+      if (!analysisResult) {
+        this.sendError(res, 404, 'Analysis not found', 'Analysis not found or access denied');
+        return;
+      }
+
+      this.sendSuccess(res, analysisResult, 'Swiss obligation law analysis result retrieved successfully');
+
+    } catch (error) {
+      this.logger.error('Failed to get Swiss obligation law analysis result', error as Error, {
+        userId: this.getUserId(req),
+        analysisId: req.params.analysisId
+      });
+
+      this.sendError(res, 500, 'Failed to retrieve analysis result');
+      next(error);
+    }
+  }
+
+  /**
+   * List user's Swiss obligation law analyses
+   * GET /api/documents/swiss-obligation-analyses
+   */
+  public async listSwissObligationAnalyses(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = this.getUserId(req);
+      const limit = parseInt(req.query.limit as string) || 10;
+
+      this.logger.info('Swiss obligation law analyses list requested', {
+        userId,
+        limit
+      });
+
+      const analyses = await this.swissObligationLawService.listUserAnalyses(userId, limit);
+
+      this.sendSuccess(res, {
+        analyses: analyses.map(analysis => ({
+          analysisId: analysis.analysisId,
+          documentId: analysis.documentId,
+          overallCompliance: analysis.overallCompliance,
+          sectionCount: analysis.sections.length,
+          createdAt: analysis.createdAt.toISOString(),
+          completedAt: analysis.completedAt?.toISOString()
+        })),
+        total: analyses.length
+      }, 'Swiss obligation law analyses retrieved successfully');
+
+    } catch (error) {
+      this.logger.error('Failed to list Swiss obligation law analyses', error as Error, {
+        userId: this.getUserId(req)
+      });
+
+      this.sendError(res, 500, 'Failed to retrieve analyses list');
       next(error);
     }
   }

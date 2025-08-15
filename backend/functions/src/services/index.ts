@@ -4,6 +4,7 @@ export { FirestoreService } from './FirestoreService';
 export { EmbeddingService } from './EmbeddingService';
 export { AnalysisService } from './AnalysisService';
 export { TextExtractionService } from './TextExtractionService';
+export { SwissObligationLawService } from './SwissObligationLawService';
 export { FirebaseInitializer, ensureFirebaseInitialized } from './FirebaseInitializer';
 
 // Re-export types for convenience
@@ -18,3 +19,10 @@ export type {
   DocumentFilters,
   PaginatedResult
 } from './FirestoreService';
+
+export type {
+  ContractSection,
+  GeneratedQuery,
+  SectionAnalysisResult,
+  SwissObligationAnalysisResult
+} from './SwissObligationLawService';

@@ -79,8 +79,6 @@ export class TextExtractionService {
    */
   private async extractFromDOCX(buffer: Buffer): Promise<string> {
     try {
-      // For now, we'll use a simple approach. In a production environment,
-      // you might want to use a library like 'mammoth' or 'docx-parser'
       const mammoth = await import('mammoth');
       const result = await mammoth.extractRawText({ buffer });
       return result.value;

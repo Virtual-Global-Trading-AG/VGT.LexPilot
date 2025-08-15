@@ -1,9 +1,8 @@
 import { Router } from 'express';
+import * as Joi from 'joi';
 import { DocumentController } from '../controllers/DocumentController';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { ValidationMiddleware } from '../middleware/validationMiddleware';
-import { rateLimitMiddleware } from '../middleware/rateLimitMiddleware';
-import * as Joi from 'joi';
 
 const router = Router();
 const documentController = new DocumentController();
@@ -177,6 +176,21 @@ router.post('/dsgvo-check',
 router.post('/dsgvo-check-complete',
   ValidationMiddleware.validate({ body: completeDsgvoCheckSchema }),
   documentController.completeDSGVOCheck.bind(documentController)
+);
+
+// Swiss Obligation Law Analysis
+router.post('/:documentId/analyze-swiss-obligation-law',
+  documentController.analyzeSwissObligationLaw.bind(documentController)
+);
+
+// Get Swiss Obligation Law Analysis Result
+router.get('/swiss-obligation-analysis/:analysisId',
+  documentController.getSwissObligationAnalysis.bind(documentController)
+);
+
+// List Swiss Obligation Law Analyses
+router.get('/swiss-obligation-analyses',
+  documentController.listSwissObligationAnalyses.bind(documentController)
 );
 
 export default router;

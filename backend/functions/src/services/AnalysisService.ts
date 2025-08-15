@@ -1,3 +1,4 @@
+import { index } from '@langchain/core/indexing';
 import { ChatOpenAI } from '@langchain/openai';
 import { Document } from 'langchain/document';
 import { Logger } from '../utils/logger';
@@ -634,14 +635,16 @@ export class AnalysisService {
     query: string,
     legalArea?: string,
     jurisdiction?: string,
-    topK: number = 5
+    topK: number = 5,
+    indexName = process.env.PINECONE_LEGAL_INDEX,
+    shoreThreshold: number = 0.75
   ): Promise<SearchResult> {
     try {
       const vectorConfig: VectorStoreConfig = {
-        indexName: process.env.PINECONE_LEGAL_INDEX || 'legal-texts',
+        indexName: indexName ? indexName : process.env.PINECONE_LEGAL_INDEX || 'legal-texts',
         namespace: 'legal-regulations',
         topK,
-        scoreThreshold: 0.75
+        scoreThreshold: shoreThreshold
       };
 
       // Baue Filter für spezifische Suche

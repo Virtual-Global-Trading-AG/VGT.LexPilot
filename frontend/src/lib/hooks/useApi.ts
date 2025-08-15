@@ -436,10 +436,43 @@ export function useDocuments() {
     }
   }, [isAuthenticated]);
 
+  const analyzeSwissObligationLaw = useCallback(async (documentId: string): Promise<{
+    success: boolean;
+    data?: any;
+    error?: string;
+  }> => {
+    if (!isAuthenticated) {
+      setError('Authentication required');
+      return { success: false, error: 'Authentication required' };
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await apiClient.post(`/documents/${documentId}/analyze-swiss-obligation-law`);
+
+      if (response.success && response.data) {
+        return { success: true, data: response.data };
+      } else {
+        const errorMsg = response.error || 'Failed to analyze document against Swiss obligation law';
+        setError(errorMsg);
+        return { success: false, error: errorMsg };
+      }
+    } catch (err) {
+      const errorMsg = 'Network error while analyzing document';
+      setError(errorMsg);
+      return { success: false, error: errorMsg };
+    } finally {
+      setLoading(false);
+    }
+  }, [isAuthenticated]);
+
   return {
     getDocuments,
     deleteDocument,
     getDocumentText,
+    analyzeSwissObligationLaw,
     documents,
     pagination,
     loading,

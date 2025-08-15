@@ -47,6 +47,7 @@ import {
   FileSearch,
   X,
   Plus,
+  Scale,
 } from 'lucide-react';
 
 
@@ -118,7 +119,7 @@ const getStatusText = (status: string) => {
 export default function ContractsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { uploadDocumentDirect, uploading, uploadProgress, error, clearError } = useDocumentUpload();
-  const { getDocuments, deleteDocument, getDocumentText, documents, pagination, loading: documentsLoading, error: documentsError, clearError: clearDocumentsError } = useDocuments();
+  const { getDocuments, deleteDocument, getDocumentText, analyzeSwissObligationLaw, documents, pagination, loading: documentsLoading, error: documentsError, clearError: clearDocumentsError } = useDocuments();
   const [dragActive, setDragActive] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [documentToDelete, setDocumentToDelete] = useState<{id: string, name: string} | null>(null);
@@ -130,6 +131,9 @@ export default function ContractsPage() {
   const [extractedDocumentInfo, setExtractedDocumentInfo] = useState<{fileName: string, documentId: string} | null>(null);
   const [anonymizedKeywords, setAnonymizedKeywords] = useState<string[]>([]);
   const [currentTextInput, setCurrentTextInput] = useState('');
+  const [swissAnalysisLoading, setSwissAnalysisLoading] = useState<string | null>(null);
+  const [swissAnalysisResults, setSwissAnalysisResults] = useState<any>(null);
+  const [analysisDetailsOpen, setAnalysisDetailsOpen] = useState(false);
   const { toast } = useToast();
 
   // Helper functions for managing texts to replace
@@ -367,6 +371,39 @@ export default function ContractsPage() {
     }
   };
 
+  const handleSwissObligationAnalysis = async (documentId: string, fileName: string) => {
+    setSwissAnalysisLoading(documentId);
+    setSwissAnalysisResults(null);
+
+    try {
+      const result = await analyzeSwissObligationLaw(documentId);
+
+      if (result.success && result.data) {
+        setSwissAnalysisResults(result.data);
+        toast({
+          variant: "success",
+          title: "Analyse abgeschlossen",
+          description: `Schweizer Obligationenrecht-Analyse für "${fileName}" wurde erfolgreich durchgeführt.`
+        });
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Analyse fehlgeschlagen",
+          description: result.error || "Fehler bei der Schweizer Obligationenrecht-Analyse."
+        });
+      }
+    } catch (err) {
+      console.error('Swiss obligation analysis error:', err);
+      toast({
+        variant: "destructive",
+        title: "Analyse fehlgeschlagen",
+        description: "Unerwarteter Fehler bei der Schweizer Obligationenrecht-Analyse."
+      });
+    } finally {
+      setSwissAnalysisLoading(null);
+    }
+  };
+
   return (
     <MainLayout>
       <div className="space-y-6">
@@ -504,6 +541,17 @@ export default function ContractsPage() {
                                 <Button 
                                   variant="ghost" 
                                   size="sm" 
+                                  className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50"
+                                  onClick={() => handleSwissObligationAnalysis(document.documentId, document.documentMetadata.fileName || 'Unbekannt')}
+                                  disabled={swissAnalysisLoading === document.documentId}
+                                  title="Schweizer Obligationenrecht-Analyse"
+                                >
+                                  <Scale className="h-4 w-4" />
+                                  <span className="sr-only">Schweizer Obligationenrecht-Analyse</span>
+                                </Button>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
                                   className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
                                   onClick={() => handleDeleteDocument(document.documentId, document.documentMetadata.fileName || 'Unbekannt')}
                                 >
@@ -574,6 +622,152 @@ export default function ContractsPage() {
               <div className="flex items-center justify-center space-x-2">
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
                 <span className="text-sm text-muted-foreground">Text wird extrahiert...</span>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Loading indicator for Swiss obligation analysis */}
+        {swissAnalysisLoading && (
+          <Card>
+            <CardContent className="py-8">
+              <div className="flex items-center justify-center space-x-2">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                <span className="text-sm text-muted-foreground">Schweizer Obligationenrecht-Analyse läuft...</span>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Swiss Obligation Analysis Results */}
+        {swissAnalysisResults && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2">
+                <Scale className="h-5 w-5" />
+                <span>Schweizer Obligationenrecht-Analyse</span>
+              </CardTitle>
+              <div className="text-sm text-muted-foreground">
+                Analyse-ID: {swissAnalysisResults.analysisId} • {swissAnalysisResults.sections?.length || 0} Abschnitte analysiert
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {/* Overall Compliance */}
+                <div className="p-4 rounded-lg border">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="font-semibold">Gesamtbewertung</h3>
+                    <Badge variant={swissAnalysisResults.overallCompliance?.isCompliant ? "default" : "destructive"}>
+                      {swissAnalysisResults.overallCompliance?.isCompliant ? "Konform" : "Nicht konform"}
+                    </Badge>
+                  </div>
+                  <div className="text-sm text-muted-foreground mb-2">
+                    Compliance-Score: {Math.round((swissAnalysisResults.overallCompliance?.complianceScore || 0) * 100)}%
+                  </div>
+                  <p className="text-sm">{swissAnalysisResults.overallCompliance?.summary}</p>
+                </div>
+
+                {/* Summary Statistics */}
+                {swissAnalysisResults.summary && (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="text-center p-3 bg-muted rounded-lg">
+                      <div className="text-2xl font-bold">{swissAnalysisResults.summary.totalSections}</div>
+                      <div className="text-xs text-muted-foreground">Abschnitte</div>
+                    </div>
+                    <div className="text-center p-3 bg-green-50 rounded-lg">
+                      <div className="text-2xl font-bold text-green-600">{swissAnalysisResults.summary.compliantSections}</div>
+                      <div className="text-xs text-muted-foreground">Konform</div>
+                    </div>
+                    <div className="text-center p-3 bg-red-50 rounded-lg">
+                      <div className="text-2xl font-bold text-red-600">{swissAnalysisResults.summary.totalViolations}</div>
+                      <div className="text-xs text-muted-foreground">Verstöße</div>
+                    </div>
+                    <div className="text-center p-3 bg-blue-50 rounded-lg">
+                      <div className="text-2xl font-bold text-blue-600">{swissAnalysisResults.summary.totalRecommendations}</div>
+                      <div className="text-xs text-muted-foreground">Empfehlungen</div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Sections Overview */}
+                {swissAnalysisResults.sections && swissAnalysisResults.sections.length > 0 && (
+                  <div className="space-y-2">
+                    <h3 className="font-semibold">Abschnitte</h3>
+                    <div className="space-y-2">
+                      {swissAnalysisResults.sections.map((section: any, index: number) => (
+                        <div key={section.sectionId || index} className="border rounded-lg p-3 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <div className="font-medium text-sm">{section.title}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {section.violationCount} Verstöße • {section.recommendationCount} Empfehlungen
+                              </div>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <Badge variant={section.isCompliant ? "default" : "destructive"} className="text-xs">
+                                {section.isCompliant ? "Konform" : "Nicht konform"}
+                              </Badge>
+                              <div className="text-xs text-muted-foreground">
+                                {Math.round((section.confidence || 0) * 100)}%
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Preview of violations and recommendations */}
+                          {(section.violations?.length > 0 || section.recommendations?.length > 0) && (
+                            <div className="space-y-1 pt-2 border-t">
+                              {section.violations?.length > 0 && (
+                                <div className="space-y-1">
+                                  <div className="text-xs font-medium text-red-600">Verstöße:</div>
+                                  {section.violations.slice(0, 2).map((violation: string, violationIndex: number) => (
+                                    <div key={violationIndex} className="text-xs text-red-600 bg-red-50 p-1 rounded">
+                                      • {violation.length > 100 ? violation.substring(0, 100) + '...' : violation}
+                                    </div>
+                                  ))}
+                                  {section.violations.length > 2 && (
+                                    <div className="text-xs text-red-500 italic">
+                                      +{section.violations.length - 2} weitere Verstöße
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              {section.recommendations?.length > 0 && (
+                                <div className="space-y-1">
+                                  <div className="text-xs font-medium text-blue-600">Empfehlungen:</div>
+                                  {section.recommendations.slice(0, 2).map((recommendation: string, recommendationIndex: number) => (
+                                    <div key={recommendationIndex} className="text-xs text-blue-600 bg-blue-50 p-1 rounded">
+                                      • {recommendation.length > 100 ? recommendation.substring(0, 100) + '...' : recommendation}
+                                    </div>
+                                  ))}
+                                  {section.recommendations.length > 2 && (
+                                    <div className="text-xs text-blue-500 italic">
+                                      +{section.recommendations.length - 2} weitere Empfehlungen
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Action Buttons */}
+                <div className="flex justify-between items-center pt-4 border-t">
+                  <span className="text-xs text-muted-foreground">
+                    Erstellt: {swissAnalysisResults.createdAt ? new Date(swissAnalysisResults.createdAt).toLocaleString('de-DE') : 'Unbekannt'}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setAnalysisDetailsOpen(true)}
+                  >
+                    Details anzeigen
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -740,6 +934,154 @@ export default function ContractsPage() {
             onChange={(e) => handleFileSelect(e.target.files)}
             className="hidden"
           />
+        </DialogContent>
+      </Dialog>
+
+      {/* Analysis Details Dialog */}
+      <Dialog open={analysisDetailsOpen} onOpenChange={setAnalysisDetailsOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center space-x-2">
+              <Scale className="h-5 w-5" />
+              <span>Detaillierte Analyse-Ergebnisse</span>
+            </DialogTitle>
+            <DialogDescription>
+              Vollständige Ergebnisse der Schweizer Obligationenrecht-Analyse
+            </DialogDescription>
+          </DialogHeader>
+
+          {swissAnalysisResults && (
+            <div className="space-y-6">
+              {/* Analysis Overview */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Analyse-ID</Label>
+                  <p className="text-sm font-mono bg-muted p-2 rounded">{swissAnalysisResults.analysisId}</p>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Dokument-ID</Label>
+                  <p className="text-sm font-mono bg-muted p-2 rounded">{swissAnalysisResults.documentId}</p>
+                </div>
+              </div>
+
+              {/* Overall Compliance Details */}
+              <div className="space-y-3">
+                <h3 className="text-lg font-semibold">Gesamtbewertung</h3>
+                <div className="p-4 border rounded-lg space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium">Status:</span>
+                    <Badge variant={swissAnalysisResults.overallCompliance?.isCompliant ? "default" : "destructive"}>
+                      {swissAnalysisResults.overallCompliance?.isCompliant ? "Konform" : "Nicht konform"}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium">Compliance-Score:</span>
+                    <span className="font-mono">{Math.round((swissAnalysisResults.overallCompliance?.complianceScore || 0) * 100)}%</span>
+                  </div>
+                  <div className="space-y-2">
+                    <span className="font-medium">Zusammenfassung:</span>
+                    <p className="text-sm text-muted-foreground">{swissAnalysisResults.overallCompliance?.summary}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Detailed Sections */}
+              {swissAnalysisResults.sections && swissAnalysisResults.sections.length > 0 && (
+                <div className="space-y-3">
+                  <h3 className="text-lg font-semibold">Detaillierte Abschnitts-Analyse</h3>
+                  <div className="space-y-4">
+                    {swissAnalysisResults.sections.map((section: any, index: number) => (
+                      <div key={section.sectionId || index} className="border rounded-lg p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-medium">Abschnitt {index + 1}</h4>
+                          <div className="flex items-center space-x-2">
+                            <Badge variant={section.isCompliant ? "default" : "destructive"} className="text-xs">
+                              {section.isCompliant ? "Konform" : "Nicht konform"}
+                            </Badge>
+                            <span className="text-xs text-muted-foreground">
+                              Vertrauen: {Math.round((section.confidence || 0) * 100)}%
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label className="text-sm font-medium">Inhalt:</Label>
+                          <p className="text-sm bg-muted p-3 rounded max-h-32 overflow-y-auto">{section.title}</p>
+                        </div>
+
+                        {section.reasoning && (
+                          <div className="space-y-2">
+                            <Label className="text-sm font-medium">Rechtliche Begründung:</Label>
+                            <p className="text-sm text-muted-foreground bg-gray-50 p-3 rounded">{section.reasoning}</p>
+                          </div>
+                        )}
+
+                        {section.violationCount > 0 && (
+                          <div className="space-y-2">
+                            <Label className="text-sm font-medium text-red-600">Verstöße ({section.violationCount}):</Label>
+                            <div className="space-y-1">
+                              {section.violations && section.violations.length > 0 ? (
+                                section.violations.map((violation: string, violationIndex: number) => (
+                                  <div key={violationIndex} className="text-sm text-red-600 bg-red-50 p-2 rounded">
+                                    • {violation}
+                                  </div>
+                                ))
+                              ) : (
+                                <p className="text-sm text-red-600 bg-red-50 p-2 rounded">
+                                  {section.violationCount} potenzielle Verstöße identifiziert
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {section.recommendationCount > 0 && (
+                          <div className="space-y-2">
+                            <Label className="text-sm font-medium text-blue-600">Empfehlungen ({section.recommendationCount}):</Label>
+                            <div className="space-y-1">
+                              {section.recommendations && section.recommendations.length > 0 ? (
+                                section.recommendations.map((recommendation: string, recommendationIndex: number) => (
+                                  <div key={recommendationIndex} className="text-sm text-blue-600 bg-blue-50 p-2 rounded">
+                                    • {recommendation}
+                                  </div>
+                                ))
+                              ) : (
+                                <p className="text-sm text-blue-600 bg-blue-50 p-2 rounded">
+                                  {section.recommendationCount} Empfehlungen zur Verbesserung
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Timestamps */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t">
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Erstellt am:</Label>
+                  <p className="text-sm text-muted-foreground">
+                    {swissAnalysisResults.createdAt ? new Date(swissAnalysisResults.createdAt).toLocaleString('de-DE') : 'Unbekannt'}
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Abgeschlossen am:</Label>
+                  <p className="text-sm text-muted-foreground">
+                    {swissAnalysisResults.completedAt ? new Date(swissAnalysisResults.completedAt).toLocaleString('de-DE') : 'Unbekannt'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAnalysisDetailsOpen(false)}>
+              Schließen
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </MainLayout>

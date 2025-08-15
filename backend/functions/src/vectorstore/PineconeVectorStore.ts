@@ -216,8 +216,12 @@ export class PineconeVectorStore {
         config.filter
       );
 
+      this.logger.debug('results', {results});
+
       // Filtere Ergebnisse nach Score-Threshold
       const filteredResults = results.filter(([_, score]) => score >= scoreThreshold);
+
+      this.logger.debug('filtered results', {filteredResults});
 
       const documents: HierarchicalChunk[] = filteredResults.map(([doc, _]) => ({
         pageContent: doc.pageContent,

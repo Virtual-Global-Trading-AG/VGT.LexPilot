@@ -148,7 +148,7 @@ export const config = {
     maxFileSizeMB: env.MAX_FILE_SIZE_MB,
     allowedTypes: env.ALLOWED_FILE_TYPES.split(','),
     uploadPath: 'documents',
-    processingTimeout: 300000 // 5 Minuten
+    processingTimeout: 540000 // 9 Minuten
   },
   
   // Cost Control
