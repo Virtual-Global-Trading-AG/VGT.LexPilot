@@ -14,34 +14,12 @@ router.use(authMiddleware);
 //router.use(rateLimitMiddleware);
 
 // Validation schemas
-const uploadDocumentSchema = Joi.object({
-  fileName: Joi.string().min(1).max(255).required()
-    .pattern(/^[a-zA-Z0-9._\-\s]+\.(pdf|docx|doc|txt|md|csv)$/i)
-    .messages({
-      'string.pattern.base': 'File name must have a valid extension (pdf, docx, doc, txt, md, csv)'
-    }),
-  contentType: Joi.string().valid(
-    'application/pdf',
-    'application/msword',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'text/plain',
-    'text/markdown',
-    'text/csv'
-  ).required(),
-  size: Joi.number().min(1).max(52428800).required(), // Max 50MB
-  metadata: Joi.object({
-    category: Joi.string().valid('nda', 'contract', 'other'),
-    description: Joi.string().max(1000),
-    tags: Joi.array().items(Joi.string().max(50)).max(10)
-  }).optional()
-});
-
 const uploadDocumentDirectSchema = Joi.object({
   fileName: Joi.string().min(1).max(255).required()
-    .pattern(/^[a-zA-Z0-9._\-\s]+\.(pdf|docx|doc|txt|md|csv)$/i)
-    .messages({
-      'string.pattern.base': 'File name must have a valid extension (pdf, docx, doc, txt, md, csv)'
-    }),
+  .pattern(/^.+\.(pdf|docx|doc|txt|md|csv)$/i)
+  .messages({
+    'string.pattern.base': 'File name must have a valid extension (pdf, docx, doc, txt, md, csv)'
+  }),
   contentType: Joi.string().valid(
     'application/pdf',
     'application/msword',
@@ -51,12 +29,12 @@ const uploadDocumentDirectSchema = Joi.object({
     'text/csv'
   ).required(),
   base64Content: Joi.string().required()
-    .pattern(/^[A-Za-z0-9+/]*={0,2}$/)
-    .messages({
-      'string.pattern.base': 'Invalid base64 content format'
-    }),
+  .pattern(/^[A-Za-z0-9+/]*={0,2}$/)
+  .messages({
+    'string.pattern.base': 'Invalid base64 content format'
+  }),
   metadata: Joi.object({
-    category: Joi.string().valid('contract', 'nda', 'other'),
+    category: Joi.string().valid('contract', 'nda', 'terms_conditions', 'other'),
     description: Joi.string().max(1000),
     tags: Joi.array().items(Joi.string().max(50)).max(10),
     anonymizedKeywords: Joi.array().items(Joi.string().min(1).max(500)).max(50)
@@ -67,7 +45,7 @@ const updateDocumentSchema = Joi.object({
   title: Joi.string().min(1).max(255).optional(),
   description: Joi.string().max(1000).optional(),
   tags: Joi.array().items(Joi.string().max(50)).max(10).optional(),
-  category: Joi.string().valid('contract', 'legal_document', 'policy', 'other').optional()
+  category: Joi.string().valid('contract', 'legal_document', 'policy', 'terms_conditions', 'other').optional()
 }).min(1); // At least one field required
 
 const updateStatusSchema = Joi.object({
@@ -126,17 +104,17 @@ const paginationSchema = Joi.object({
 const searchSchema = Joi.object({
   q: Joi.string().min(1).max(255).required(),
   status: Joi.string().valid('uploading', 'uploaded', 'processing', 'processed', 'error').optional(),
-  category: Joi.string().valid('contract', 'legal_document', 'policy', 'other').optional(),
+  category: Joi.string().valid('contract', 'legal_document', 'policy', 'terms_conditions', 'other').optional(),
   page: Joi.number().min(1).default(1).optional(),
   limit: Joi.number().min(1).max(100).default(10).optional()
 });
 
-router.post('/upload-direct', 
+router.post('/upload-direct',
   ValidationMiddleware.validate({ body: uploadDocumentDirectSchema }),
   documentController.uploadDocumentDirect.bind(documentController)
 );
 
-router.get('/', 
+router.get('/',
   documentController.getDocuments.bind(documentController)
 );
 
@@ -150,7 +128,7 @@ router.get('/stats',
 );
 
 
-router.delete('/:documentId', 
+router.delete('/:documentId',
   documentController.deleteDocument.bind(documentController)
 );
 

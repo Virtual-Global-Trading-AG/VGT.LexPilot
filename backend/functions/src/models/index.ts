@@ -163,7 +163,7 @@ export interface DocumentMetadata {
   uploadedAt: string;
   processedAt?: string;
   status: 'uploading' | 'uploaded' | 'processing' | 'processed' | 'error';
-  category?: 'contract' | 'nda' | 'other';
+  category?: 'contract' | 'nda' | 'terms_conditions' | 'other';
   anonymizedKeywords?: string[];
   description?: string;
   tags?: string[];

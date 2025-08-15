@@ -10,7 +10,7 @@ interface DocumentUploadRequest {
   contentType: string;
   size: number;
   metadata?: {
-    category?: 'contract' | 'legal_document' | 'policy' | 'other';
+    category?: 'contract' | 'legal_document' | 'policy' | 'terms_conditions' | 'other';
     description?: string;
     tags?: string[];
   };

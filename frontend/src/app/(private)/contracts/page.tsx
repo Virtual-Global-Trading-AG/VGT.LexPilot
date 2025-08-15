@@ -70,6 +70,8 @@ const getCategoryBadge = (category: string) => {
       return <Badge variant="default">Vertrag</Badge>;
     case 'nda':
       return <Badge variant="secondary">NDA</Badge>;
+    case 'terms_conditions':
+      return <Badge variant="outline">AGB</Badge>;
     case 'other':
       return <Badge variant="outline">Sonstiges</Badge>;
     default:
@@ -83,6 +85,8 @@ const getCategoryDisplayName = (category: string) => {
       return 'Verträge';
     case 'nda':
       return 'Geheimhaltungsvereinbarungen (NDA)';
+    case 'terms_conditions':
+      return 'Allgemeine Geschäftsbedingungen (AGB)';
     case 'other':
       return 'Sonstige Dokumente';
     default:
@@ -125,7 +129,7 @@ export default function ContractsPage() {
   const [documentToDelete, setDocumentToDelete] = useState<{id: string, name: string} | null>(null);
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [selectedCategory, setSelectedCategory] = useState<'contract' | 'nda' | 'other'>('contract');
+  const [selectedCategory, setSelectedCategory] = useState<'contract' | 'nda' | 'terms_conditions' | 'other'>('contract');
   const [extractedText, setExtractedText] = useState<string>('');
   const [extractingText, setExtractingText] = useState<boolean>(false);
   const [extractedDocumentInfo, setExtractedDocumentInfo] = useState<{fileName: string, documentId: string} | null>(null);
@@ -213,6 +217,7 @@ export default function ContractsPage() {
 
   const handleFileUpload = async (file: File, category: 'contract' | 'nda' | 'other') => {
     try {
+
       const result = await uploadDocumentDirect(file, {
         category: category,
         description: `Hochgeladenes Dokument: ${file.name}`,
@@ -854,13 +859,14 @@ export default function ContractsPage() {
             {/* Category Selection */}
             <div className="space-y-2">
               <Label htmlFor="category">Kategorie</Label>
-              <Select value={selectedCategory} onValueChange={(value: 'contract' | 'nda' | 'other') => setSelectedCategory(value)}>
+              <Select value={selectedCategory} onValueChange={(value: 'contract' | 'nda' | 'terms_conditions' | 'other') => setSelectedCategory(value)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Kategorie auswählen" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="contract">Vertrag</SelectItem>
                   <SelectItem value="nda">Geheimhaltungsvereinbarung (NDA)</SelectItem>
+                  <SelectItem value="terms_conditions">AGB</SelectItem>
                   <SelectItem value="other">Sonstiges</SelectItem>
                 </SelectContent>
               </Select>
