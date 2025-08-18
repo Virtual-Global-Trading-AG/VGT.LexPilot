@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { useDocumentUpload, useDocuments } from '@/lib/hooks/useApi';
-import { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { useToast } from '@/lib/hooks/use-toast';
 import {
   Table,
@@ -48,6 +48,8 @@ import {
   X,
   Plus,
   Scale,
+  ChevronRight,
+  ChevronDown,
 } from 'lucide-react';
 import { SwissObligationAnalysisResult, SwissObligationSectionResult } from '@/types';
 
@@ -124,7 +126,7 @@ const getStatusText = (status: string) => {
 export default function ContractsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { uploadDocumentDirect, uploading, uploadProgress, error, clearError } = useDocumentUpload();
-  const { getDocuments, deleteDocument, getDocumentText, analyzeSwissObligationLaw, documents, pagination, loading: documentsLoading, error: documentsError, clearError: clearDocumentsError } = useDocuments();
+  const { getDocuments, deleteDocument, getDocumentText, analyzeSwissObligationLaw, getJobStatus, getUserJobs, getSwissObligationAnalysesByDocumentId, documents, pagination, loading: documentsLoading, error: documentsError, clearError: clearDocumentsError } = useDocuments();
   const [dragActive, setDragActive] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [documentToDelete, setDocumentToDelete] = useState<{id: string, name: string} | null>(null);
@@ -137,8 +139,10 @@ export default function ContractsPage() {
   const [anonymizedKeywords, setAnonymizedKeywords] = useState<string[]>([]);
   const [currentTextInput, setCurrentTextInput] = useState('');
   const [swissAnalysisLoading, setSwissAnalysisLoading] = useState<string | null>(null);
-  const [swissAnalysisResults, setSwissAnalysisResults] = useState<SwissObligationAnalysisResult | null>(null);
-  const [analysisDetailsOpen, setAnalysisDetailsOpen] = useState(false);
+  const [expandedDocuments, setExpandedDocuments] = useState<Set<string>>(new Set());
+  const [documentAnalyses, setDocumentAnalyses] = useState<Record<string, SwissObligationAnalysisResult[]>>({});
+  const [selectedAnalysis, setSelectedAnalysis] = useState<SwissObligationAnalysisResult | null>(null);
+  const [sidenavOpen, setSidenavOpen] = useState(false);
   const { toast } = useToast();
 
   // Helper functions for managing texts to replace
@@ -160,6 +164,25 @@ export default function ContractsPage() {
     }
   };
 
+  // Helper functions for managing document expansion and analyses
+  const toggleDocumentExpansion = (documentId: string) => {
+    const newExpanded = new Set(expandedDocuments);
+
+    if (expandedDocuments.has(documentId)) {
+      newExpanded.delete(documentId);
+    } else {
+      newExpanded.add(documentId);
+    }
+
+    setExpandedDocuments(newExpanded);
+  };
+
+
+  const handleAnalysisRowClick = (analysis: SwissObligationAnalysisResult) => {
+    setSelectedAnalysis(analysis);
+    setSidenavOpen(true);
+  };
+
   // Group documents by category
   const groupedDocuments = documents.reduce((groups: Record<string, any[]>, document) => {
     const category = document.documentMetadata?.category || 'other';
@@ -170,6 +193,33 @@ export default function ContractsPage() {
     return groups;
   }, {});
 
+  // Load all document analyses for the given documents
+  const loadAllDocumentAnalyses = async (documents: any[]) => {
+    const analysesPromises = documents.map(async (document) => {
+      try {
+        const result = await getSwissObligationAnalysesByDocumentId(document.documentId);
+        if (result.success && result.data?.analyses) {
+          return { documentId: document.documentId, analyses: result.data.analyses };
+        }
+        return { documentId: document.documentId, analyses: [] };
+      } catch (err) {
+        console.error(`Error loading analyses for document ${document.documentId}:`, err);
+        return { documentId: document.documentId, analyses: [] };
+      }
+    });
+
+    const analysesResults = await Promise.all(analysesPromises);
+    const analysesMap: Record<string, SwissObligationAnalysisResult[]> = {};
+
+    analysesResults.forEach(({ documentId, analyses }) => {
+      if (analyses.length > 0) {
+        analysesMap[documentId] = analyses;
+      }
+    });
+
+    setDocumentAnalyses(analysesMap);
+  };
+
   // Fetch documents on component mount
   useEffect(() => {
     getDocuments({
@@ -179,6 +229,13 @@ export default function ContractsPage() {
       sortOrder: 'desc'
     });
   }, [getDocuments]);
+
+  // Load analyses when documents are loaded
+  useEffect(() => {
+    if (documents.length > 0) {
+      loadAllDocumentAnalyses(documents);
+    }
+  }, [documents]);
 
   const handleFileSelect = (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -379,33 +436,34 @@ export default function ContractsPage() {
 
   const handleSwissObligationAnalysis = async (documentId: string, fileName: string) => {
     setSwissAnalysisLoading(documentId);
-    setSwissAnalysisResults(null);
 
     try {
+      // Start the analysis job
       const result = await analyzeSwissObligationLaw(documentId);
 
-      if (result.success && result.data) {
-        setSwissAnalysisResults(result.data);
+      if (result.success && result.data?.jobId) {
         toast({
-          variant: "success",
-          title: "Analyse abgeschlossen",
-          description: `Schweizer Obligationenrecht-Analyse für "${fileName}" wurde erfolgreich durchgeführt.`
+          title: "Analyse gestartet",
+          description: `Schweizer Obligationenrecht-Analyse für "${fileName}" wurde im Hintergrund gestartet. Sie erhalten eine Benachrichtigung, wenn die Analyse abgeschlossen ist.`
         });
+
+        // Clear loading state immediately since global monitoring will handle the rest
+        setSwissAnalysisLoading(null);
       } else {
         toast({
           variant: "destructive",
           title: "Analyse fehlgeschlagen",
-          description: result.error || "Fehler bei der Schweizer Obligationenrecht-Analyse."
+          description: result.error || "Fehler beim Starten der Schweizer Obligationenrecht-Analyse."
         });
+        setSwissAnalysisLoading(null);
       }
     } catch (err) {
       console.error('Swiss obligation analysis error:', err);
       toast({
         variant: "destructive",
         title: "Analyse fehlgeschlagen",
-        description: "Unerwarteter Fehler bei der Schweizer Obligationenrecht-Analyse."
+        description: "Unerwarteter Fehler beim Starten der Schweizer Obligationenrecht-Analyse."
       });
-    } finally {
       setSwissAnalysisLoading(null);
     }
   };
@@ -492,6 +550,7 @@ export default function ContractsPage() {
                     <Table>
                       <TableHeader>
                         <TableRow>
+                          <TableHead className="w-8"></TableHead>
                           <TableHead>Titel</TableHead>
                           <TableHead>Risiko</TableHead>
                           <TableHead>Hochgeladen</TableHead>
@@ -501,72 +560,132 @@ export default function ContractsPage() {
                       </TableHeader>
                       <TableBody>
                         {categoryDocuments.map((document) => (
-                          <TableRow key={document.documentId}>
-                            <TableCell>
-                              <div className="space-y-1">
-                                <div className="font-medium">{document.documentMetadata.fileName || document.documentMetadata.originalName || 'Unbekannt'}</div>
-                                <div className="text-sm text-muted-foreground">
-                                  {document.documentMetadata.uploadedAt ? new Date(document.documentMetadata.uploadedAt).toLocaleDateString('de-DE') : 'Unbekannt'} • {document.documentMetadata.size ? `${(document.documentMetadata.size / 1024 / 1024).toFixed(1)} MB` : 'Unbekannt'}
+                          <React.Fragment key={document.documentId}>
+                            <TableRow className="border-b">
+                              <TableCell>
+                                {documentAnalyses[document.documentId] && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 w-6 p-0"
+                                    onClick={() => toggleDocumentExpansion(document.documentId)}
+                                  >
+                                    {expandedDocuments.has(document.documentId) ? (
+                                      <ChevronDown className="h-4 w-4" />
+                                    ) : (
+                                      <ChevronRight className="h-4 w-4" />
+                                    )}
+                                  </Button>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                <div className="space-y-1">
+                                  <div className="font-medium">{document.documentMetadata.fileName || document.documentMetadata.originalName || 'Unbekannt'}</div>
+                                  <div className="text-sm text-muted-foreground">
+                                    {document.documentMetadata.uploadedAt ? new Date(document.documentMetadata.uploadedAt).toLocaleDateString('de-DE') : 'Unbekannt'} • {document.documentMetadata.size ? `${(document.documentMetadata.size / 1024 / 1024).toFixed(1)} MB` : 'Unbekannt'}
+                                  </div>
                                 </div>
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              {getRiskBadge(document.documentMetadata.riskLevel || 'unknown')}
-                            </TableCell>
-                            <TableCell>
-                              <div className="text-sm">
-                                {document.documentMetadata.uploadedAt ? new Date(document.documentMetadata.uploadedAt).toLocaleDateString('de-DE') : 'Unbekannt'}
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex items-center space-x-2">
-                                {getStatusIcon(document.documentMetadata.status || 'unknown')}
-                                <span className="text-sm">{getStatusText(document.documentMetadata.status || 'unknown')}</span>
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex items-center space-x-2">
-                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                                  <Eye className="h-4 w-4" />
-                                  <span className="sr-only">Details</span>
-                                </Button>
-                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                                  <Download className="h-4 w-4" />
-                                  <span className="sr-only">Herunterladen</span>
-                                </Button>
-                                <Button 
-                                  variant="ghost" 
-                                  size="sm" 
-                                  className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                                  onClick={() => handleExtractText(document.documentId, document.documentMetadata.fileName || 'Unbekannt')}
-                                  disabled={extractingText}
-                                >
-                                  <FileSearch className="h-4 w-4" />
-                                  <span className="sr-only">Text extrahieren</span>
-                                </Button>
-                                <Button 
-                                  variant="ghost" 
-                                  size="sm" 
-                                  className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50"
-                                  onClick={() => handleSwissObligationAnalysis(document.documentId, document.documentMetadata.fileName || 'Unbekannt')}
-                                  disabled={swissAnalysisLoading === document.documentId}
-                                  title="Schweizer Obligationenrecht-Analyse"
-                                >
-                                  <Scale className="h-4 w-4" />
-                                  <span className="sr-only">Schweizer Obligationenrecht-Analyse</span>
-                                </Button>
-                                <Button 
-                                  variant="ghost" 
-                                  size="sm" 
-                                  className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
-                                  onClick={() => handleDeleteDocument(document.documentId, document.documentMetadata.fileName || 'Unbekannt')}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                  <span className="sr-only">Löschen</span>
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
+                              </TableCell>
+                              <TableCell>
+                              </TableCell>
+                              <TableCell>
+                                <div className="text-sm">
+                                  {document.documentMetadata.uploadedAt ? new Date(document.documentMetadata.uploadedAt).toLocaleDateString('de-DE') : 'Unbekannt'}
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex items-center space-x-2">
+                                  {getStatusIcon(document.documentMetadata.status || 'unknown')}
+                                  <span className="text-sm">{getStatusText(document.documentMetadata.status || 'unknown')}</span>
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex items-center space-x-2">
+                                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                    <Download className="h-4 w-4" />
+                                    <span className="sr-only">Herunterladen</span>
+                                  </Button>
+                                  <Button 
+                                    variant="ghost" 
+                                    size="sm" 
+                                    className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                    onClick={() => handleExtractText(document.documentId, document.documentMetadata.fileName || 'Unbekannt')}
+                                    disabled={extractingText}
+                                  >
+                                    <FileSearch className="h-4 w-4" />
+                                    <span className="sr-only">Text extrahieren</span>
+                                  </Button>
+                                  <Button 
+                                    variant="ghost" 
+                                    size="sm" 
+                                    className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50"
+                                    onClick={() => handleSwissObligationAnalysis(document.documentId, document.documentMetadata.fileName || 'Unbekannt')}
+                                    disabled={swissAnalysisLoading === document.documentId}
+                                    title="Schweizer Obligationenrecht-Analyse"
+                                  >
+                                    <Scale className="h-4 w-4" />
+                                    <span className="sr-only">Schweizer Obligationenrecht-Analyse</span>
+                                  </Button>
+                                  <Button 
+                                    variant="ghost" 
+                                    size="sm" 
+                                    className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                    onClick={() => handleDeleteDocument(document.documentId, document.documentMetadata.fileName || 'Unbekannt')}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                    <span className="sr-only">Löschen</span>
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+
+                            {/* Analysis Results Sub-rows */}
+                            {expandedDocuments.has(document.documentId) && documentAnalyses[document.documentId] && (
+                              <>
+                                {documentAnalyses[document.documentId].map((analysis, analysisIndex) => (
+                                  <TableRow 
+                                    key={`${document.documentId}-analysis-${analysisIndex}`}
+                                    className="bg-slate-50 hover:bg-slate-100 cursor-pointer border-l-4 border-l-blue-500"
+                                    onClick={() => handleAnalysisRowClick(analysis)}
+                                  >
+                                    <TableCell></TableCell>
+                                    <TableCell>
+                                      <div className="pl-6 space-y-1">
+                                        <div className="flex items-center space-x-2">
+                                          <Scale className="h-4 w-4 text-blue-600" />
+                                          <span className="font-medium text-sm">Schweizer Obligationenrecht-Analyse</span>
+                                        </div>
+                                        <div className="text-xs text-muted-foreground">
+                                          ID: {analysis.analysisId} • {analysis.sections?.length || 0} Abschnitte
+                                        </div>
+                                      </div>
+                                    </TableCell>
+                                    <TableCell>
+                                      <Badge variant={analysis.overallCompliance?.isCompliant ? "default" : "destructive"} className="text-xs">
+                                        {analysis.overallCompliance?.isCompliant ? "Konform" : "Nicht konform"}
+                                      </Badge>
+                                    </TableCell>
+                                    <TableCell>
+                                      <div className="text-sm">
+                                        {analysis.createdAt ? new Date(analysis.createdAt).toLocaleDateString('de-DE') : 'Unbekannt'}
+                                      </div>
+                                    </TableCell>
+                                    <TableCell>
+                                      <div className="flex items-center space-x-2">
+                                        <CheckCircle className="h-4 w-4 text-green-500" />
+                                        <span className="text-sm">Abgeschlossen</span>
+                                      </div>
+                                    </TableCell>
+                                    <TableCell>
+                                      <div className="text-sm text-muted-foreground">
+                                        Score: {Math.round((analysis.overallCompliance?.complianceScore || 0) * 100)}%
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </>
+                            )}
+                          </React.Fragment>
                         ))}
                       </TableBody>
                     </Table>
@@ -645,183 +764,6 @@ export default function ContractsPage() {
           </Card>
         )}
 
-        {/* Swiss Obligation Analysis Results */}
-        {swissAnalysisResults && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <Scale className="h-5 w-5" />
-                <span>Schweizer Obligationenrecht-Analyse</span>
-              </CardTitle>
-              <div className="text-sm text-muted-foreground">
-                Analyse-ID: {swissAnalysisResults.analysisId} • {swissAnalysisResults.sections?.length || 0} Abschnitte analysiert
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {/* Document Context */}
-                {swissAnalysisResults.documentContext && (
-                  <div className="p-4 rounded-lg border bg-slate-50">
-                    <div className="flex items-center space-x-2 mb-3">
-                      <FileText className="h-4 w-4 text-slate-600" />
-                      <h3 className="font-semibold text-slate-800">Dokumentkontext</h3>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <div className="text-xs font-medium text-slate-600 mb-1">Dokumenttyp</div>
-                        <Badge variant="outline" className="text-xs">
-                          {swissAnalysisResults.documentContext.documentType}
-                        </Badge>
-                      </div>
-                      <div>
-                        <div className="text-xs font-medium text-slate-600 mb-1">Geschäftsbereich</div>
-                        <Badge variant="outline" className="text-xs">
-                          {swissAnalysisResults.documentContext.businessDomain}
-                        </Badge>
-                      </div>
-                    </div>
-                    {swissAnalysisResults.documentContext.keyTerms && swissAnalysisResults.documentContext.keyTerms.length > 0 && (
-                      <div className="mt-3">
-                        <div className="text-xs font-medium text-slate-600 mb-2">Schlüsselbegriffe</div>
-                        <div className="flex flex-wrap gap-1">
-                          {swissAnalysisResults.documentContext.keyTerms.map((term: string, index: number) => (
-                            <Badge key={index} variant="secondary" className="text-xs">
-                              {term}
-                            </Badge>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {swissAnalysisResults.documentContext.contextDescription && (
-                      <div className="mt-3">
-                        <div className="text-xs font-medium text-slate-600 mb-1">Kontextbeschreibung</div>
-                        <p className="text-xs text-slate-700 bg-white p-2 rounded border">
-                          {swissAnalysisResults.documentContext.contextDescription}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Overall Compliance */}
-                <div className="p-4 rounded-lg border">
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="font-semibold">Gesamtbewertung</h3>
-                    <Badge variant={swissAnalysisResults.overallCompliance?.isCompliant ? "default" : "destructive"}>
-                      {swissAnalysisResults.overallCompliance?.isCompliant ? "Konform" : "Nicht konform"}
-                    </Badge>
-                  </div>
-                  <div className="text-sm text-muted-foreground mb-2">
-                    Compliance-Score: {Math.round((swissAnalysisResults.overallCompliance?.complianceScore || 0) * 100)}%
-                  </div>
-                  <p className="text-sm">{swissAnalysisResults.overallCompliance?.summary}</p>
-                </div>
-
-                {/* Summary Statistics */}
-                {swissAnalysisResults.summary && (
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="text-center p-3 bg-muted rounded-lg">
-                      <div className="text-2xl font-bold">{swissAnalysisResults.summary.totalSections}</div>
-                      <div className="text-xs text-muted-foreground">Abschnitte</div>
-                    </div>
-                    <div className="text-center p-3 bg-green-50 rounded-lg">
-                      <div className="text-2xl font-bold text-green-600">{swissAnalysisResults.summary.compliantSections}</div>
-                      <div className="text-xs text-muted-foreground">Konform</div>
-                    </div>
-                    <div className="text-center p-3 bg-red-50 rounded-lg">
-                      <div className="text-2xl font-bold text-red-600">{swissAnalysisResults.summary.totalViolations}</div>
-                      <div className="text-xs text-muted-foreground">Verstöße</div>
-                    </div>
-                    <div className="text-center p-3 bg-blue-50 rounded-lg">
-                      <div className="text-2xl font-bold text-blue-600">{swissAnalysisResults.summary.totalRecommendations}</div>
-                      <div className="text-xs text-muted-foreground">Empfehlungen</div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Sections Overview */}
-                {swissAnalysisResults.sections && swissAnalysisResults.sections.length > 0 && (
-                  <div className="space-y-2">
-                    <h3 className="font-semibold">Abschnitte</h3>
-                    <div className="space-y-2">
-                      {swissAnalysisResults.sections.map((section: SwissObligationSectionResult, index: number) => (
-                        <div key={section.sectionId || index} className="border rounded-lg p-3 space-y-2">
-                          <div className="flex items-center justify-between">
-                            <div className="flex-1">
-                              <div className="font-medium text-sm">{section.title}</div>
-                              <div className="text-xs text-muted-foreground">
-                                {section.violationCount} Verstöße • {section.recommendationCount} Empfehlungen
-                              </div>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <Badge variant={section.isCompliant ? "default" : "destructive"} className="text-xs">
-                                {section.isCompliant ? "Konform" : "Nicht konform"}
-                              </Badge>
-                              <div className="text-xs text-muted-foreground">
-                                {Math.round((section.confidence || 0) * 100)}%
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Preview of violations and recommendations */}
-                          {(section.violations?.length > 0 || section.recommendations?.length > 0) && (
-                            <div className="space-y-1 pt-2 border-t">
-                              {section.violations?.length > 0 && (
-                                <div className="space-y-1">
-                                  <div className="text-xs font-medium text-red-600">Verstöße:</div>
-                                  {section.violations.slice(0, 2).map((violation: string, violationIndex: number) => (
-                                    <div key={violationIndex} className="text-xs text-red-600 bg-red-50 p-1 rounded">
-                                      • {violation.length > 100 ? violation.substring(0, 100) + '...' : violation}
-                                    </div>
-                                  ))}
-                                  {section.violations.length > 2 && (
-                                    <div className="text-xs text-red-500 italic">
-                                      +{section.violations.length - 2} weitere Verstöße
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-
-                              {section.recommendations?.length > 0 && (
-                                <div className="space-y-1">
-                                  <div className="text-xs font-medium text-blue-600">Empfehlungen:</div>
-                                  {section.recommendations.slice(0, 2).map((recommendation: string, recommendationIndex: number) => (
-                                    <div key={recommendationIndex} className="text-xs text-blue-600 bg-blue-50 p-1 rounded">
-                                      • {recommendation.length > 100 ? recommendation.substring(0, 100) + '...' : recommendation}
-                                    </div>
-                                  ))}
-                                  {section.recommendations.length > 2 && (
-                                    <div className="text-xs text-blue-500 italic">
-                                      +{section.recommendations.length - 2} weitere Empfehlungen
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Action Buttons */}
-                <div className="flex justify-between items-center pt-4 border-t">
-                  <span className="text-xs text-muted-foreground">
-                    Erstellt: {swissAnalysisResults.createdAt ? new Date(swissAnalysisResults.createdAt).toLocaleString('de-DE') : 'Unbekannt'}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setAnalysisDetailsOpen(true)}
-                  >
-                    Details anzeigen
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
       </div>
 
       {/* Delete Confirmation Dialog */}
@@ -988,198 +930,274 @@ export default function ContractsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Analysis Details Dialog */}
-      <Dialog open={analysisDetailsOpen} onOpenChange={setAnalysisDetailsOpen}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center space-x-2">
-              <Scale className="h-5 w-5" />
-              <span>Detaillierte Analyse-Ergebnisse</span>
-            </DialogTitle>
-            <DialogDescription>
-              Vollständige Ergebnisse der Schweizer Obligationenrecht-Analyse
-            </DialogDescription>
-          </DialogHeader>
+      {/* Analysis Details Sidenav */}
+      {sidenavOpen && selectedAnalysis && (
+        <div className="fixed inset-0 z-50 overflow-hidden">
+          {/* Backdrop */}
+          <div 
+            className="absolute inset-0 bg-opacity-50 transition-opacity"
+            onClick={() => setSidenavOpen(false)}
+          />
 
-          {swissAnalysisResults && (
-            <div className="space-y-6">
-              {/* Analysis Overview */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Analyse-ID</Label>
-                  <p className="text-sm font-mono bg-muted p-2 rounded">{swissAnalysisResults.analysisId}</p>
+          {/* Sidenav */}
+          <div className="absolute right-0 top-0 h-full w-full max-w-2xl bg-white shadow-xl transform transition-transform">
+            <div className="flex flex-col h-full">
+              {/* Header */}
+              <div className="flex items-center justify-between p-6 border-b bg-slate-50">
+                <div className="flex items-center space-x-2">
+                  <Scale className="h-5 w-5 text-blue-600" />
+                  <h2 className="text-lg font-semibold">Detaillierte Analyse-Ergebnisse</h2>
                 </div>
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Dokument-ID</Label>
-                  <p className="text-sm font-mono bg-muted p-2 rounded">{swissAnalysisResults.documentId}</p>
-                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSidenavOpen(false)}
+                  className="h-8 w-8 p-0"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
               </div>
 
-              {/* Document Context Details */}
-              {swissAnalysisResults.documentContext && (
-                <div className="space-y-3">
-                  <h3 className="text-lg font-semibold">Dokumentkontext</h3>
-                  <div className="p-4 border rounded-lg bg-slate-50 space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label className="text-sm font-medium">Dokumenttyp</Label>
-                        <Badge variant="outline" className="text-sm">
-                          {swissAnalysisResults.documentContext.documentType}
-                        </Badge>
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="text-sm font-medium">Geschäftsbereich</Label>
-                        <Badge variant="outline" className="text-sm">
-                          {swissAnalysisResults.documentContext.businessDomain}
-                        </Badge>
-                      </div>
-                    </div>
-
-                    {swissAnalysisResults.documentContext.keyTerms && swissAnalysisResults.documentContext.keyTerms.length > 0 && (
-                      <div className="space-y-2">
-                        <Label className="text-sm font-medium">Schlüsselbegriffe</Label>
-                        <div className="flex flex-wrap gap-2">
-                          {swissAnalysisResults.documentContext.keyTerms.map((term: string, index: number) => (
-                            <Badge key={index} variant="secondary" className="text-sm">
-                              {term}
-                            </Badge>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {swissAnalysisResults.documentContext.contextDescription && (
-                      <div className="space-y-2">
-                        <Label className="text-sm font-medium">Kontextbeschreibung</Label>
-                        <p className="text-sm text-slate-700 bg-white p-3 rounded border">
-                          {swissAnalysisResults.documentContext.contextDescription}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Overall Compliance Details */}
-              <div className="space-y-3">
-                <h3 className="text-lg font-semibold">Gesamtbewertung</h3>
-                <div className="p-4 border rounded-lg space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium">Status:</span>
-                    <Badge variant={swissAnalysisResults.overallCompliance?.isCompliant ? "default" : "destructive"}>
-                      {swissAnalysisResults.overallCompliance?.isCompliant ? "Konform" : "Nicht konform"}
-                    </Badge>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium">Compliance-Score:</span>
-                    <span className="font-mono">{Math.round((swissAnalysisResults.overallCompliance?.complianceScore || 0) * 100)}%</span>
+              {/* Content */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                {/* Analysis Overview */}
+                <div className="grid grid-cols-1 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Analyse-ID</Label>
+                    <p className="text-sm font-mono bg-muted p-2 rounded">{selectedAnalysis.analysisId}</p>
                   </div>
                   <div className="space-y-2">
-                    <span className="font-medium">Zusammenfassung:</span>
-                    <p className="text-sm text-muted-foreground">{swissAnalysisResults.overallCompliance?.summary}</p>
+                    <Label className="text-sm font-medium">Dokument-ID</Label>
+                    <p className="text-sm font-mono bg-muted p-2 rounded">{selectedAnalysis.documentId}</p>
                   </div>
                 </div>
-              </div>
 
-              {/* Detailed Sections */}
-              {swissAnalysisResults.sections && swissAnalysisResults.sections.length > 0 && (
-                <div className="space-y-3">
-                  <h3 className="text-lg font-semibold">Detaillierte Abschnitts-Analyse</h3>
-                  <div className="space-y-4">
-                    {swissAnalysisResults.sections.map((section: SwissObligationSectionResult, index: number) => (
-                      <div key={section.sectionId || index} className="border rounded-lg p-4 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <h4 className="font-medium">Abschnitt {index + 1}</h4>
-                          <div className="flex items-center space-x-2">
-                            <Badge variant={section.isCompliant ? "default" : "destructive"} className="text-xs">
-                              {section.isCompliant ? "Konform" : "Nicht konform"}
-                            </Badge>
-                            <span className="text-xs text-muted-foreground">
-                              Vertrauen: {Math.round((section.confidence || 0) * 100)}%
-                            </span>
-                          </div>
-                        </div>
-
+                {/* Document Context Details */}
+                {selectedAnalysis.documentContext && (
+                  <div className="space-y-3">
+                    <h3 className="text-lg font-semibold">Dokumentkontext</h3>
+                    <div className="p-4 border rounded-lg bg-slate-50 space-y-4">
+                      <div className="grid grid-cols-1 gap-4">
                         <div className="space-y-2">
-                          <Label className="text-sm font-medium">Inhalt:</Label>
-                          <p className="text-sm bg-muted p-3 rounded max-h-32 overflow-y-auto">{section.title}</p>
+                          <Label className="text-sm font-medium">Dokumenttyp</Label>
+                          <Badge variant="outline" className="text-sm">
+                            {selectedAnalysis.documentContext.documentType}
+                          </Badge>
                         </div>
-
-                        {section.reasoning && (
-                          <div className="space-y-2">
-                            <Label className="text-sm font-medium">Rechtliche Begründung:</Label>
-                            <p className="text-sm text-muted-foreground bg-gray-50 p-3 rounded">{section.reasoning}</p>
-                          </div>
-                        )}
-
-                        {section.violationCount > 0 && (
-                          <div className="space-y-2">
-                            <Label className="text-sm font-medium text-red-600">Verstöße ({section.violationCount}):</Label>
-                            <div className="space-y-1">
-                              {section.violations && section.violations.length > 0 ? (
-                                section.violations.map((violation: string, violationIndex: number) => (
-                                  <div key={violationIndex} className="text-sm text-red-600 bg-red-50 p-2 rounded">
-                                    • {violation}
-                                  </div>
-                                ))
-                              ) : (
-                                <p className="text-sm text-red-600 bg-red-50 p-2 rounded">
-                                  {section.violationCount} potenzielle Verstöße identifiziert
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                        )}
-
-                        {section.recommendationCount > 0 && (
-                          <div className="space-y-2">
-                            <Label className="text-sm font-medium text-blue-600">Empfehlungen ({section.recommendationCount}):</Label>
-                            <div className="space-y-1">
-                              {section.recommendations && section.recommendations.length > 0 ? (
-                                section.recommendations.map((recommendation: string, recommendationIndex: number) => (
-                                  <div key={recommendationIndex} className="text-sm text-blue-600 bg-blue-50 p-2 rounded">
-                                    • {recommendation}
-                                  </div>
-                                ))
-                              ) : (
-                                <p className="text-sm text-blue-600 bg-blue-50 p-2 rounded">
-                                  {section.recommendationCount} Empfehlungen zur Verbesserung
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                        )}
+                        <div className="space-y-2">
+                          <Label className="text-sm font-medium">Geschäftsbereich</Label>
+                          <Badge variant="outline" className="text-sm">
+                            {selectedAnalysis.documentContext.businessDomain}
+                          </Badge>
+                        </div>
                       </div>
-                    ))}
+
+                      {selectedAnalysis.documentContext.keyTerms && selectedAnalysis.documentContext.keyTerms.length > 0 && (
+                        <div className="space-y-2">
+                          <Label className="text-sm font-medium">Schlüsselbegriffe</Label>
+                          <div className="flex flex-wrap gap-2">
+                            {selectedAnalysis.documentContext.keyTerms.map((term: string, index: number) => (
+                              <Badge key={index} variant="secondary" className="text-sm">
+                                {term}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {selectedAnalysis.documentContext.contextDescription && (
+                        <div className="space-y-2">
+                          <Label className="text-sm font-medium">Kontextbeschreibung</Label>
+                          <p className="text-sm text-slate-700 bg-white p-3 rounded border">
+                            {selectedAnalysis.documentContext.contextDescription}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Overall Compliance Details */}
+                <div className="space-y-3">
+                  <h3 className="text-lg font-semibold">Gesamtbewertung</h3>
+                  <div className="p-4 border rounded-lg space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">Status:</span>
+                      <Badge variant={selectedAnalysis.overallCompliance?.isCompliant ? "default" : "destructive"}>
+                        {selectedAnalysis.overallCompliance?.isCompliant ? "Konform" : "Nicht konform"}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">Compliance-Score:</span>
+                      <span className="font-mono">{Math.round((selectedAnalysis.overallCompliance?.complianceScore || 0) * 100)}%</span>
+                    </div>
+                    <div className="space-y-2">
+                      <span className="font-medium">Zusammenfassung:</span>
+                      <p className="text-sm text-muted-foreground">{selectedAnalysis.overallCompliance?.summary}</p>
+                    </div>
                   </div>
                 </div>
-              )}
 
-              {/* Timestamps */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t">
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Erstellt am:</Label>
-                  <p className="text-sm text-muted-foreground">
-                    {swissAnalysisResults.createdAt ? new Date(swissAnalysisResults.createdAt).toLocaleString('de-DE') : 'Unbekannt'}
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Abgeschlossen am:</Label>
-                  <p className="text-sm text-muted-foreground">
-                    {swissAnalysisResults.completedAt ? new Date(swissAnalysisResults.completedAt).toLocaleString('de-DE') : 'Unbekannt'}
-                  </p>
+                {/* Summary Statistics */}
+                {selectedAnalysis.summary && (
+                  <div className="space-y-3">
+                    <h3 className="text-lg font-semibold">Statistiken</h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="text-center p-3 bg-muted rounded-lg">
+                        <div className="text-2xl font-bold">{selectedAnalysis.summary.totalSections}</div>
+                        <div className="text-xs text-muted-foreground">Abschnitte</div>
+                      </div>
+                      <div className="text-center p-3 bg-green-50 rounded-lg">
+                        <div className="text-2xl font-bold text-green-600">{selectedAnalysis.summary.compliantSections}</div>
+                        <div className="text-xs text-muted-foreground">Konform</div>
+                      </div>
+                      <div className="text-center p-3 bg-red-50 rounded-lg">
+                        <div className="text-2xl font-bold text-red-600">{selectedAnalysis.summary.totalViolations}</div>
+                        <div className="text-xs text-muted-foreground">Verstöße</div>
+                      </div>
+                      <div className="text-center p-3 bg-blue-50 rounded-lg">
+                        <div className="text-2xl font-bold text-blue-600">{selectedAnalysis.summary.totalRecommendations}</div>
+                        <div className="text-xs text-muted-foreground">Empfehlungen</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Detailed Sections */}
+                {selectedAnalysis.sections && selectedAnalysis.sections.length > 0 && (
+                  <div className="space-y-3">
+                    <h3 className="text-lg font-semibold">Detaillierte Abschnitts-Analyse</h3>
+                    <div className="space-y-4">
+                      {selectedAnalysis.sections.map((section: SwissObligationSectionResult, index: number) => (
+                        <div key={section.sectionId || index} className="border rounded-lg p-4 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <h4 className="font-medium">Abschnitt {index + 1}</h4>
+                            <div className="flex items-center space-x-2">
+                              <Badge variant={section.isCompliant ? "default" : "destructive"} className="text-xs">
+                                {section.isCompliant ? "Konform" : "Nicht konform"}
+                              </Badge>
+                              <span className="text-xs text-muted-foreground">
+                                Vertrauen: {Math.round((section.confidence || 0) * 100)}%
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label className="text-sm font-medium">Inhalt:</Label>
+                            <p className="text-sm bg-muted p-3 rounded max-h-32 overflow-y-auto">{section.title}</p>
+                          </div>
+
+                          {section.complianceAnalysis?.reasoning && (
+                            <div className="space-y-2">
+                              <Label className="text-sm font-medium">Rechtliche Begründung:</Label>
+                              <p className="text-sm text-muted-foreground bg-gray-50 p-3 rounded">{section.complianceAnalysis.reasoning}</p>
+                            </div>
+                          )}
+
+                          {/* Findings Section */}
+                          {section.findings && section.findings.length > 0 && (
+                            <div className="space-y-2">
+                              <Label className="text-sm font-medium text-red-600">Rechtliche Befunde ({section.findings.length}):</Label>
+                              <div className="space-y-2">
+                                {section.findings.map((finding: any, findingIndex: number) => (
+                                  <div key={finding.id || findingIndex} className="text-sm bg-red-50 p-3 rounded border-l-4 border-red-400">
+                                    <div className="font-medium text-red-800">{finding.title}</div>
+                                    <div className="text-red-700 mt-1">{finding.description}</div>
+                                    {finding.severity && (
+                                      <Badge variant="destructive" className="mt-2 text-xs">
+                                        {finding.severity}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {section.violationCount > 0 && (
+                            <div className="space-y-2">
+                              <Label className="text-sm font-medium text-red-600">Verstöße ({section.violationCount}):</Label>
+                              <div className="space-y-1">
+                                {section.violations && section.violations.length > 0 ? (
+                                  section.violations.map((violation: string, violationIndex: number) => (
+                                    <div key={violationIndex} className="text-sm text-red-600 bg-red-50 p-2 rounded">
+                                      • {violation}
+                                    </div>
+                                  ))
+                                ) : (
+                                  <p className="text-sm text-red-600 bg-red-50 p-2 rounded">
+                                    {section.violationCount} potenzielle Verstöße identifiziert
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Recommendations Section */}
+                          {section.recommendations && section.recommendations.length > 0 && (
+                            <div className="space-y-2">
+                              <Label className="text-sm font-medium text-blue-600">Empfehlungen ({section.recommendations.length}):</Label>
+                              <div className="space-y-2">
+                                {section.recommendations.map((recommendation: any, recommendationIndex: number) => (
+                                  <div key={recommendation.id || recommendationIndex} className="text-sm bg-blue-50 p-3 rounded border-l-4 border-blue-400">
+                                    <div className="font-medium text-blue-800">{recommendation.title}</div>
+                                    <div className="text-blue-700 mt-1">{recommendation.description}</div>
+                                    {recommendation.suggestedAction && recommendation.suggestedAction !== recommendation.description && (
+                                      <div className="text-blue-600 mt-2 text-xs">
+                                        <strong>Vorgeschlagene Maßnahme:</strong> {recommendation.suggestedAction}
+                                      </div>
+                                    )}
+                                    <div className="flex items-center gap-2 mt-2">
+                                      {recommendation.priority && (
+                                        <Badge variant={recommendation.priority === 'HIGH' ? "destructive" : recommendation.priority === 'MEDIUM' ? "default" : "secondary"} className="text-xs">
+                                          {recommendation.priority}
+                                        </Badge>
+                                      )}
+                                      {recommendation.estimatedEffort && (
+                                        <span className="text-xs text-blue-600">Aufwand: {recommendation.estimatedEffort}</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {section.recommendationCount > 0 && (!section.recommendations || section.recommendations.length === 0) && (
+                            <div className="space-y-2">
+                              <Label className="text-sm font-medium text-blue-600">Empfehlungen ({section.recommendationCount}):</Label>
+                              <p className="text-sm text-blue-600 bg-blue-50 p-2 rounded">
+                                {section.recommendationCount} Empfehlungen zur Verbesserung
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Timestamps */}
+                <div className="grid grid-cols-1 gap-4 pt-4 border-t">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Erstellt am:</Label>
+                    <p className="text-sm text-muted-foreground">
+                      {selectedAnalysis.createdAt ? new Date(selectedAnalysis.createdAt).toLocaleString('de-DE') : 'Unbekannt'}
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Abgeschlossen am:</Label>
+                    <p className="text-sm text-muted-foreground">
+                      {selectedAnalysis.completedAt ? new Date(selectedAnalysis.completedAt).toLocaleString('de-DE') : 'Unbekannt'}
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
-          )}
+          </div>
+        </div>
+      )}
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAnalysisDetailsOpen(false)}>
-              Schließen
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </MainLayout>
   );
 }

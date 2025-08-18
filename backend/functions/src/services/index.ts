@@ -5,6 +5,7 @@ export { EmbeddingService } from './EmbeddingService';
 export { AnalysisService } from './AnalysisService';
 export { TextExtractionService } from './TextExtractionService';
 export { SwissObligationLawService } from './SwissObligationLawService';
+export { JobQueueService } from './JobQueueService';
 export { FirebaseInitializer, ensureFirebaseInitialized } from './FirebaseInitializer';
 
 // Re-export types for convenience
@@ -26,3 +27,8 @@ export type {
   SectionAnalysisResult,
   SwissObligationAnalysisResult
 } from './SwissObligationLawService';
+
+export type {
+  Job,
+  JobProgress
+} from './JobQueueService';

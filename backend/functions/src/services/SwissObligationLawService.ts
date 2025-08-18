@@ -510,8 +510,6 @@ Bestimme Dokumenttyp, Geschäftsdomäne und wichtige Schlüsselbegriffe:`;
         }
       }
 
-      this.logger.info('Found legal context for section', {legalContext})
-
       // Step 3: Analyze compliance using ChatGPT with legal context
       const complianceAnalysis = await this.analyzeComplianceWithContext(
         section,
@@ -669,7 +667,7 @@ Antworte im JSON-Format mit folgender Struktur:
     const contextText = legalContext
     .flatMap(ctx => ctx.documents) // Flatten: Alle documents aus allen contexts
     .map(doc => {
-      this.logger.info('Legal context document', { doc });
+      this.logger.debug('Legal context document', { doc });
       return `${doc.metadata?.title || 'Rechtsnorm'}: ${doc.pageContent}`;
     })
     .join('\n\n');
@@ -878,6 +876,55 @@ Analysiere die Rechtmässigkeit dieses Abschnitts unter Berücksichtigung des sp
       return [];
     } catch (error) {
       this.logger.error('Error listing user Swiss obligation analyses', error as Error, {
+        userId
+      });
+      return [];
+    }
+  }
+
+  /**
+   * Get analysis results by document ID
+   */
+  public async getAnalysesByDocumentId(documentId: string, userId: string): Promise<SwissObligationAnalysisResult[]> {
+    try {
+      this.logger.info('Getting Swiss obligation analyses by document ID', { documentId, userId });
+
+      // Query Firestore for analyses with the given documentId
+      const db = this.firestoreService['db'] || require('firebase-admin').firestore();
+      const analysesRef = db.collection('swissObligationAnalyses');
+
+      const querySnapshot = await analysesRef
+        .where('documentId', '==', documentId)
+        .where('userId', '==', userId)
+        .orderBy('createdAt', 'desc')
+        .get();
+
+      const analyses: SwissObligationAnalysisResult[] = [];
+
+      querySnapshot.forEach((doc: any) => {
+        const data = doc.data();
+        analyses.push({
+          analysisId: data.analysisId,
+          documentId: data.documentId,
+          userId: data.userId,
+          documentContext: data.documentContext,
+          sections: data.sections,
+          overallCompliance: data.overallCompliance,
+          createdAt: new Date(data.createdAt),
+          completedAt: data.completedAt ? new Date(data.completedAt) : undefined
+        });
+      });
+
+      this.logger.info('Retrieved Swiss obligation analyses by document ID', { 
+        documentId, 
+        userId, 
+        count: analyses.length 
+      });
+
+      return analyses;
+    } catch (error) {
+      this.logger.error('Error getting Swiss obligation analyses by document ID', error as Error, {
+        documentId,
         userId
       });
       return [];

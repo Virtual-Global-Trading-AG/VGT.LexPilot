@@ -31,7 +31,7 @@ export interface PaginatedResult<T> {
 
 export class FirestoreService {
   private readonly logger = Logger.getInstance();
-  private readonly db: admin.firestore.Firestore;
+  public readonly db: admin.firestore.Firestore;
   private readonly userRepo;
   private readonly storageService;
 

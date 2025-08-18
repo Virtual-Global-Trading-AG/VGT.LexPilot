@@ -455,12 +455,98 @@ export function useDocuments() {
       if (response.success && response.data) {
         return { success: true, data: response.data };
       } else {
-        const errorMsg = response.error || 'Failed to analyze document against Swiss obligation law';
+        const errorMsg = response.error || 'Failed to start Swiss obligation law analysis';
         setError(errorMsg);
         return { success: false, error: errorMsg };
       }
     } catch (err) {
-      const errorMsg = 'Network error while analyzing document';
+      const errorMsg = 'Network error while starting analysis';
+      setError(errorMsg);
+      return { success: false, error: errorMsg };
+    } finally {
+      setLoading(false);
+    }
+  }, [isAuthenticated]);
+
+  const getJobStatus = useCallback(async (jobId: string): Promise<{
+    success: boolean;
+    data?: any;
+    error?: string;
+  }> => {
+    if (!isAuthenticated) {
+      setError('Authentication required');
+      return { success: false, error: 'Authentication required' };
+    }
+
+    try {
+      const response = await apiClient.get(`/documents/jobs/${jobId}`);
+
+      if (response.success && response.data) {
+        return { success: true, data: response.data };
+      } else {
+        const errorMsg = response.error || 'Failed to get job status';
+        setError(errorMsg);
+        return { success: false, error: errorMsg };
+      }
+    } catch (err) {
+      const errorMsg = 'Network error while getting job status';
+      setError(errorMsg);
+      return { success: false, error: errorMsg };
+    }
+  }, [isAuthenticated]);
+
+  const getUserJobs = useCallback(async (limit: number = 20, offset: number = 0): Promise<{
+    success: boolean;
+    data?: any;
+    error?: string;
+  }> => {
+    if (!isAuthenticated) {
+      setError('Authentication required');
+      return { success: false, error: 'Authentication required' };
+    }
+
+    try {
+      const response = await apiClient.get(`/documents/jobs?limit=${limit}&offset=${offset}`);
+
+      if (response.success && response.data) {
+        return { success: true, data: response.data };
+      } else {
+        const errorMsg = response.error || 'Failed to get user jobs';
+        setError(errorMsg);
+        return { success: false, error: errorMsg };
+      }
+    } catch (err) {
+      const errorMsg = 'Network error while getting user jobs';
+      setError(errorMsg);
+      return { success: false, error: errorMsg };
+    }
+  }, [isAuthenticated]);
+
+  const getSwissObligationAnalysesByDocumentId = useCallback(async (documentId: string): Promise<{
+    success: boolean;
+    data?: any;
+    error?: string;
+  }> => {
+    if (!isAuthenticated) {
+      setError('Authentication required');
+      return { success: false, error: 'Authentication required' };
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await apiClient.get(`/documents/${documentId}/swiss-obligation-analyses`);
+
+      if (response.success && response.data) {
+        return { success: true, data: response.data };
+      } else {
+        const errorMsg = response.error || 'Failed to fetch Swiss obligation analyses for document';
+        setError(errorMsg);
+        return { success: false, error: errorMsg };
+      }
+    } catch (err) {
+      const errorMsg = 'Network error while fetching Swiss obligation analyses';
       setError(errorMsg);
       return { success: false, error: errorMsg };
     } finally {
@@ -473,6 +559,9 @@ export function useDocuments() {
     deleteDocument,
     getDocumentText,
     analyzeSwissObligationLaw,
+    getJobStatus,
+    getUserJobs,
+    getSwissObligationAnalysesByDocumentId,
     documents,
     pagination,
     loading,

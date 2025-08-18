@@ -171,4 +171,18 @@ router.get('/swiss-obligation-analyses',
   documentController.listSwissObligationAnalyses.bind(documentController)
 );
 
+// Get Swiss Obligation Law Analyses by Document ID
+router.get('/:documentId/swiss-obligation-analyses',
+  documentController.getSwissObligationAnalysesByDocumentId.bind(documentController)
+);
+
+// Job Management Routes
+router.get('/jobs/:jobId',
+  documentController.getJobStatus.bind(documentController)
+);
+
+router.get('/jobs',
+  documentController.getUserJobs.bind(documentController)
+);
+
 export default router;

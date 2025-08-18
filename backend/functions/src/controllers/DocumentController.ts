@@ -2,7 +2,7 @@ import { HumanMessage } from '@langchain/core/messages';
 import { ChatOpenAI } from '@langchain/openai';
 import { NextFunction, Request, Response } from 'express';
 import { UserRepository } from '../repositories/UserRepository';
-import { AnalysisService, DocumentFilters, FirestoreService, PaginationOptions, SortOptions, StorageService, SwissObligationLawService, TextExtractionService } from '../services';
+import { AnalysisService, DocumentFilters, FirestoreService, JobQueueService, PaginationOptions, SortOptions, StorageService, SwissObligationLawService, TextExtractionService } from '../services';
 import { BaseController } from './BaseController';
 
 interface DocumentUploadRequest {
@@ -23,6 +23,7 @@ export class DocumentController extends BaseController {
   private readonly userRepository: UserRepository;
   private readonly textExtractionService: TextExtractionService;
   private readonly swissObligationLawService: SwissObligationLawService;
+  private readonly jobQueueService: JobQueueService;
 
   constructor() {
     super();
@@ -36,6 +37,7 @@ export class DocumentController extends BaseController {
       this.textExtractionService,
       this.firestoreService
     );
+    this.jobQueueService = new JobQueueService(this.firestoreService);
   }
 
   /**
@@ -1135,7 +1137,7 @@ STIL: Professionell, präzise, praxisorientiert für beide Jurisdiktionen`;
   }
 
   /**
-   * Analyze document against Swiss obligation law
+   * Analyze document against Swiss obligation law (Background Processing)
    * POST /api/documents/:documentId/analyze-swiss-obligation-law
    */
   public async analyzeSwissObligationLaw(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -1153,7 +1155,7 @@ STIL: Professionell, präzise, praxisorientiert für beide Jurisdiktionen`;
         documentId
       });
 
-      // Get document metadata from Firestore
+      // Verify document exists and user has access
       const document = await this.firestoreService.getDocument(documentId, userId);
 
       if (!document) {
@@ -1161,90 +1163,29 @@ STIL: Professionell, präzise, praxisorientiert für beide Jurisdiktionen`;
         return;
       }
 
-      // Get document content from storage
-      const documentBuffer = await this.storageService.getDocumentContent(
-        documentId,
-        document.fileName,
-        userId
+      // Create background job for analysis
+      const jobId = await this.jobQueueService.createJob(
+        'swiss-obligation-analysis',
+        userId,
+        { documentId, userId, fileName: document.fileName }
       );
 
-      // Extract text from document
-      const extractedText = await this.textExtractionService.extractText(
-        documentBuffer,
-        document.contentType,
-        document.fileName
-      );
-
-      // Clean and sanitize the text
-      let contractText: string;
-      if (document.anonymizedKeywords?.length) {
-        contractText = this.textExtractionService.replaceSpecificTexts(extractedText, document.anonymizedKeywords);
-      } else {
-        contractText = extractedText;
-      }
-
-      this.logger.info('Starting Swiss obligation law analysis', {
+      this.logger.info('Swiss obligation law analysis job created', {
         userId,
         documentId,
-        textLength: contractText.length
+        jobId
       });
 
-      // Set up progress tracking via WebSocket
-      const progressCallback = (progress: number, message: string) => {
-        // You can implement WebSocket progress updates here if needed
-        this.logger.info('Swiss obligation law analysis progress', {
-          userId,
-          documentId,
-          progress,
-          message
-        });
-      };
-
-      // Perform Swiss obligation law analysis
-      const analysisResult = await this.swissObligationLawService.analyzeContractAgainstSwissLaw(
-        contractText,
-        documentId,
-        userId,
-        progressCallback
-      );
-
-      this.logger.info('Swiss obligation law analysis completed', {
-        userId,
-        documentId,
-        analysisId: analysisResult.analysisId,
-        sectionCount: analysisResult.sections.length,
-        overallCompliant: analysisResult.overallCompliance.isCompliant,
-        complianceScore: analysisResult.overallCompliance.complianceScore
-      });
-
+      // Return immediately with job ID
       this.sendSuccess(res, {
-        analysisId: analysisResult.analysisId,
-        documentId: analysisResult.documentId,
-        documentContext: analysisResult.documentContext,
-        sections: analysisResult.sections.map(section => ({
-          sectionId: section.sectionId,
-          title: section.sectionContent.slice(0, 100) + '...',
-          isCompliant: section.complianceAnalysis.isCompliant,
-          confidence: section.complianceAnalysis.confidence,
-          violationCount: section.complianceAnalysis.violations.length,
-          recommendationCount: section.complianceAnalysis.recommendations.length,
-          violations: section.complianceAnalysis.violations,
-          recommendations: section.complianceAnalysis.recommendations,
-          reasoning: section.complianceAnalysis.reasoning
-        })),
-        overallCompliance: analysisResult.overallCompliance,
-        summary: {
-          totalSections: analysisResult.sections.length,
-          compliantSections: analysisResult.sections.filter(s => s.complianceAnalysis.isCompliant).length,
-          totalViolations: analysisResult.sections.reduce((sum, s) => sum + s.complianceAnalysis.violations.length, 0),
-          totalRecommendations: analysisResult.sections.reduce((sum, s) => sum + s.complianceAnalysis.recommendations.length, 0)
-        },
-        createdAt: analysisResult.createdAt.toISOString(),
-        completedAt: analysisResult.completedAt?.toISOString()
-      }, 'Swiss obligation law analysis completed successfully');
+        jobId,
+        documentId,
+        status: 'processing',
+        message: 'Analysis started in background. You will receive a notification when completed.'
+      }, 'Swiss obligation law analysis started successfully');
 
     } catch (error) {
-      this.logger.error('Swiss obligation law analysis failed', error as Error, {
+      this.logger.error('Swiss obligation law analysis job creation failed', error as Error, {
         userId: this.getUserId(req),
         documentId: req.params.documentId
       });
@@ -1342,6 +1283,174 @@ STIL: Professionell, präzise, praxisorientiert für beide Jurisdiktionen`;
       });
 
       this.sendError(res, 500, 'Failed to retrieve analyses list');
+      next(error);
+    }
+  }
+
+  /**
+   * Get Swiss obligation law analyses by document ID
+   * GET /api/documents/:documentId/swiss-obligation-analyses
+   */
+  public async getSwissObligationAnalysesByDocumentId(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = this.getUserId(req);
+      const { documentId } = req.params;
+
+      if (!documentId) {
+        this.sendError(res, 400, 'Missing required parameter', 'documentId is required');
+        return;
+      }
+
+      this.logger.info('Swiss obligation law analyses by document ID requested', {
+        userId,
+        documentId
+      });
+
+      const analyses = await this.swissObligationLawService.getAnalysesByDocumentId(documentId, userId);
+
+      this.sendSuccess(res, {
+        analyses: analyses.map(analysis => ({
+          analysisId: analysis.analysisId,
+          documentId: analysis.documentId,
+          documentContext: analysis.documentContext,
+          sections: analysis.sections.map(section => ({
+            sectionId: section.sectionId,
+            title: section.sectionContent?.slice(0, 100) + '...' || 'Section',
+            isCompliant: section.complianceAnalysis.isCompliant,
+            confidence: section.complianceAnalysis.confidence,
+            violationCount: section.complianceAnalysis.violations.length,
+            recommendationCount: section.recommendations.length,
+            violations: section.complianceAnalysis.violations,
+            recommendations: section.recommendations,
+            reasoning: section.complianceAnalysis.reasoning,
+            findings: section.findings || []
+          })),
+          overallCompliance: analysis.overallCompliance,
+          summary: {
+            totalSections: analysis.sections.length,
+            compliantSections: analysis.sections.filter(s => 
+              s.complianceAnalysis.isCompliant === true
+            ).length,
+            totalViolations: analysis.sections.reduce((sum, s) => 
+              sum + s.complianceAnalysis.violations.length, 0
+            ),
+            totalRecommendations: analysis.sections.reduce((sum, s) => 
+              sum + s.recommendations.length, 0
+            )
+          },
+          createdAt: analysis.createdAt.toISOString(),
+          completedAt: analysis.completedAt?.toISOString()
+        })),
+        total: analyses.length
+      }, 'Swiss obligation law analyses by document ID retrieved successfully');
+
+    } catch (error) {
+      this.logger.error('Failed to get Swiss obligation law analyses by document ID', error as Error, {
+        userId: this.getUserId(req),
+        documentId: req.params.documentId
+      });
+
+      this.sendError(res, 500, 'Failed to retrieve analyses by document ID');
+      next(error);
+    }
+  }
+
+  /**
+   * Get job status and progress
+   * GET /api/documents/jobs/:jobId
+   */
+  public async getJobStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = this.getUserId(req);
+      const { jobId } = req.params;
+
+      if (!jobId) {
+        this.sendError(res, 400, 'Missing required parameter', 'jobId is required');
+        return;
+      }
+
+      this.logger.info('Job status requested', {
+        userId,
+        jobId
+      });
+
+      const job = await this.jobQueueService.getJob(jobId, userId);
+
+      if (!job) {
+        this.sendError(res, 404, 'Job not found', 'Job not found or access denied');
+        return;
+      }
+
+      this.sendSuccess(res, {
+        jobId: job.id,
+        type: job.type,
+        status: job.status,
+        progress: job.progress || 0,
+        progressMessage: job.progressMessage || '',
+        result: job.result,
+        error: job.error,
+        createdAt: job.createdAt.toISOString(),
+        startedAt: job.startedAt?.toISOString(),
+        completedAt: job.completedAt?.toISOString()
+      }, 'Job status retrieved successfully');
+
+    } catch (error) {
+      this.logger.error('Failed to get job status', error as Error, {
+        userId: this.getUserId(req),
+        jobId: req.params.jobId
+      });
+
+      this.sendError(res, 500, 'Failed to retrieve job status');
+      next(error);
+    }
+  }
+
+  /**
+   * Get user's jobs with pagination
+   * GET /api/documents/jobs
+   */
+  public async getUserJobs(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = this.getUserId(req);
+      const limit = parseInt(req.query.limit as string) || 20;
+      const offset = parseInt(req.query.offset as string) || 0;
+
+      this.logger.info('User jobs requested', {
+        userId,
+        limit,
+        offset
+      });
+
+      const result = await this.jobQueueService.getUserJobs(userId, limit, offset);
+
+      this.sendSuccess(res, {
+        jobs: result.jobs.map(job => ({
+          jobId: job.id,
+          type: job.type,
+          status: job.status,
+          progress: job.progress || 0,
+          progressMessage: job.progressMessage || '',
+          data: job.data,
+          result: job.result,
+          error: job.error,
+          createdAt: job.createdAt.toISOString(),
+          startedAt: job.startedAt?.toISOString(),
+          completedAt: job.completedAt?.toISOString()
+        })),
+        pagination: {
+          limit,
+          offset,
+          total: result.total,
+          hasMore: offset + limit < result.total
+        }
+      }, 'User jobs retrieved successfully');
+
+    } catch (error) {
+      this.logger.error('Failed to get user jobs', error as Error, {
+        userId: this.getUserId(req)
+      });
+
+      this.sendError(res, 500, 'Failed to retrieve user jobs');
       next(error);
     }
   }
