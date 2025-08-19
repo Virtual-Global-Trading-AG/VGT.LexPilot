@@ -614,4 +614,48 @@ export class FirestoreService {
       throw new Error(`Failed to save document at ${path}`);
     }
   }
+
+  /**
+   * Batch operation for atomic multi-document operations
+   */
+  async saveBatch(operations: Array<{ path: string; data: any }>): Promise<void> {
+    try {
+      const batch = this.db.batch();
+
+      operations.forEach(({ path, data }) => {
+        const docRef = this.db.doc(path);
+        batch.set(docRef, data, { merge: true });
+      });
+
+      await batch.commit();
+
+      this.logger.debug('Batch operation completed successfully', {
+        operationCount: operations.length,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      this.logger.error('Failed to execute batch operation', error as Error, {
+        operationCount: operations.length
+      });
+      throw new Error('Failed to execute batch operation');
+    }
+  }
+
+  /**
+   * Get document from subcollection
+   */
+  async getSubcollectionDocument(path: string): Promise<any | null> {
+    try {
+      const doc = await this.db.doc(path).get();
+
+      if (!doc.exists) {
+        return null;
+      }
+
+      return doc.data();
+    } catch (error) {
+      this.logger.error('Failed to get subcollection document', error as Error, { path });
+      throw new Error(`Failed to get document at ${path}`);
+    }
+  }
 }

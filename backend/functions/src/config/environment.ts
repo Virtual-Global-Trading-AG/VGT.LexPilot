@@ -20,7 +20,12 @@ const envSchema = z.object({
   OPENAI_API_KEY: z.string().min(1),
   OPENAI_EMBEDDINGS_MODEL: z.string().default('text-embedding-3-small'),
   OPENAI_CHAT_MODEL: z.string().default('gpt-4-turbo-preview'),
-  
+
+  // Gemini
+  GOOGLE_API_KEY: z.string().min(1),
+  GOOGLE_CHAT_MODEL: z.string().default('gemini-pro'),
+  GOOGLE_MODEL: z.string().default('gemini-pro'),
+
   // Pinecone
   PINECONE_API_KEY: z.string().min(1),
   PINECONE_ENVIRONMENT: z.string().default('gcp-starter'),

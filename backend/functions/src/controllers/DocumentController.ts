@@ -1316,27 +1316,27 @@ STIL: Professionell, präzise, praxisorientiert für beide Jurisdiktionen`;
           sections: analysis.sections.map(section => ({
             sectionId: section.sectionId,
             title: section.sectionContent?.slice(0, 100) + '...' || 'Section',
-            isCompliant: section.complianceAnalysis.isCompliant,
-            confidence: section.complianceAnalysis.confidence,
-            violationCount: section.complianceAnalysis.violations.length,
-            recommendationCount: section.recommendations.length,
-            violations: section.complianceAnalysis.violations,
-            recommendations: section.recommendations,
-            reasoning: section.complianceAnalysis.reasoning,
+            isCompliant: section.complianceAnalysis?.isCompliant || false,
+            confidence: section.complianceAnalysis?.confidence || 0,
+            violationCount: section.complianceAnalysis?.violations?.length || 0,
+            recommendationCount: section.recommendations?.length || 0,
+            violations: section.complianceAnalysis?.violations || [],
+            recommendations: section.recommendations || [],
+            reasoning: section.complianceAnalysis?.reasoning || '',
             findings: section.findings || []
           })),
           overallCompliance: analysis.overallCompliance,
           summary: {
-            totalSections: analysis.sections.length,
-            compliantSections: analysis.sections.filter(s => 
-              s.complianceAnalysis.isCompliant === true
-            ).length,
-            totalViolations: analysis.sections.reduce((sum, s) => 
-              sum + s.complianceAnalysis.violations.length, 0
-            ),
-            totalRecommendations: analysis.sections.reduce((sum, s) => 
-              sum + s.recommendations.length, 0
-            )
+            totalSections: analysis.sections?.length || 0,
+            compliantSections: analysis.sections?.filter(s => 
+              s.complianceAnalysis?.isCompliant === true
+            ).length || 0,
+            totalViolations: analysis.sections?.reduce((sum, s) => 
+              sum + (s.complianceAnalysis?.violations?.length || 0), 0
+            ) || 0,
+            totalRecommendations: analysis.sections?.reduce((sum, s) => 
+              sum + (s.recommendations?.length || 0), 0
+            ) || 0
           },
           createdAt: analysis.createdAt.toISOString(),
           completedAt: analysis.completedAt?.toISOString()

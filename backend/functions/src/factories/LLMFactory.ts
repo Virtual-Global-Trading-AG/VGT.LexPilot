@@ -1,3 +1,4 @@
+import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
 import { ChatOpenAI } from '@langchain/openai';
 import { BaseLanguageModel } from '@langchain/core/language_models/base';
 import { Logger } from '../utils/logger';
@@ -13,7 +14,7 @@ export enum LLMType {
 
 export interface LLMConfig {
   temperature: number;
-  maxTokens: number;
+  maxTokens?: number;
   modelName: string;
   streaming?: boolean;
   timeout?: number;
@@ -37,24 +38,19 @@ export class LLMFactory {
    * Erstellt ein LLM für juristische Analysen
    * Optimiert für Präzision und strukturierte Ausgaben
    */
-  createAnalysisLLM(): ChatOpenAI {
+  createAnalysisLLM(): ChatGoogleGenerativeAI {
     const cacheKey = 'analysis';
-    
-    if (this.modelCache.has(cacheKey)) {
-      return this.modelCache.get(cacheKey)!;
-    }
 
     const config: LLMConfig = {
       temperature: 0.1, // Niedrige Temperatur für konsistente, präzise Antworten
-      maxTokens: 4000,
-      modelName: env.OPENAI_CHAT_MODEL,
+     // maxTokens: 4000,
+      modelName: env.GOOGLE_CHAT_MODEL,
       responseFormat: 'json_object', // Strukturierte Ausgaben für Analysen
       timeout: 60000, // 60 Sekunden für komplexe Analysen
-      maxRetries: 3
+      maxRetries: 3,
     };
 
-    const llm = this.createLLM(config);
-    this.modelCache.set(cacheKey, llm);
+    const llm = this.createLLMGoogleAI(config);
     
     this.logger.info('Created Analysis LLM', {
       model: config.modelName,
@@ -85,7 +81,7 @@ export class LLMFactory {
       maxRetries: 2
     };
 
-    const llm = this.createLLM(config);
+    const llm = this.createLLMOpenAI(config);
     this.modelCache.set(cacheKey, llm);
     
     this.logger.info('Created Generation LLM', {
@@ -116,7 +112,7 @@ export class LLMFactory {
       maxRetries: 3
     };
 
-    const llm = this.createLLM(config);
+    const llm = this.createLLMOpenAI(config);
     this.modelCache.set(cacheKey, llm);
     
     this.logger.info('Created Research LLM', {
@@ -147,7 +143,7 @@ export class LLMFactory {
       maxRetries: 3
     };
 
-    const llm = this.createLLM(config);
+    const llm = this.createLLMOpenAI(config);
     this.modelCache.set(cacheKey, llm);
     
     this.logger.info('Created Validation LLM', {
@@ -178,7 +174,7 @@ export class LLMFactory {
       maxRetries: 2
     };
 
-    const llm = this.createLLM(config);
+    const llm = this.createLLMOpenAI(config);
     this.modelCache.set(cacheKey, llm);
     
     this.logger.info('Created Summarization LLM', {
@@ -206,7 +202,7 @@ export class LLMFactory {
       return this.modelCache.get(cacheKey)!;
     }
 
-    const llm = this.createLLM(fullConfig);
+    const llm = this.createLLMOpenAI(fullConfig);
     
     if (cacheKey) {
       this.modelCache.set(cacheKey, llm);
@@ -225,7 +221,7 @@ export class LLMFactory {
   /**
    * Interne Methode zur LLM-Erstellung
    */
-  private createLLM(config: LLMConfig): ChatOpenAI {
+  private createLLMOpenAI(config: LLMConfig): ChatOpenAI {
     const modelKwargs: any = {};
     
     // Response Format konfigurieren
@@ -235,13 +231,47 @@ export class LLMFactory {
 
     return new ChatOpenAI({
       openAIApiKey: env.OPENAI_API_KEY,
-      modelName: config.modelName,
+      model: config.modelName,
       temperature: config.temperature,
       maxTokens: config.maxTokens,
       streaming: config.streaming || false,
       timeout: config.timeout || 45000,
       maxRetries: config.maxRetries || 2,
       modelKwargs,
+      callbacks: [
+        {
+          handleLLMStart: async (llm, prompts) => {
+            this.logger.info('LLM Request started', {
+              model: config.modelName,
+              promptCount: prompts.length,
+              temperature: config.temperature
+            });
+          },
+          handleLLMEnd: async (output) => {
+            this.logger.info('LLM Request completed', {
+              model: config.modelName,
+              outputLength: output.generations[0]?.[0]?.text?.length || 0
+            });
+          },
+          handleLLMError: async (error) => {
+            this.logger.error('LLM Request failed', error, {
+              model: config.modelName
+            });
+          }
+        }
+      ],
+      service_tier: 'priority'
+    });
+  }
+
+  private createLLMGoogleAI(config: LLMConfig): ChatGoogleGenerativeAI {
+    return new ChatGoogleGenerativeAI({
+      apiKey: env.GOOGLE_API_KEY,
+      model: config.modelName,
+      temperature: config.temperature,
+      json: true,
+      streaming: config.streaming || false,
+      maxRetries: config.maxRetries || 2,
       callbacks: [
         {
           handleLLMStart: async (llm, prompts) => {

@@ -1,3 +1,4 @@
+import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
 import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { Logger } from '../utils/logger';
@@ -5,8 +6,9 @@ import { AnalysisService } from './AnalysisService';
 import { TextExtractionService } from './TextExtractionService';
 import { FirestoreService } from './FirestoreService';
 import { LLMFactory } from '../factories/LLMFactory';
-import { Analysis, AnalysisResult, Finding, FindingSeverity, FindingType, Recommendation, RecommendationType, Priority } from '../models';
+import { Analysis, AnalysisResult, AnalysisType, AnalysisStatus, Finding, FindingSeverity, FindingType, Recommendation, RecommendationType, Priority, TextLocation } from '../models';
 import { v4 as uuidv4 } from 'uuid';
+import { encoding_for_model } from 'tiktoken';
 
 export interface ContractSection {
   id: string;
@@ -45,6 +47,29 @@ export interface SectionAnalysisResult {
   recommendations: Recommendation[];
 }
 
+// Compact data structure interfaces for Firestore 1MB limit optimization
+export interface CompactSectionResult {
+  sectionId: string;
+  sectionContent: string;
+  queries: GeneratedQuery[];
+  legalContext: any[];
+  complianceAnalysis: {
+    isCompliant: boolean;
+    confidence: number;
+    reasoning: string;
+    violations: string[];
+    recommendations: string[];
+  };
+  findingIds: string[]; // Only IDs instead of full Finding objects
+  recommendationIds: string[]; // Only IDs instead of full Recommendation objects
+}
+
+export interface AnalysisDetails {
+  items: {
+    [key: string]: Finding | Recommendation; // Map of ID to full object
+  };
+}
+
 export interface SwissObligationAnalysisResult {
   analysisId: string;
   documentId: string;
@@ -65,7 +90,7 @@ export class SwissObligationLawService {
   private analysisService: AnalysisService;
   private textExtractionService: TextExtractionService;
   private firestoreService: FirestoreService;
-  private llm: ChatOpenAI;
+  private llm: ChatGoogleGenerativeAI;
 
   constructor(
     analysisService: AnalysisService,
@@ -170,7 +195,7 @@ Bestimme Dokumenttyp, Geschäftsdomäne und wichtige Schlüsselbegriffe:`;
 
       // Step 1: Split contract into sections
       progressCallback?.(10, 'Splitting contract into sections...');
-      const sections = await this.splitContractIntoSections(contractText);
+      const sections = await this.splitContractIntoSections(contractText, documentContext);
 
       this.logger.info('Contract split into sections', {
         analysisId,
@@ -237,178 +262,99 @@ Bestimme Dokumenttyp, Geschäftsdomäne und wichtige Schlüsselbegriffe:`;
   }
 
   /**
-   * Split contract text into meaningful sections
-   * Uses natural text structure and semantic boundaries instead of formal legal patterns
+   * Split contract text into meaningful sections using OpenAI
+   * Uses tiktoken to ensure token limits and considers document context for intelligent splitting
    */
-  private async splitContractIntoSections(contractText: string): Promise<ContractSection[]> {
-    // Clean and normalize text
-    const cleanedText = contractText.trim();
-    const sections: ContractSection[] = [];
+  private async splitContractIntoSections(contractText: string, documentContext?: DocumentContext): Promise<ContractSection[]> {
+    try {
+      // Clean and normalize text
+      const cleanedText = contractText.trim();
 
-    // Strategy 1: Split by natural paragraph breaks (double line breaks or more)
-    const paragraphSections = this.splitByParagraphs(cleanedText);
+      const modelName = 'gpt-4'; //process.env.OPENAI_MODEL || 'gpt-4';
 
-    // Strategy 2: If paragraphs are too large, split by semantic boundaries
-    const refinedSections = this.refineBySemanticBoundaries(paragraphSections);
+      // Initialize tiktoken encoder for the configured model
+      const encoder = encoding_for_model(modelName as any);
 
-    // Strategy 3: If still no good sections, use intelligent chunking
-    const finalSections = refinedSections.length > 0 ? refinedSections : this.intelligentChunking(cleanedText);
+      // Count tokens in the original text
+      const totalTokens = encoder.encode(cleanedText).length;
+      const maxTokensForRequest = 4000; // Leave room for prompt and response
 
-    // Create ContractSection objects
-    let currentIndex = 0;
-    for (let i = 0; i < finalSections.length; i++) {
-      const sectionText = finalSections[i];
-      if (!sectionText) continue; // Skip if undefined
+      this.logger.info('Token analysis for contract splitting', {
+        totalTokens,
+        maxTokensForRequest,
+        textLength: cleanedText.length
+      });
 
-      const content = sectionText.trim();
-
-      if (content.length > 100) { // Only include substantial sections
-        const startIndex = currentIndex;
-        const endIndex = currentIndex + content.length;
-
-        sections.push({
-          id: uuidv4(),
-          content,
-          startIndex,
-          endIndex,
-          title: this.extractSectionTitle(content)
-        });
-
-        currentIndex = endIndex;
-      }
-    }
-
-    // Fallback: if no meaningful sections found, create reasonable chunks
-    if (sections.length === 0) {
-      return this.createFallbackSections(cleanedText);
-    }
-
-    this.logger.info('Contract split into sections', {
-      totalSections: sections.length,
-      averageLength: Math.round(sections.reduce((sum, s) => sum + s.content.length, 0) / sections.length)
-    });
-
-    return sections;
-  }
-
-  /**
-   * Split text by natural paragraph breaks
-   */
-  private splitByParagraphs(text: string): string[] {
-    // Split by double line breaks or more, which typically indicate paragraph boundaries
-    const paragraphs = text.split(/\n\s*\n+/).filter(p => p.trim().length > 0);
-
-    // If we get very few paragraphs, try single line breaks with additional criteria
-    if (paragraphs.length < 3) {
-      return text.split(/\n+/).filter(p => p.trim().length > 50);
-    }
-
-    return paragraphs;
-  }
-
-  /**
-   * Refine sections by identifying semantic boundaries
-   */
-  private refineBySemanticBoundaries(paragraphs: string[]): string[] {
-    const refinedSections: string[] = [];
-    let currentSection = '';
-
-    for (const paragraph of paragraphs) {
-      const trimmedParagraph = paragraph.trim();
-
-      // Check if this paragraph starts a new semantic section
-      if (this.isNewSemanticSection(trimmedParagraph, currentSection)) {
-        if (currentSection.trim().length > 0) {
-          refinedSections.push(currentSection.trim());
-        }
-        currentSection = trimmedParagraph;
+      // If text is too large, split it into manageable chunks first
+      let textChunks: string[] = [];
+      if (totalTokens > maxTokensForRequest) {
+        textChunks = await this.splitTextByTokenLimit(cleanedText, encoder, maxTokensForRequest);
       } else {
-        // Add to current section
-        currentSection += (currentSection ? '\n\n' : '') + trimmedParagraph;
+        textChunks = [cleanedText];
       }
 
-      // If current section is getting too long, force a break
-      if (currentSection.length > 2000) {
-        refinedSections.push(currentSection.trim());
-        currentSection = '';
+      // Process each chunk with OpenAI
+      const allSections: ContractSection[] = [];
+      let globalStartIndex = 0;
+
+      for (let chunkIndex = 0; chunkIndex < textChunks.length; chunkIndex++) {
+        const chunk = textChunks[chunkIndex];
+        if (!chunk) continue;
+
+        this.logger.info(`Processing chunk ${chunkIndex + 1} of ${textChunks.length}`);
+
+        const chunkSections = await this.splitChunkWithOpenAI(chunk, documentContext, globalStartIndex);
+        allSections.push(...chunkSections);
+
+        // Update global start index for next chunk
+        globalStartIndex += chunk.length;
       }
-    }
 
-    // Add the last section
-    if (currentSection.trim().length > 0) {
-      refinedSections.push(currentSection.trim());
-    }
+      // Clean up the encoder
+      encoder.free();
 
-    return refinedSections;
+      // Fallback: if no meaningful sections found, create reasonable chunks
+      if (allSections.length === 0) {
+        return this.createFallbackSections(cleanedText);
+      }
+
+      this.logger.info('Contract split into sections using OpenAI', {
+        totalSections: allSections.length,
+        averageLength: Math.round(allSections.reduce((sum, s) => sum + s.content.length, 0) / allSections.length)
+      });
+
+      return allSections;
+
+    } catch (error) {
+      this.logger.error('Error in OpenAI-based contract splitting', error as Error);
+      // Fallback to simple chunking if OpenAI fails
+      return this.createFallbackSections(contractText.trim());
+    }
   }
 
   /**
-   * Check if a paragraph starts a new semantic section
+   * Split text into chunks that fit within token limits
    */
-  private isNewSemanticSection(paragraph: string, currentSection: string): boolean {
-    // Contract-specific patterns that indicate new sections
-    const newSectionPatterns = [
-      // Headings (short lines that are likely titles)
-      /^.{1,80}$/,
-      // Lines that start with common contract section indicators
-      /^(Vertragsgegenstand|Laufzeit|Kündigung|Vergütung|Haftung|Datenschutz|Geheimhaltung|Schlussbestimmungen)/i,
-      // Lines with specific formatting (all caps, centered, etc.)
-      /^[A-ZÄÖÜ\s]{5,50}$/,
-      // Numbered or lettered sections (but more flexible than legal articles)
-      /^[0-9]+[\.\)]\s+/,
-      /^[a-z][\.\)]\s+/i,
-      // Lines that start with "Der/Die/Das" (common contract language)
-      /^(Der|Die|Das|Diese[rs]?|Beide|Alle)\s+/,
-    ];
-
-    // Don't create new section if current section is too short
-    if (currentSection.length < 200) {
-      return false;
-    }
-
-    // Check if paragraph matches any new section pattern
-    const lines = paragraph.split('\n');
-    const firstLine = lines[0]?.trim() || '';
-
-    // Short first line might be a heading
-    if (firstLine.length < 80 && firstLine.length > 5) {
-      return true;
-    }
-
-    // Check against patterns
-    return newSectionPatterns.some(pattern => pattern.test(firstLine));
-  }
-
-  /**
-   * Intelligent chunking when other methods don't work well
-   */
-  private intelligentChunking(text: string): string[] {
+  private async splitTextByTokenLimit(text: string, encoder: any, maxTokens: number): Promise<string[]> {
     const chunks: string[] = [];
-    const sentences = this.splitIntoSentences(text);
+    const sentences = text.split(/[.!?]+\s+/).filter(s => s.trim().length > 10);
 
     let currentChunk = '';
-    const targetChunkSize = 800; // Target size for each chunk
-    const maxChunkSize = 1500; // Maximum size before forcing a break
 
     for (const sentence of sentences) {
       const potentialChunk = currentChunk + (currentChunk ? ' ' : '') + sentence;
+      const tokenCount = encoder.encode(potentialChunk).length;
 
-      if (potentialChunk.length > maxChunkSize) {
-        // Force break
-        if (currentChunk.trim()) {
-          chunks.push(currentChunk.trim());
-        }
+      if (tokenCount > maxTokens && currentChunk) {
+        // Current chunk is full, start a new one
+        chunks.push(currentChunk.trim());
         currentChunk = sentence;
-      } else if (potentialChunk.length > targetChunkSize && this.isGoodBreakPoint(sentence)) {
-        // Good natural break point
-        chunks.push(potentialChunk.trim());
-        currentChunk = '';
       } else {
         currentChunk = potentialChunk;
       }
     }
 
-    // Add remaining chunk
+    // Add the last chunk
     if (currentChunk.trim()) {
       chunks.push(currentChunk.trim());
     }
@@ -417,33 +363,104 @@ Bestimme Dokumenttyp, Geschäftsdomäne und wichtige Schlüsselbegriffe:`;
   }
 
   /**
-   * Split text into sentences
+   * Split a text chunk using OpenAI for intelligent sectioning
    */
-  private splitIntoSentences(text: string): string[] {
-    // Simple sentence splitting - can be improved with more sophisticated NLP
-    return text.split(/[.!?]+\s+/).filter(s => s.trim().length > 10);
-  }
+  private async splitChunkWithOpenAI(chunk: string, documentContext?: DocumentContext, startIndex: number = 0): Promise<ContractSection[]> {
+    const contextInfo = documentContext ?
+      `Dokumenttyp: ${documentContext.documentType}
+Geschäftsbereich: ${documentContext.businessDomain}
+Schlüsselbegriffe: ${documentContext.keyTerms.join(', ')}
+Kontext: ${documentContext.contextDescription}` :
+      'Kein spezifischer Dokumentkontext verfügbar';
 
-  /**
-   * Check if this is a good point to break a chunk
-   */
-  private isGoodBreakPoint(sentence: string): boolean {
-    // Sentences that typically end a topic or section
-    const breakPatterns = [
-      /\.$/, // Ends with period
-      /vereinbart\.$/, // "vereinbart."
-      /festgelegt\.$/, // "festgelegt."
-      /geregelt\.$/, // "geregelt."
-      /bestimmt\.$/, // "bestimmt."
-    ];
+    const systemPrompt = `Du bist ein Experte für Vertragsanalyse und Dokumentenstrukturierung. Deine Aufgabe ist es, einen Vertragstext in sinnvolle, thematisch zusammenhängende Abschnitte zu unterteilen.
 
-    return breakPatterns.some(pattern => pattern.test(sentence.trim()));
+KONTEXT DES DOKUMENTS:
+${contextInfo}
+
+ANWEISUNGEN:
+1. Analysiere den gegebenen Vertragstext und identifiziere natürliche thematische Abschnitte
+2. Jeder Abschnitt sollte einen zusammenhängenden Themenbereich behandeln (z.B. Vertragsgegenstand, Laufzeit, Vergütung, Haftung, etc.)
+3. Abschnitte sollten zwischen 200-2000 Zeichen lang sein (optimal: 500-1500 Zeichen)
+4. Berücksichtige den Dokumentkontext bei der Strukturierung
+5. Erstelle aussagekräftige Titel für jeden Abschnitt
+
+ANTWORTFORMAT (JSON):
+{
+  "sections": [
+    {
+      "title": "Aussagekräftiger Titel des Abschnitts",
+      "content": "Der vollständige Text des Abschnitts",
+      "startIndex": 0,
+      "endIndex": 123
+    }
+  ]
+}
+
+WICHTIG: 
+- Gib den Text vollständig und unverändert wieder
+- Keine Auslassungen oder Zusammenfassungen
+- Berechne startIndex und endIndex basierend auf der Position im ursprünglichen Text
+- Antworte nur mit dem JSON-Format, keine zusätzlichen Erklärungen`;
+
+    const humanPrompt = `Bitte unterteile den folgenden Vertragstext in sinnvolle Abschnitte:
+
+"${chunk}"
+
+Berücksichtige dabei den oben genannten Dokumentkontext und erstelle eine strukturierte Aufteilung in thematisch zusammenhängende Abschnitte.`;
+
+    try {
+      const response = await this.llm.invoke([
+        new SystemMessage(systemPrompt),
+        new HumanMessage(humanPrompt)
+      ]);
+
+      const content = response.content as string;
+
+      try {
+        const result = JSON.parse(content);
+        const sections: ContractSection[] = [];
+
+        if (result.sections && Array.isArray(result.sections)) {
+          for (const section of result.sections) {
+            if (section.content && section.content.trim().length > 50) {
+              sections.push({
+                id: uuidv4(),
+                content: section.content.trim(),
+                title: section.title || this.extractSectionTitle(section.content),
+                startIndex: startIndex + (section.startIndex || 0),
+                endIndex: startIndex + (section.endIndex || section.content.length)
+              });
+            }
+          }
+        }
+
+        return sections;
+
+      } catch (parseError) {
+        this.logger.warn('Failed to parse OpenAI response for contract splitting', { parseError, content });
+        // Fallback to simple chunking for this chunk
+        return this.createFallbackSectionsFromChunk(chunk, startIndex);
+      }
+
+    } catch (error) {
+      this.logger.error('Error calling OpenAI for contract splitting', error as Error);
+      // Fallback to simple chunking for this chunk
+      return this.createFallbackSectionsFromChunk(chunk, startIndex);
+    }
   }
 
   /**
    * Create fallback sections when all else fails
    */
   private createFallbackSections(text: string): ContractSection[] {
+    return this.createFallbackSectionsFromChunk(text, 0);
+  }
+
+  /**
+   * Create fallback sections from a text chunk
+   */
+  private createFallbackSectionsFromChunk(text: string, startIndex: number): ContractSection[] {
     const sections: ContractSection[] = [];
     const chunkSize = 1000;
 
@@ -452,8 +469,8 @@ Bestimme Dokumenttyp, Geschäftsdomäne und wichtige Schlüsselbegriffe:`;
       sections.push({
         id: uuidv4(),
         content,
-        startIndex: i,
-        endIndex: i + content.length,
+        startIndex: startIndex + i,
+        endIndex: startIndex + i + content.length,
         title: `Abschnitt ${sections.length + 1}`
       });
     }
@@ -790,9 +807,9 @@ Analysiere die Rechtmässigkeit dieses Abschnitts unter Berücksichtigung des sp
     const compliantSections = sectionResults.filter(s => s.complianceAnalysis.isCompliant).length;
     const complianceScore = totalSections > 0 ? compliantSections / totalSections : 0;
 
-    const isCompliant = complianceScore >= 0.8; // 80% compliance threshold
+    const isCompliant = compliantSections === sectionResults.length;
 
-    const violationCount = sectionResults.reduce((count, section) => 
+    const violationCount = sectionResults.reduce((count, section) =>
       count + section.complianceAnalysis.violations.length, 0
     );
 
@@ -811,26 +828,74 @@ Analysiere die Rechtmässigkeit dieses Abschnitts unter Berücksichtigung des sp
   }
 
   /**
-   * Save analysis result to Firestore
+   * Save analysis result to Firestore with compact structure to avoid 1MB limit
    */
   private async saveAnalysisResult(result: SwissObligationAnalysisResult): Promise<void> {
     try {
-      const docData = {
+      // Create compact sections and collect all details
+      const compactSections: CompactSectionResult[] = [];
+      const allDetails: AnalysisDetails = { items: {} };
+
+      result.sections.forEach(section => {
+        // Extract finding and recommendation IDs
+        const findingIds = section.findings.map(f => f.id);
+        const recommendationIds = section.recommendations.map(r => r.id);
+
+        // Create compact section
+        const compactSection: CompactSectionResult = {
+          sectionId: section.sectionId,
+          sectionContent: section.sectionContent,
+          queries: section.queries,
+          legalContext: section.legalContext,
+          complianceAnalysis: section.complianceAnalysis,
+          findingIds,
+          recommendationIds
+        };
+
+        compactSections.push(compactSection);
+
+        // Add full objects to details map
+        section.findings.forEach(finding => {
+          allDetails.items[finding.id] = finding;
+        });
+        section.recommendations.forEach(recommendation => {
+          allDetails.items[recommendation.id] = recommendation;
+        });
+      });
+
+      // Prepare main document with compact sections
+      const mainDocData = {
         analysisId: result.analysisId,
         documentId: result.documentId,
         userId: result.userId,
-        sections: result.sections,
+        documentContext: result.documentContext,
+        sections: compactSections,
         overallCompliance: result.overallCompliance,
         createdAt: result.createdAt.toISOString(),
         completedAt: result.completedAt?.toISOString()
       };
 
-      await this.firestoreService.saveDocument(`swissObligationAnalyses/${result.analysisId}`, docData);
+      // Prepare batch operations
+      const batchOperations = [
+        {
+          path: `swissObligationAnalyses/${result.analysisId}`,
+          data: mainDocData
+        },
+        {
+          path: `swissObligationAnalyses/${result.analysisId}/details/items`,
+          data: allDetails
+        }
+      ];
 
-      this.logger.info('Swiss obligation analysis result saved', {
+      // Execute batch operation for atomic save
+      await this.firestoreService.saveBatch(batchOperations);
+
+      this.logger.info('Swiss obligation analysis result saved with compact structure', {
         analysisId: result.analysisId,
         documentId: result.documentId,
-        userId: result.userId
+        userId: result.userId,
+        sectionsCount: compactSections.length,
+        detailsCount: Object.keys(allDetails.items).length
       });
     } catch (error) {
       this.logger.error('Error saving Swiss obligation analysis result', error as Error, {
@@ -841,20 +906,80 @@ Analysiere die Rechtmässigkeit dieses Abschnitts unter Berücksichtigung des sp
   }
 
   /**
-   * Get analysis result by ID
+   * Get analysis result by ID and reconstruct full structure from compact data
    */
   public async getAnalysisResult(analysisId: string, userId: string): Promise<SwissObligationAnalysisResult | null> {
     try {
-      const result = await this.firestoreService.getDocument(analysisId, userId);
+      // Load main document with compact sections
+      const mainResult = await this.firestoreService.getDocument(analysisId, userId);
 
-      if (!result || result.userId !== userId) {
+      if (!mainResult || mainResult.userId !== userId) {
         return null;
       }
 
+      // Load details from sub-collection
+      const detailsPath = `swissObligationAnalyses/${analysisId}/details/items`;
+      const details = await this.firestoreService.getSubcollectionDocument(detailsPath) as AnalysisDetails | null;
+
+      if (!details) {
+        this.logger.warn('Details not found for analysis, returning compact structure', { analysisId });
+        // Fallback: return with empty findings and recommendations if details are missing
+        const fallbackSections: SectionAnalysisResult[] = (mainResult.sections as CompactSectionResult[]).map(compactSection => ({
+          sectionId: compactSection.sectionId,
+          sectionContent: compactSection.sectionContent,
+          queries: compactSection.queries,
+          legalContext: compactSection.legalContext,
+          complianceAnalysis: compactSection.complianceAnalysis,
+          findings: [],
+          recommendations: []
+        }));
+
+        return {
+          ...mainResult,
+          sections: fallbackSections,
+          createdAt: new Date(mainResult.createdAt),
+          completedAt: mainResult.completedAt ? new Date(mainResult.completedAt) : undefined
+        } as SwissObligationAnalysisResult;
+      }
+
+      // Reconstruct full sections by combining compact data with details
+      const fullSections: SectionAnalysisResult[] = (mainResult.sections as CompactSectionResult[]).map(compactSection => {
+        // Reconstruct findings from IDs
+        const findings: Finding[] = compactSection.findingIds.map(id => {
+          const finding = details.items[id] as Finding;
+          if (!finding) {
+            this.logger.warn('Finding not found in details', { analysisId, findingId: id });
+            return null;
+          }
+          return finding;
+        }).filter(Boolean) as Finding[];
+
+        // Reconstruct recommendations from IDs
+        const recommendations: Recommendation[] = compactSection.recommendationIds.map(id => {
+          const recommendation = details.items[id] as Recommendation;
+          if (!recommendation) {
+            this.logger.warn('Recommendation not found in details', { analysisId, recommendationId: id });
+            return null;
+          }
+          return recommendation;
+        }).filter(Boolean) as Recommendation[];
+
+        return {
+          sectionId: compactSection.sectionId,
+          sectionContent: compactSection.sectionContent,
+          queries: compactSection.queries,
+          legalContext: compactSection.legalContext,
+          complianceAnalysis: compactSection.complianceAnalysis,
+          findings,
+          recommendations
+        };
+      });
+
       return {
-        ...result,
-        createdAt: new Date(result.createdAt),
-        completedAt: result.completedAt ? new Date(result.completedAt) : undefined
+        ...mainResult,
+        sections: fullSections,
+        createdAt: new Date(mainResult.createdAt),
+        completedAt: mainResult.completedAt ? new Date(mainResult.completedAt) : undefined
       } as SwissObligationAnalysisResult;
     } catch (error) {
       this.logger.error('Error getting Swiss obligation analysis result', error as Error, {
@@ -901,19 +1026,86 @@ Analysiere die Rechtmässigkeit dieses Abschnitts unter Berücksichtigung des sp
 
       const analyses: SwissObligationAnalysisResult[] = [];
 
-      querySnapshot.forEach((doc: any) => {
+      // Process each analysis and reconstruct full structure
+      for (const doc of querySnapshot.docs) {
         const data = doc.data();
+
+        // Load details from sub-collection for this analysis
+        const detailsPath = `swissObligationAnalyses/${data.analysisId}/details/items`;
+        const details = await this.firestoreService.getSubcollectionDocument(detailsPath) as AnalysisDetails | null;
+
+        let fullSections: SectionAnalysisResult[];
+
+        if (!details) {
+          this.logger.warn('Details not found for analysis, using fallback structure', { analysisId: data.analysisId });
+          // Fallback: return with empty findings and recommendations if details are missing
+          fullSections = (data.sections as CompactSectionResult[]).map(compactSection => ({
+            sectionId: compactSection.sectionId,
+            sectionContent: compactSection.sectionContent,
+            queries: compactSection.queries || [],
+            legalContext: compactSection.legalContext || [],
+            complianceAnalysis: compactSection.complianceAnalysis || {
+              isCompliant: false,
+              confidence: 0,
+              reasoning: '',
+              violations: [],
+              recommendations: []
+            },
+            findings: [],
+            recommendations: []
+          }));
+        } else {
+          // Reconstruct full sections by combining compact data with details
+          fullSections = (data.sections as CompactSectionResult[]).map(compactSection => {
+            // Reconstruct findings from IDs
+            const findings: Finding[] = (compactSection.findingIds || []).map(id => {
+              const finding = details.items[id] as Finding;
+              if (!finding) {
+                this.logger.warn('Finding not found in details', { analysisId: data.analysisId, findingId: id });
+                return null;
+              }
+              return finding;
+            }).filter(Boolean) as Finding[];
+
+            // Reconstruct recommendations from IDs
+            const recommendations: Recommendation[] = (compactSection.recommendationIds || []).map(id => {
+              const recommendation = details.items[id] as Recommendation;
+              if (!recommendation) {
+                this.logger.warn('Recommendation not found in details', { analysisId: data.analysisId, recommendationId: id });
+                return null;
+              }
+              return recommendation;
+            }).filter(Boolean) as Recommendation[];
+
+            return {
+              sectionId: compactSection.sectionId,
+              sectionContent: compactSection.sectionContent,
+              queries: compactSection.queries || [],
+              legalContext: compactSection.legalContext || [],
+              complianceAnalysis: compactSection.complianceAnalysis || {
+                isCompliant: false,
+                confidence: 0,
+                reasoning: '',
+                violations: [],
+                recommendations: []
+              },
+              findings,
+              recommendations
+            };
+          });
+        }
+
         analyses.push({
           analysisId: data.analysisId,
           documentId: data.documentId,
           userId: data.userId,
           documentContext: data.documentContext,
-          sections: data.sections,
+          sections: fullSections,
           overallCompliance: data.overallCompliance,
           createdAt: new Date(data.createdAt),
           completedAt: data.completedAt ? new Date(data.completedAt) : undefined
         });
-      });
+      }
 
       this.logger.info('Retrieved Swiss obligation analyses by document ID', { 
         documentId, 
