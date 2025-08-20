@@ -312,21 +312,33 @@ Bestimme Dokumenttyp, Geschäftsdomäne und wichtige Schlüsselbegriffe:`;
         textChunks = [cleanedText];
       }
 
-      // Process each chunk with OpenAI
+      // Process each chunk with OpenAI in parallel
       const allSections: ContractSection[] = [];
+
+      // Pre-calculate start indices for all chunks
+      const chunkStartIndices: number[] = [];
       let globalStartIndex = 0;
+      for (let i = 0; i < textChunks.length; i++) {
+        chunkStartIndices[i] = globalStartIndex;
+        globalStartIndex += textChunks[i]?.length || 0;
+      }
 
-      for (let chunkIndex = 0; chunkIndex < textChunks.length; chunkIndex++) {
-        const chunk = textChunks[chunkIndex];
-        if (!chunk) continue;
+      this.logger.info(`Processing ${textChunks.length} chunks in parallel`);
 
-        this.logger.info(`Processing chunk ${chunkIndex + 1} of ${textChunks.length}`);
+      // Create promises for all chunk processing
+      const chunkPromises = textChunks.map((chunk, chunkIndex) => {
+        if (!chunk) return Promise.resolve([]);
 
-        const chunkSections = await this.splitChunkWithAI(chunk, documentContext, globalStartIndex);
+        this.logger.info(`Starting processing of chunk ${chunkIndex + 1} of ${textChunks.length}`);
+        return this.splitChunkWithAI(chunk, documentContext, chunkStartIndices[chunkIndex]);
+      });
+
+      // Execute all chunk processing in parallel
+      const chunkResults = await Promise.all(chunkPromises);
+
+      // Flatten results while maintaining order
+      for (const chunkSections of chunkResults) {
         allSections.push(...chunkSections);
-
-        // Update global start index for next chunk
-        globalStartIndex += chunk.length;
       }
 
       // Clean up the encoder
