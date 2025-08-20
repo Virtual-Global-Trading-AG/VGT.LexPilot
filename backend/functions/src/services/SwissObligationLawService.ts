@@ -209,7 +209,7 @@ Bestimme Dokumenttyp, Geschäftsdomäne und wichtige Schlüsselbegriffe:`;
 
       const sectionPromises = validSections.map(async (section, index) => {
         try {
-          return await this.analyzeSectionAgainstSwissLaw(section, analysisId, documentContext);
+          return await this.analyzeSectionAgainstSwissLaw(section, analysisId, documentContext, index, sections.length);
         } catch (error) {
           this.logger.error('Error analyzing section in parallel', error as Error, {
             sectionId: section.id,
@@ -381,6 +381,7 @@ Bestimme Dokumenttyp, Geschäftsdomäne und wichtige Schlüsselbegriffe:`;
     return chunks;
   }
 
+
   /**
    * Split a text chunk using OpenAI for intelligent sectioning
    */
@@ -404,6 +405,12 @@ ANWEISUNGEN:
 4. Berücksichtige den Dokumentkontext bei der Strukturierung
 5. Erstelle aussagekräftige Titel für jeden Abschnitt
 
+WICHTIG - IGNORIERE FOLGENDE INHALTE:
+- Formale Elemente ohne rechtlichen Substanzinhalt (Titel, Überschriften, Unterschriftenfelder)
+- Administrative Angaben ohne vertragliche Relevanz (Datum, Ort, Seitennummer)
+- Strukturelle Dokumentelemente (Inhaltsverzeichnisse, Deckblätter, reine Formatierung)
+- Nicht-substanzielle Anhänge und Referenzen ohne rechtlichen Bezug
+
 ANTWORTFORMAT (JSON):
 {
   "sections": [
@@ -420,14 +427,16 @@ WICHTIG:
 - Gib den Text vollständig und unverändert wieder
 - Keine Auslassungen oder Zusammenfassungen
 - Berechne startIndex und endIndex basierend auf der Position im ursprünglichen Text
+- Gib NUR rechtlich relevante Abschnitte zurück
 - Antworte nur mit dem JSON-Format, keine zusätzlichen Erklärungen`;
 
-    const humanPrompt = `Bitte unterteile den folgenden Vertragstext in sinnvolle Abschnitte:
+    const humanPrompt = `Bitte unterteile den folgenden Vertragstext in sinnvolle Abschnitte und ignoriere dabei Titel, Unterschriften, Datumsangaben und andere nicht-rechtliche Inhalte:
 
 "${chunk}"
 
-Berücksichtige dabei den oben genannten Dokumentkontext und erstelle eine strukturierte Aufteilung in thematisch zusammenhängende Abschnitte.`;
+Berücksichtige dabei den oben genannten Dokumentkontext und erstelle eine strukturierte Aufteilung in thematisch zusammenhängende, rechtlich relevante Abschnitte.`;
 
+    // Rest der Methode bleibt unverändert...
     try {
       const response = await this.llm.invoke([
         new SystemMessage(systemPrompt),
@@ -458,13 +467,11 @@ Berücksichtige dabei den oben genannten Dokumentkontext und erstelle eine struk
 
       } catch (parseError) {
         this.logger.warn('Failed to parse OpenAI response for contract splitting', { parseError, content });
-        // Fallback to simple chunking for this chunk
         return this.createFallbackSectionsFromChunk(chunk, startIndex);
       }
 
     } catch (error) {
       this.logger.error('Error calling OpenAI for contract splitting', error as Error);
-      // Fallback to simple chunking for this chunk
       return this.createFallbackSectionsFromChunk(chunk, startIndex);
     }
   }
@@ -514,7 +521,9 @@ Berücksichtige dabei den oben genannten Dokumentkontext und erstelle eine struk
   /**
    * Analyze a single section against Swiss obligation law
    */
-  private async analyzeSectionAgainstSwissLaw(section: ContractSection, analysisId: string, documentContext: DocumentContext): Promise<SectionAnalysisResult> {
+  private async analyzeSectionAgainstSwissLaw(
+    section: ContractSection, analysisId: string, documentContext: DocumentContext, sectionIndex: number, sectionsLength: number
+  ): Promise<SectionAnalysisResult> {
     try {
       // Step 1: Generate 3 queries for this section using ChatGPT
       const queries = await this.generateQueriesForSection(section, documentContext);
@@ -551,7 +560,9 @@ Berücksichtige dabei den oben genannten Dokumentkontext und erstelle eine struk
         section,
         queries,
         legalContext,
-        documentContext
+        documentContext,
+        sectionIndex,
+        sectionsLength
       );
 
       // Step 4: Generate findings and recommendations
@@ -663,66 +674,76 @@ Generiere 3 kontextspezifische Suchanfragen für die Obligationenrecht-Datenbank
   }
 
   /**
-   * Analyze compliance with legal context
+   * Analyze compliance with legal context - section-by-section approach
    */
   private async analyzeComplianceWithContext(
     section: ContractSection,
     queries: GeneratedQuery[],
     legalContext: any[],
-    documentContext: DocumentContext
+    documentContext: DocumentContext,
+    currentSectionIndex?: number,
+    totalSections?: number
   ): Promise<SectionAnalysisResult['complianceAnalysis']> {
-    const systemPrompt = `Du bist ein Experte für Schweizer Obligationenrecht. Du analysierst Vertragsabschnitte auf ihre Rechtmässigkeit gemäss Schweizer Obligationenrecht.
+    const sectionInfo = currentSectionIndex !== undefined && totalSections !== undefined
+      ? `(Abschnitt ${currentSectionIndex + 1} von ${totalSections})`
+      : '';
 
-WICHTIGER DOKUMENTKONTEXT:
+    const systemPrompt = `Du bist ein Experte für Schweizer Obligationenrecht. Du analysierst einzelne Vertragsabschnitte auf OR-Verstösse.
+
+WICHTIGER KONTEXT:
+- Dies ist EIN Abschnitt eines grösseren Vertrags ${sectionInfo}
+- Weitere Vertragsabschnitte werden separat analysiert
+- Andere relevante Regelungen können in anderen Abschnitten stehen
+
+ANALYSE-FOKUS:
+- Analysiere NUR diesen spezifischen Abschnitt
+- Melde NUR Verstösse die DIREKT in diesem Text erkennbar sind
+- Ignoriere fehlende Regelungen (könnten in anderen Abschnitten stehen)
+- Gib NUR Empfehlungen zur Verbesserung DIESES Texts
+
+DOKUMENTKONTEXT:
 - Dokumenttyp: ${documentContext.documentType}
 - Geschäftsbereich: ${documentContext.businessDomain}
-- Schlüsselbegriffe: ${documentContext.keyTerms.join(', ')}
-- Kontext: ${documentContext.contextDescription}
 
-Du erhältst:
-1. Einen Vertragsabschnitt aus einem ${documentContext.documentType} im Bereich ${documentContext.businessDomain}
-2. Relevante Artikel aus dem Obligationenrecht als Kontext
-
-Deine Aufgabe ist es zu beurteilen:
-- Ist dieser Abschnitt gemäss Obligationenrecht zulässig, speziell im Kontext von ${documentContext.documentType}?
-- Welche Verstösse gibt es (falls vorhanden) unter Berücksichtigung des spezifischen Geschäftsbereichs?
-- Welche Empfehlungen hast du für diesen spezifischen Dokumenttyp und Geschäftsbereich?
-
-WICHTIG: Berücksichtige bei der Analyse den spezifischen Kontext des Dokuments. Vermeide Fehlanalysen durch falsche Kontextannahmen (z.B. Mietrecht bei Software-AGB).
-
-Antworte im JSON-Format mit folgender Struktur:
+Antworte im JSON-Format:
 {
   "isCompliant": boolean,
   "confidence": number (0-1),
-  "reasoning": "Detaillierte Begründung unter Berücksichtigung des Dokumentkontexts",
-  "violations": ["Liste von Verstössen"],
-  "recommendations": ["Liste von Empfehlungen"]
+  "reasoning": "Begründung bezogen nur auf diesen Abschnitt",
+  "violations": ["Direkte OR-Verstösse in diesem Text"],
+  "recommendations": ["Konkrete Verbesserungen nur für diesen Text"]
 }`;
 
-
     const contextText = legalContext
-    .flatMap(ctx => ctx.documents) // Flatten: Alle documents aus allen contexts
-    .map(doc => {
-      this.logger.debug('Legal context document', { doc });
-      return `${doc.metadata?.title || 'Rechtsnorm'}: ${doc.pageContent}`;
-    })
+    .flatMap(ctx => ctx.documents)
+    .map(doc => `${doc.metadata?.title || 'Rechtsnorm'}: ${doc.pageContent}`)
     .join('\n\n');
 
-    this.logger.info('Legal context for compliance analysis', { contextText });
-
-    const humanPrompt = `DOKUMENTKONTEXT:
-- Typ: ${documentContext.documentType}
-- Geschäftsbereich: ${documentContext.businessDomain}
-- Beschreibung: ${documentContext.contextDescription}
-- Schlüsselbegriffe: ${documentContext.keyTerms.join(', ')}
-
-VERTRAGSABSCHNITT:
+    const humanPrompt = `EINZELNER VERTRAGSABSCHNITT ZUR ANALYSE ${sectionInfo}:
 "${section.content}"
 
-RELEVANTER RECHTLICHER KONTEXT AUS DEM OBLIGATIONENRECHT:
+RELEVANTE OR-ARTIKEL:
 ${contextText}
 
-Analysiere die Rechtmässigkeit dieses Abschnitts unter Berücksichtigung des spezifischen Dokumentkontexts (${documentContext.documentType} im Bereich ${documentContext.businessDomain}):`;
+ANALYSE-AUFTRAG:
+Da dies nur ein Abschnitt des Gesamtvertrags ist:
+
+✅ MELDE ALS VERSTOSS:
+- Text verstösst direkt gegen OR (z.B. "unbegrenzte Haftung")
+- Rechtswidrige Formulierungen in diesem Abschnitt
+- Sittenwidrige Klauseln
+- AGB-Verstösse in diesem Text
+
+❌ MELDE NICHT ALS VERSTOSS:
+- Fehlende Definitionen (könnten in anderen Abschnitten stehen)
+- Nicht erwähnte Regelungen (könnten separat geregelt sein)
+- Unvollständige Informationen (Vertrag ist grösser)
+
+BEISPIELE:
+✅ "Die Klausel 'unbegrenzte Schadenersatzpflicht' verstösst gegen OR Art. 100"
+❌ "Keine Datenschutzklausel vorhanden" (könnte in anderem Abschnitt stehen)
+
+Fokussiere auf TEXTQUALITÄT dieses Abschnitts, nicht auf Vollständigkeit des Vertrags.`;
 
     try {
       const response = await this.llm.invoke([
@@ -734,12 +755,13 @@ Analysiere die Rechtmässigkeit dieses Abschnitts unter Berücksichtigung des sp
 
       try {
         const analysis = JSON.parse(content);
+
         return {
           isCompliant: analysis.isCompliant || false,
           confidence: analysis.confidence || 0.5,
           reasoning: analysis.reasoning || 'Keine detaillierte Analyse verfügbar',
           violations: analysis.violations || [],
-          recommendations: analysis.recommendations || []
+          recommendations: analysis.violations
         };
       } catch (parseError) {
         this.logger.warn('Failed to parse compliance analysis JSON', { content });
