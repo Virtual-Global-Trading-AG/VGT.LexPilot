@@ -91,6 +91,7 @@ export class SwissObligationLawService {
   private textExtractionService: TextExtractionService;
   private firestoreService: FirestoreService;
   private llm: ChatGoogleGenerativeAI;
+  private fastLlm: ChatGoogleGenerativeAI;
 
   constructor(
     analysisService: AnalysisService,
@@ -102,6 +103,7 @@ export class SwissObligationLawService {
     this.firestoreService = firestoreService;
     const llmFactory = new LLMFactory();
     this.llm = llmFactory.createAnalysisLLM();
+    this.fastLlm = llmFactory.createAnalysisLLM(true);
   }
 
   /**
@@ -303,7 +305,7 @@ Bestimme Dokumenttyp, Geschäftsdomäne und wichtige Schlüsselbegriffe:`;
 
         this.logger.info(`Processing chunk ${chunkIndex + 1} of ${textChunks.length}`);
 
-        const chunkSections = await this.splitChunkWithOpenAI(chunk, documentContext, globalStartIndex);
+        const chunkSections = await this.splitChunkWithAI(chunk, documentContext, globalStartIndex);
         allSections.push(...chunkSections);
 
         // Update global start index for next chunk
@@ -365,7 +367,7 @@ Bestimme Dokumenttyp, Geschäftsdomäne und wichtige Schlüsselbegriffe:`;
   /**
    * Split a text chunk using OpenAI for intelligent sectioning
    */
-  private async splitChunkWithOpenAI(chunk: string, documentContext?: DocumentContext, startIndex: number = 0): Promise<ContractSection[]> {
+  private async splitChunkWithAI(chunk: string, documentContext?: DocumentContext, startIndex: number = 0): Promise<ContractSection[]> {
     const contextInfo = documentContext ?
       `Dokumenttyp: ${documentContext.documentType}
 Geschäftsbereich: ${documentContext.businessDomain}
@@ -410,7 +412,7 @@ WICHTIG:
 Berücksichtige dabei den oben genannten Dokumentkontext und erstelle eine strukturierte Aufteilung in thematisch zusammenhängende Abschnitte.`;
 
     try {
-      const response = await this.llm.invoke([
+      const response = await this.fastLlm.invoke([
         new SystemMessage(systemPrompt),
         new HumanMessage(humanPrompt)
       ]);
@@ -1107,10 +1109,10 @@ Analysiere die Rechtmässigkeit dieses Abschnitts unter Berücksichtigung des sp
         });
       }
 
-      this.logger.info('Retrieved Swiss obligation analyses by document ID', { 
-        documentId, 
-        userId, 
-        count: analyses.length 
+      this.logger.info('Retrieved Swiss obligation analyses by document ID', {
+        documentId,
+        userId,
+        count: analyses.length
       });
 
       return analyses;

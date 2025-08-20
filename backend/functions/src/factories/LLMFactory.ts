@@ -38,13 +38,13 @@ export class LLMFactory {
    * Erstellt ein LLM für juristische Analysen
    * Optimiert für Präzision und strukturierte Ausgaben
    */
-  createAnalysisLLM(): ChatGoogleGenerativeAI {
+  createAnalysisLLM(fastMode: boolean = false): ChatGoogleGenerativeAI {
     const cacheKey = 'analysis';
 
     const config: LLMConfig = {
       temperature: 0.1, // Niedrige Temperatur für konsistente, präzise Antworten
-     // maxTokens: 4000,
-      modelName: env.GOOGLE_CHAT_MODEL,
+      //maxTokens: 4000,
+      modelName: fastMode ? env.GOOGLE_CHAT_MODEL_FAST : env.GOOGLE_CHAT_MODEL,
       responseFormat: 'json_object', // Strukturierte Ausgaben für Analysen
       timeout: 60000, // 60 Sekunden für komplexe Analysen
       maxRetries: 3,
@@ -269,6 +269,7 @@ export class LLMFactory {
       apiKey: env.GOOGLE_API_KEY,
       model: config.modelName,
       temperature: config.temperature,
+      maxOutputTokens: config.maxTokens,
       json: true,
       streaming: config.streaming || false,
       maxRetries: config.maxRetries || 2,

@@ -23,8 +23,8 @@ const envSchema = z.object({
 
   // Gemini
   GOOGLE_API_KEY: z.string().min(1),
-  GOOGLE_CHAT_MODEL: z.string().default('gemini-pro'),
-  GOOGLE_MODEL: z.string().default('gemini-pro'),
+  GOOGLE_CHAT_MODEL: z.string().default('gemini-2.5-flash'),
+  GOOGLE_CHAT_MODEL_FAST: z.string().default('gemini-2.5-flash-lite'),
 
   // Pinecone
   PINECONE_API_KEY: z.string().min(1),
