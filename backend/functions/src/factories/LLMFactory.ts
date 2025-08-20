@@ -34,17 +34,49 @@ export class LLMFactory {
     this.logger.info('LLMFactory initialized');
   }
 
+
   /**
    * Erstellt ein LLM für juristische Analysen
    * Optimiert für Präzision und strukturierte Ausgaben
    */
-  createAnalysisLLM(fastMode: boolean = false): ChatGoogleGenerativeAI {
+  createAnalysisLLM(): ChatOpenAI {
+    const cacheKey = 'analysis';
+
+    if (this.modelCache.has(cacheKey)) {
+      return this.modelCache.get(cacheKey)!;
+    }
+
+    const config: LLMConfig = {
+      temperature: 1, // Niedrige Temperatur für konsistente, präzise Antworten
+      maxTokens: 4000,
+      modelName: env.OPENAI_CHAT_MODEL,
+      responseFormat: 'json_object', // Strukturierte Ausgaben für Analysen
+      timeout: 60000, // 60 Sekunden für komplexe Analysen
+      maxRetries: 3
+    };
+
+    const llm = this.createLLMOpenAI(config);
+    this.modelCache.set(cacheKey, llm);
+
+    this.logger.info('Created Analysis LLM', {
+      model: config.modelName,
+      temperature: config.temperature,
+      maxTokens: config.maxTokens
+    });
+
+    return llm;
+  }
+  /**
+   * Erstellt ein LLM für textuelle Analysen
+   * Optimiert für Geschwindigkeit und Effizienz
+   */
+  createSentenceLlm(): ChatGoogleGenerativeAI {
     const cacheKey = 'analysis';
 
     const config: LLMConfig = {
       temperature: 0.1, // Niedrige Temperatur für konsistente, präzise Antworten
       //maxTokens: 4000,
-      modelName: fastMode ? env.GOOGLE_CHAT_MODEL_FAST : env.GOOGLE_CHAT_MODEL,
+      modelName: env.GOOGLE_CHAT_MODEL_FAST,
       responseFormat: 'json_object', // Strukturierte Ausgaben für Analysen
       timeout: 60000, // 60 Sekunden für komplexe Analysen
       maxRetries: 3,

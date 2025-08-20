@@ -88,10 +88,8 @@ export interface SwissObligationAnalysisResult {
 export class SwissObligationLawService {
   private logger = Logger.getInstance();
   private analysisService: AnalysisService;
-  private textExtractionService: TextExtractionService;
   private firestoreService: FirestoreService;
-  private llm: ChatGoogleGenerativeAI;
-  private fastLlm: ChatGoogleGenerativeAI;
+  private llm: ChatOpenAI;
 
   constructor(
     analysisService: AnalysisService,
@@ -99,11 +97,9 @@ export class SwissObligationLawService {
     firestoreService: FirestoreService
   ) {
     this.analysisService = analysisService;
-    this.textExtractionService = textExtractionService;
     this.firestoreService = firestoreService;
     const llmFactory = new LLMFactory();
     this.llm = llmFactory.createAnalysisLLM();
-    this.fastLlm = llmFactory.createAnalysisLLM(true);
   }
 
   /**
@@ -204,23 +200,44 @@ Bestimme Dokumenttyp, Geschäftsdomäne und wichtige Schlüsselbegriffe:`;
         sectionCount: sections.length
       });
 
-      // Step 2: Analyze each section
-      const sectionResults: SectionAnalysisResult[] = [];
+      // Step 2: Analyze each section in parallel
       const totalSections = sections.length;
+      progressCallback?.(20, `Analyzing ${totalSections} sections in parallel...`);
 
-      for (let i = 0; i < sections.length; i++) {
-        const section = sections[i];
-        if (!section) {
-          continue; // Skip if section is undefined
+      // Filter out undefined sections and create promises for parallel processing
+      const validSections = sections.filter(section => section !== undefined);
+
+      const sectionPromises = validSections.map(async (section, index) => {
+        try {
+          return await this.analyzeSectionAgainstSwissLaw(section, analysisId, documentContext);
+        } catch (error) {
+          this.logger.error('Error analyzing section in parallel', error as Error, {
+            sectionId: section.id,
+            sectionIndex: index
+          });
+          // Return a fallback result instead of failing the entire analysis
+          return {
+            sectionId: section.id,
+            sectionContent: section.content,
+            queries: [],
+            legalContext: [],
+            complianceAnalysis: this.generateFallbackComplianceAnalysis(section),
+            findings: [],
+            recommendations: []
+          } as SectionAnalysisResult;
         }
+      });
 
-        const sectionProgress = 20 + (i / totalSections) * 70; // 20-90% for section analysis
+      // Execute all section analyses in parallel
+      const sectionResults = await Promise.all(sectionPromises);
 
-        progressCallback?.(sectionProgress, `Analyzing section ${i + 1} of ${totalSections}...`);
+      progressCallback?.(90, `Completed analysis of ${sectionResults.length} sections`);
 
-        const sectionResult = await this.analyzeSectionAgainstSwissLaw(section, analysisId, documentContext);
-        sectionResults.push(sectionResult);
-      }
+      this.logger.info('Parallel section analysis completed', {
+        analysisId,
+        totalSections: validSections.length,
+        completedSections: sectionResults.length
+      });
 
       // Step 3: Generate overall compliance assessment
       progressCallback?.(95, 'Generating overall compliance assessment...');
@@ -272,7 +289,7 @@ Bestimme Dokumenttyp, Geschäftsdomäne und wichtige Schlüsselbegriffe:`;
       // Clean and normalize text
       const cleanedText = contractText.trim();
 
-      const modelName = 'gpt-4'; //process.env.OPENAI_MODEL || 'gpt-4';
+      const modelName = process.env.OPENAI_MODEL || 'gpt-4';
 
       // Initialize tiktoken encoder for the configured model
       const encoder = encoding_for_model(modelName as any);
@@ -412,7 +429,7 @@ WICHTIG:
 Berücksichtige dabei den oben genannten Dokumentkontext und erstelle eine strukturierte Aufteilung in thematisch zusammenhängende Abschnitte.`;
 
     try {
-      const response = await this.fastLlm.invoke([
+      const response = await this.llm.invoke([
         new SystemMessage(systemPrompt),
         new HumanMessage(humanPrompt)
       ]);
