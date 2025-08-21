@@ -13,7 +13,7 @@ export default function IndexLawButton() {
   const handleIndexDsg = async () => {
     setIsLoading(true);
     try {
-      const response = await apiClient.post('/admin/law-texts/index');
+      const response = await apiClient.post('/admin/vectorstore/create');
 
       if (response.success) {
         toast({

@@ -1229,4 +1229,112 @@ export class AdminController extends BaseController {
       next(error);
     }
   }
+
+  /**
+   * Create VectorStore from URL (Admin Only)
+   * POST /api/admin/vectorstore/create
+   */
+  public async createVectorStore(req: Request, res: Response, next: NextFunction): Promise<void> {
+    const startTime = Date.now();
+    try {
+
+      const userId = this.getUserId(req);
+
+
+      this.logger.info('Admin VectorStore-Erstellung gestartet', {
+        userId,
+        timestamp: new Date().toISOString()
+      });
+
+      // ==========================================
+      // VectorStore Service importieren und verwenden
+      // ==========================================
+
+      const { VectorStoreService } = await import('../services/VectorStoreService');
+      const vectorStoreService = new VectorStoreService();
+      const FILE_URL = '../../assets/OR.pdf';
+
+      // VectorStore mit der bestehenden Service-Methode erstellen
+      const vectorStoreDoc = await vectorStoreService.createAndSaveVectorStore(
+        'knowledge_base',
+        FILE_URL,
+        userId
+      );
+
+      this.logger.info('Admin VectorStore erfolgreich erstellt', {
+        userId,
+        firestoreDocId: vectorStoreDoc.id,
+        vectorStoreId: vectorStoreDoc.vectorStoreId,
+        totalProcessingTimeMs: Date.now() - startTime
+      });
+
+      // ==========================================
+      // Erfolgreiche Admin-Antwort
+      // ==========================================
+
+      this.sendSuccess(res, {
+        admin: {
+          createdBy: userId,
+          processingTimeMs: Date.now() - startTime,
+          timestamp: new Date().toISOString()
+        },
+        vectorStore: {
+          id: vectorStoreDoc.id,
+          vectorStoreId: vectorStoreDoc.vectorStoreId,
+          name: vectorStoreDoc.name,
+          description: vectorStoreDoc.description,
+          status: vectorStoreDoc.status,
+          fileCount: vectorStoreDoc.fileCount,
+          files: vectorStoreDoc.files.map(file => ({
+            id: file.id,
+            status: file.status,
+            usage_bytes: file.usage_bytes,
+            created_at: file.created_at
+          })),
+          metadata: vectorStoreDoc.metadata,
+          createdAt: vectorStoreDoc.createdAt.toISOString(),
+          FILE_URL,
+          size: vectorStoreDoc.files.reduce((total, file) => total + (file.usage_bytes || 0), 0)
+        },
+        openai: {
+          vectorStoreId: vectorStoreDoc.vectorStoreId,
+          fileId: vectorStoreDoc.fileId,
+          status: vectorStoreDoc.status,
+          file_counts: vectorStoreDoc.fileCount
+        }
+      }, 'Admin: VectorStore erfolgreich erstellt');
+
+    } catch (error) {
+      const processingTimeMs = Date.now() - startTime;
+
+      this.logger.error('Admin VectorStore-Erstellung fehlgeschlagen', error as Error, {
+        adminId: this.getUserId(req),
+        name: req.body?.name,
+        fileUrl: req.body?.fileUrl,
+        targetUserId: req.body?.targetUserId,
+        processingTimeMs,
+        errorDetails: {
+          message: (error as Error).message,
+          stack: (error as Error).stack
+        }
+      });
+
+      // Spezifische Admin-Fehlerbehandlung
+      if ((error as Error).message.includes('file')) {
+        this.sendError(res, 400, 'Admin: Datei-Upload fehlgeschlagen',
+          'Die angegebene Datei konnte nicht zu OpenAI hochgeladen werden. Prüfen Sie die URL und Berechtigung.');
+      } else if ((error as Error).message.includes('vector_store')) {
+        this.sendError(res, 500, 'Admin: VectorStore-Erstellung fehlgeschlagen',
+          'Fehler bei der OpenAI VectorStore-Erstellung. Überprüfen Sie OpenAI-Konfiguration.');
+      } else if ((error as Error).message.includes('permission')) {
+        this.sendError(res, 403, 'Admin: Berechtigung verweigert',
+          'Unzureichende Berechtigung für VectorStore-Erstellung.');
+      } else {
+        this.sendError(res, 500, 'Admin: VectorStore-Erstellung fehlgeschlagen', (error as Error).message);
+      }
+
+      next(error);
+    }
+  }
+
 }

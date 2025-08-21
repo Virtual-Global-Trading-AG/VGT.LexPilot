@@ -121,5 +121,13 @@ router.post('/law-texts/index',
   adminController.indexLawTexts.bind(adminController)
 );
 
+/**
+ * Create and Index vectorstore (OR)
+ * POST /api/admin/vector-store/create
+ */
+router.post('/vectorstore/create',
+  adminController.createVectorStore.bind(adminController)
+);
+
 
 export default router;
