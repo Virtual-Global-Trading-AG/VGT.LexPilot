@@ -161,6 +161,11 @@ router.post('/:documentId/analyze-swiss-obligation-law',
   documentController.analyzeSwissObligationLaw.bind(documentController)
 );
 
+// Swiss Obligation Law Analysis - Direct PDF Processing
+router.post('/:documentId/analyze-swiss-obligation-law-direct',
+  documentController.analyzeSwissObligationLawDirect.bind(documentController)
+);
+
 // Get Swiss Obligation Law Analysis Result
 router.get('/swiss-obligation-analysis/:analysisId',
   documentController.getSwissObligationAnalysis.bind(documentController)

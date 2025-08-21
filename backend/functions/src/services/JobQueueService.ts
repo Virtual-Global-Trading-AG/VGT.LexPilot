@@ -239,6 +239,9 @@ export class JobQueueService {
         case 'swiss-obligation-analysis':
           await this.processSwissObligationAnalysis(job);
           break;
+        case 'swiss-obligation-analysis-direct':
+          await this.processSwissObligationAnalysisDirect(job);
+          break;
         default:
           throw new Error(`Unknown job type: ${job.type}`);
       }
@@ -310,6 +313,83 @@ export class JobQueueService {
       );
 
       // Complete job with result
+      await this.completeJob(job.id, {
+        analysisId: analysisResult.analysisId,
+        documentId: analysisResult.documentId,
+        documentContext: analysisResult.documentContext,
+        sections: analysisResult.sections.map(section => ({
+          sectionId: section.sectionId,
+          title: section.sectionContent.slice(0, 100) + '...',
+          isCompliant: section.complianceAnalysis.isCompliant,
+          confidence: section.complianceAnalysis.confidence,
+          violationCount: section.complianceAnalysis.violations.length,
+          violations: section.complianceAnalysis.violations,
+          reasoning: section.complianceAnalysis.reasoning
+        })),
+        overallCompliance: analysisResult.overallCompliance,
+        summary: {
+          totalSections: analysisResult.sections.length,
+          compliantSections: analysisResult.sections.filter(s => s.complianceAnalysis.isCompliant).length,
+          totalViolations: analysisResult.sections.reduce((sum, s) => sum + s.complianceAnalysis.violations.length, 0),
+        },
+        createdAt: analysisResult.createdAt.toISOString(),
+        completedAt: analysisResult.completedAt?.toISOString()
+      });
+
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Process Swiss Obligation Law analysis job with direct PDF processing
+   */
+  private async processSwissObligationAnalysisDirect(job: Job): Promise<void> {
+    const { SwissObligationLawService } = await import('./SwissObligationLawService');
+    const { AnalysisService } = await import('./AnalysisService');
+    const { TextExtractionService } = await import('./TextExtractionService');
+    const { StorageService } = await import('./StorageService');
+
+    const analysisService = new AnalysisService();
+    const textExtractionService = new TextExtractionService();
+    const storageService = new StorageService();
+    const swissObligationLawService = new SwissObligationLawService(
+      analysisService,
+      textExtractionService,
+      this.firestoreService
+    );
+
+    const { documentId, userId } = job.data;
+
+    try {
+      // Get document metadata
+      const document = await this.firestoreService.getDocument(documentId, userId);
+      if (!document) {
+        throw new Error('Document not found');
+      }
+
+      // Get document content as buffer (PDF)
+      const documentBuffer = await storageService.getDocumentContent(
+        documentId,
+        document.fileName,
+        userId
+      );
+
+      // Progress callback to update job status
+      const progressCallback = async (progress: number, message: string) => {
+        await this.updateJobProgress(job.id, progress, message);
+      };
+
+      // Perform direct PDF analysis
+      const analysisResult = await swissObligationLawService.analyzeContractPdfDirectly(
+        documentBuffer,
+        document.fileName,
+        documentId,
+        userId,
+        progressCallback
+      );
+
+      // Complete job with result (same structure as regular analysis)
       await this.completeJob(job.id, {
         analysisId: analysisResult.analysisId,
         documentId: analysisResult.documentId,

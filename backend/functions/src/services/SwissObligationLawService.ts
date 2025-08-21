@@ -9,6 +9,8 @@ import { LLMFactory } from '../factories/LLMFactory';
 import { Analysis, AnalysisResult, AnalysisType, AnalysisStatus, Finding, FindingSeverity, FindingType, Recommendation, RecommendationType, Priority, TextLocation } from '../models';
 import { v4 as uuidv4 } from 'uuid';
 import { encoding_for_model } from 'tiktoken';
+import OpenAI from 'openai';
+import * as fs from 'fs';
 
 export interface ContractSection {
   id: string;
@@ -248,6 +250,288 @@ Bestimme Dokumenttyp, Geschäftsdomäne und wichtige Schlüsselbegriffe:`;
 
     } catch (error) {
       this.logger.error('Error in Swiss obligation law analysis', error as Error, {
+        analysisId,
+        documentId,
+        userId
+      });
+      throw error;
+    }
+  }
+
+
+
+  /**
+   * Analyze contract PDF directly using OpenAI API with base64 encoding
+   * This method bypasses text extraction and uses the PDF directly
+   */
+  public async analyzeContractPdfDirectly(
+    pdfBuffer: Buffer,
+    fileName: string,
+    documentId: string,
+    userId: string,
+    progressCallback?: (progress: number, message: string) => void
+  ): Promise<SwissObligationAnalysisResult> {
+    const analysisId = uuidv4();
+    const createDate = new Date();
+
+    try {
+      this.logger.info('Starting direct PDF analysis against Swiss obligation law', {
+        analysisId,
+        documentId,
+        userId,
+        fileName,
+        pdfSize: pdfBuffer.length
+      });
+
+      // Initialize OpenAI client
+      const openai = new OpenAI({
+        apiKey: process.env.OPENAI_API_KEY
+      });
+
+      // Convert PDF to base64
+      progressCallback?.(10, 'Converting PDF to base64...');
+      const base64String = pdfBuffer.toString('base64');
+
+      // Step 1: Extract document context and analyze compliance
+      progressCallback?.(20, 'Analyzing document against Swiss Obligation Law...');
+
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-5-mini',
+        messages: [
+          {
+            role: 'system',
+            content: `Du bist ein Experte für Schweizer Obligationenrecht. Du analysierst Verträge und gibst AUSSCHLIESSLICH gültiges JSON zurück. 
+
+WICHTIG: Deine Antwort muss gültiges JSON sein. Verwende keine zusätzlichen Erklärungen oder Text außerhalb des JSON-Objekts.
+
+Beispiel für korrekte Datentypen:
+- "isCompliant": true (boolean, nicht "true" als String)
+- "confidence": 0.85 (number, nicht "0.85" als String)
+- "complianceScore": 0.92 (number zwischen 0 und 1)
+- "violations": [] (array von strings, kann leer sein)
+
+Gib NUR das JSON-Objekt zurück, ohne zusätzliche Formatierung oder Erklärungen.`
+          },
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'file',
+                file: {
+                  filename: fileName,
+                  file_data: `data:application/pdf;base64,${base64String}`
+                }
+              },
+              {
+                type: 'text',
+                text: `Analysiere diesen Vertrag gegen das Schweizer Obligationenrecht (OR). 
+
+Gib AUSSCHLIESSLICH ein gültiges JSON-Objekt mit folgender exakter Struktur zurück:
+
+{
+  "documentContext": {
+    "documentType": "Software-AGB",
+    "businessDomain": "Software/IT",
+    "keyTerms": ["Haftung", "Gewährleistung", "Datenschutz"],
+    "contextDescription": "Allgemeine Geschäftsbedingungen für Software-Services"
+  },
+  "sections": [
+    {
+      "sectionId": "section-1",
+      "sectionContent": "Vollständiger Text des Abschnitts...",
+      "complianceAnalysis": {
+        "isCompliant": true,
+        "confidence": 0.85,
+        "reasoning": "Detaillierte Begründung der Bewertung...",
+        "violations": []
+      }
+    }
+  ],
+  "overallCompliance": {
+    "isCompliant": true,
+    "complianceScore": 0.92,
+    "summary": "Zusammenfassung der gesamten Analyse..."
+  }
+}
+
+WICHTIGE REGELN:
+1. Verwende AUSSCHLIESSLICH gültiges JSON
+2. isCompliant muss boolean sein (true/false, nicht "true"/"false")
+3. confidence und complianceScore müssen numbers zwischen 0 und 1 sein
+4. violations muss ein array von strings sein (kann leer sein: [])
+5. Keine zusätzlichen Kommentare oder Erklärungen außerhalb des JSON
+6. Alle strings müssen in Anführungszeichen stehen
+7. Keine trailing commas
+
+Analysiere den Vertrag auf Konformität mit dem Schweizer Obligationenrecht:
+- Allgemeine Geschäftsbedingungen (AGB) nach Art. 1-40 OR
+- Vertragsrecht nach Art. 1-183 OR
+- Besondere Vertragstypen nach Art. 184-551 OR
+- Ungültige oder missbräuchliche Klauseln
+- Transparenz und Verständlichkeit
+- Rechte und Pflichten der Parteien
+
+Teile den Vertrag in logische Abschnitte auf und analysiere jeden Abschnitt einzeln.`
+              }
+            ]
+          }
+        ],
+        response_format: { type: "json_object" }
+      });
+
+      progressCallback?.(70, 'Processing OpenAI response...');
+
+      const responseContent = completion.choices[0]?.message?.content;
+      if (!responseContent) {
+        throw new Error('No response from OpenAI');
+      }
+
+      // Parse the JSON response
+      let analysisData;
+      try {
+        // Log the raw response for debugging
+        this.logger.info('Raw OpenAI response received', {
+          analysisId,
+          responseLength: responseContent.length,
+          responsePreview: responseContent.substring(0, 200) + '...'
+        });
+
+        // Since we're using response_format: json_object, the response should be pure JSON
+        // But let's still try to extract JSON in case there's any wrapper text
+        let jsonString = responseContent.trim();
+
+        // Try to extract JSON if there's additional text
+        const jsonMatch = responseContent.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          jsonString = jsonMatch[0];
+        }
+
+        // Parse the JSON
+        analysisData = JSON.parse(jsonString);
+
+        // Validate the structure
+        if (!analysisData.documentContext || !analysisData.sections || !analysisData.overallCompliance) {
+          throw new Error('Missing required fields in OpenAI response');
+        }
+
+        // Validate data types
+        if (typeof analysisData.overallCompliance.isCompliant !== 'boolean') {
+          this.logger.warn('Converting isCompliant to boolean', {
+            originalValue: analysisData.overallCompliance.isCompliant,
+            type: typeof analysisData.overallCompliance.isCompliant
+          });
+          analysisData.overallCompliance.isCompliant = analysisData.overallCompliance.isCompliant === true || analysisData.overallCompliance.isCompliant === 'true';
+        }
+
+        if (typeof analysisData.overallCompliance.complianceScore !== 'number') {
+          this.logger.warn('Converting complianceScore to number', {
+            originalValue: analysisData.overallCompliance.complianceScore,
+            type: typeof analysisData.overallCompliance.complianceScore
+          });
+          analysisData.overallCompliance.complianceScore = parseFloat(analysisData.overallCompliance.complianceScore) || 0;
+        }
+
+        // Validate sections
+        if (Array.isArray(analysisData.sections)) {
+          analysisData.sections.forEach((section: any, index: number) => {
+            if (section.complianceAnalysis) {
+              if (typeof section.complianceAnalysis.isCompliant !== 'boolean') {
+                this.logger.warn(`Converting section ${index} isCompliant to boolean`, {
+                  originalValue: section.complianceAnalysis.isCompliant,
+                  type: typeof section.complianceAnalysis.isCompliant
+                });
+                section.complianceAnalysis.isCompliant = section.complianceAnalysis.isCompliant === true || section.complianceAnalysis.isCompliant === 'true';
+              }
+
+              if (typeof section.complianceAnalysis.confidence !== 'number') {
+                this.logger.warn(`Converting section ${index} confidence to number`, {
+                  originalValue: section.complianceAnalysis.confidence,
+                  type: typeof section.complianceAnalysis.confidence
+                });
+                section.complianceAnalysis.confidence = parseFloat(section.complianceAnalysis.confidence) || 0;
+              }
+
+              if (!Array.isArray(section.complianceAnalysis.violations)) {
+                this.logger.warn(`Converting section ${index} violations to array`, {
+                  originalValue: section.complianceAnalysis.violations,
+                  type: typeof section.complianceAnalysis.violations
+                });
+                section.complianceAnalysis.violations = [];
+              }
+            }
+          });
+        }
+
+        this.logger.info('Successfully parsed and validated OpenAI JSON response', {
+          analysisId,
+          sectionsCount: analysisData.sections?.length || 0,
+          overallCompliant: analysisData.overallCompliance?.isCompliant
+        });
+
+      } catch (parseError) {
+        this.logger.error('Failed to parse OpenAI response as JSON', parseError as Error, {
+          analysisId,
+          responseContent: responseContent.substring(0, 1000), // Log first 1000 chars for debugging
+          responseLength: responseContent.length,
+          errorMessage: (parseError as Error).message
+        });
+        throw new Error(`Invalid response format from OpenAI: ${(parseError as Error).message}`);
+      }
+
+      progressCallback?.(80, 'Creating analysis result...');
+
+      // Transform the response to match our expected structure
+      const sectionResults: SectionAnalysisResult[] = analysisData.sections.map((section: any) => ({
+        sectionId: section.sectionId || uuidv4(),
+        sectionContent: section.sectionContent || '',
+        complianceAnalysis: {
+          isCompliant: section.complianceAnalysis?.isCompliant || false,
+          confidence: section.complianceAnalysis?.confidence || 0,
+          reasoning: section.complianceAnalysis?.reasoning || '',
+          violations: section.complianceAnalysis?.violations || []
+        },
+        findings: [] // Empty for now, could be enhanced later
+      }));
+
+      // Create the final result
+      const result: SwissObligationAnalysisResult = {
+        analysisId,
+        documentId,
+        userId,
+        documentContext: {
+          documentType: analysisData.documentContext?.documentType || 'Unbekannter Vertragstyp',
+          businessDomain: analysisData.documentContext?.businessDomain || 'Unbekannte Domäne',
+          keyTerms: analysisData.documentContext?.keyTerms || [],
+          contextDescription: analysisData.documentContext?.contextDescription || 'Kontextanalyse nicht verfügbar'
+        },
+        sections: sectionResults,
+        overallCompliance: {
+          isCompliant: analysisData.overallCompliance?.isCompliant || false,
+          complianceScore: analysisData.overallCompliance?.complianceScore || 0,
+          summary: analysisData.overallCompliance?.summary || 'Keine Zusammenfassung verfügbar'
+        },
+        createdAt: createDate,
+        completedAt: new Date()
+      };
+
+      // Save results to Firestore
+      progressCallback?.(90, 'Saving analysis results...');
+      await this.saveAnalysisResult(result);
+
+      progressCallback?.(100, 'Direct PDF analysis completed successfully');
+
+      this.logger.info('Direct PDF analysis against Swiss obligation law completed', {
+        analysisId,
+        documentId,
+        userId,
+        sectionCount: sectionResults.length,
+        overallCompliant: result.overallCompliance.isCompliant
+      });
+
+      return result;
+
+    } catch (error) {
+      this.logger.error('Error in direct PDF analysis against Swiss obligation law', error as Error, {
         analysisId,
         documentId,
         userId

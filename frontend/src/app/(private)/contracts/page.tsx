@@ -50,6 +50,7 @@ import {
   Scale,
   ChevronRight,
   ChevronDown,
+  Zap,
 } from 'lucide-react';
 import { SwissObligationAnalysisResult, SwissObligationSectionResult } from '@/types';
 
@@ -126,7 +127,7 @@ const getStatusText = (status: string) => {
 export default function ContractsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { uploadDocumentDirect, uploading, uploadProgress, error, clearError } = useDocumentUpload();
-  const { getDocuments, deleteDocument, getDocumentText, analyzeSwissObligationLaw, getJobStatus, getUserJobs, getSwissObligationAnalysesByDocumentId, documents, pagination, loading: documentsLoading, error: documentsError, clearError: clearDocumentsError } = useDocuments();
+  const { getDocuments, deleteDocument, getDocumentText, analyzeSwissObligationLaw, analyzeSwissObligationLawDirect, getJobStatus, getUserJobs, getSwissObligationAnalysesByDocumentId, documents, pagination, loading: documentsLoading, error: documentsError, clearError: clearDocumentsError } = useDocuments();
   const [dragActive, setDragActive] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [documentToDelete, setDocumentToDelete] = useState<{id: string, name: string} | null>(null);
@@ -139,6 +140,7 @@ export default function ContractsPage() {
   const [anonymizedKeywords, setAnonymizedKeywords] = useState<string[]>([]);
   const [currentTextInput, setCurrentTextInput] = useState('');
   const [swissAnalysisLoading, setSwissAnalysisLoading] = useState<string | null>(null);
+  const [swissDirectAnalysisLoading, setSwissDirectAnalysisLoading] = useState<string | null>(null);
   const [expandedDocuments, setExpandedDocuments] = useState<Set<string>>(new Set());
   const [documentAnalyses, setDocumentAnalyses] = useState<Record<string, SwissObligationAnalysisResult[]>>({});
   const [selectedAnalysis, setSelectedAnalysis] = useState<SwissObligationAnalysisResult | null>(null);
@@ -468,6 +470,40 @@ export default function ContractsPage() {
     }
   };
 
+  const handleSwissObligationAnalysisDirect = async (documentId: string, fileName: string) => {
+    setSwissDirectAnalysisLoading(documentId);
+
+    try {
+      // Start the direct analysis job
+      const result = await analyzeSwissObligationLawDirect(documentId);
+
+      if (result.success && result.data?.jobId) {
+        toast({
+          title: "Direkte Analyse gestartet",
+          description: `Direkte PDF-Analyse für "${fileName}" wurde im Hintergrund gestartet. Sie erhalten eine Benachrichtigung, wenn die Analyse abgeschlossen ist.`
+        });
+
+        // Clear loading state immediately since global monitoring will handle the rest
+        setSwissDirectAnalysisLoading(null);
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Direkte Analyse fehlgeschlagen",
+          description: result.error || "Fehler beim Starten der direkten PDF-Analyse."
+        });
+        setSwissDirectAnalysisLoading(null);
+      }
+    } catch (err) {
+      console.error('Direct Swiss obligation analysis error:', err);
+      toast({
+        variant: "destructive",
+        title: "Direkte Analyse fehlgeschlagen",
+        description: "Unerwarteter Fehler beim Starten der direkten PDF-Analyse."
+      });
+      setSwissDirectAnalysisLoading(null);
+    }
+  };
+
   return (
     <MainLayout>
       <div className="space-y-6">
@@ -625,6 +661,17 @@ export default function ContractsPage() {
                                   >
                                     <Scale className="h-4 w-4" />
                                     <span className="sr-only">Schweizer Obligationenrecht-Analyse</span>
+                                  </Button>
+                                  <Button 
+                                    variant="ghost" 
+                                    size="sm" 
+                                    className="h-8 w-8 p-0 text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                                    onClick={() => handleSwissObligationAnalysisDirect(document.documentId, document.documentMetadata.fileName || 'Unbekannt')}
+                                    disabled={swissDirectAnalysisLoading === document.documentId}
+                                    title="Direkte PDF-Analyse (Schweizer Obligationenrecht)"
+                                  >
+                                    <Zap className="h-4 w-4" />
+                                    <span className="sr-only">Direkte PDF-Analyse</span>
                                   </Button>
                                   <Button 
                                     variant="ghost" 

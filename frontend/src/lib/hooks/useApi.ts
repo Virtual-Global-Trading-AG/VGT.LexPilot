@@ -467,6 +467,38 @@ export function useDocuments() {
     }
   }, [isAuthenticated]);
 
+  const analyzeSwissObligationLawDirect = useCallback(async (documentId: string): Promise<{
+    success: boolean;
+    data?: any;
+    error?: string;
+  }> => {
+    if (!isAuthenticated) {
+      setError('Authentication required');
+      return { success: false, error: 'Authentication required' };
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await apiClient.post(`/documents/${documentId}/analyze-swiss-obligation-law-direct`);
+
+      if (response.success && response.data) {
+        return { success: true, data: response.data };
+      } else {
+        const errorMsg = response.error || 'Failed to start direct Swiss obligation law analysis';
+        setError(errorMsg);
+        return { success: false, error: errorMsg };
+      }
+    } catch (err) {
+      const errorMsg = 'Network error while starting direct analysis';
+      setError(errorMsg);
+      return { success: false, error: errorMsg };
+    } finally {
+      setLoading(false);
+    }
+  }, [isAuthenticated]);
+
   const getJobStatus = useCallback(async (jobId: string): Promise<{
     success: boolean;
     data?: any;
@@ -558,6 +590,7 @@ export function useDocuments() {
     deleteDocument,
     getDocumentText,
     analyzeSwissObligationLaw,
+    analyzeSwissObligationLawDirect,
     getJobStatus,
     getUserJobs,
     getSwissObligationAnalysesByDocumentId,
