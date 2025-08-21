@@ -1390,7 +1390,7 @@ STIL: Professionell, präzise, praxisorientiert für beide Jurisdiktionen`;
           documentContext: analysis.documentContext,
           sections: analysis.sections.map(section => ({
             sectionId: section.sectionId,
-            title: section.sectionContent?.slice(0, 100) + '...' || 'Section',
+            title: section.sectionContent,
             isCompliant: section.complianceAnalysis?.isCompliant || false,
             confidence: section.complianceAnalysis?.confidence || 0,
             violationCount: section.complianceAnalysis?.violations?.length || 0,

@@ -299,7 +299,7 @@ export class JobQueueService {
         documentContext: analysisResult.documentContext,
         sections: analysisResult.sections.map(section => ({
           sectionId: section.sectionId,
-          title: section.sectionContent.slice(0, 100) + '...',
+          title: section.sectionContent,
           isCompliant: section.complianceAnalysis.isCompliant,
           confidence: section.complianceAnalysis.confidence,
           violationCount: section.complianceAnalysis.violations.length,
