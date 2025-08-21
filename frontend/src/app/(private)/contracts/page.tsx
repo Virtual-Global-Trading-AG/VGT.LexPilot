@@ -1055,10 +1055,6 @@ export default function ContractsPage() {
                         <div className="text-2xl font-bold text-red-600">{selectedAnalysis.summary.totalViolations}</div>
                         <div className="text-xs text-muted-foreground">Verstöße</div>
                       </div>
-                      <div className="text-center p-3 bg-blue-50 rounded-lg">
-                        <div className="text-2xl font-bold text-blue-600">{selectedAnalysis.summary.totalRecommendations}</div>
-                        <div className="text-xs text-muted-foreground">Empfehlungen</div>
-                      </div>
                     </div>
                   </div>
                 )}
@@ -1130,45 +1126,6 @@ export default function ContractsPage() {
                                   </p>
                                 )}
                               </div>
-                            </div>
-                          )}
-
-                          {/* Recommendations Section */}
-                          {section.recommendations && section.recommendations.length > 0 && (
-                            <div className="space-y-2">
-                              <Label className="text-sm font-medium text-blue-600">Empfehlungen ({section.recommendations.length}):</Label>
-                              <div className="space-y-2">
-                                {section.recommendations.map((recommendation: any, recommendationIndex: number) => (
-                                  <div key={recommendation.id || recommendationIndex} className="text-sm bg-blue-50 p-3 rounded border-l-4 border-blue-400">
-                                    <div className="font-medium text-blue-800">{recommendation.title}</div>
-                                    <div className="text-blue-700 mt-1">{recommendation.description}</div>
-                                    {recommendation.suggestedAction && recommendation.suggestedAction !== recommendation.description && (
-                                      <div className="text-blue-600 mt-2 text-xs">
-                                        <strong>Vorgeschlagene Maßnahme:</strong> {recommendation.suggestedAction}
-                                      </div>
-                                    )}
-                                    <div className="flex items-center gap-2 mt-2">
-                                      {recommendation.priority && (
-                                        <Badge variant={recommendation.priority === 'HIGH' ? "destructive" : recommendation.priority === 'MEDIUM' ? "default" : "secondary"} className="text-xs">
-                                          {recommendation.priority}
-                                        </Badge>
-                                      )}
-                                      {recommendation.estimatedEffort && (
-                                        <span className="text-xs text-blue-600">Aufwand: {recommendation.estimatedEffort}</span>
-                                      )}
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                          {section.recommendationCount > 0 && (!section.recommendations || section.recommendations.length === 0) && (
-                            <div className="space-y-2">
-                              <Label className="text-sm font-medium text-blue-600">Empfehlungen ({section.recommendationCount}):</Label>
-                              <p className="text-sm text-blue-600 bg-blue-50 p-2 rounded">
-                                {section.recommendationCount} Empfehlungen zur Verbesserung
-                              </p>
                             </div>
                           )}
                         </div>

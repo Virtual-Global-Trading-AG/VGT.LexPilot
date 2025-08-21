@@ -14,8 +14,8 @@ export interface ContractSection {
   id: string;
   content: string;
   title?: string;
-  startIndex: number;
-  endIndex: number;
+    startIndex: number;
+    endIndex: number;
 }
 
 export interface GeneratedQuery {
@@ -34,34 +34,30 @@ export interface DocumentContext {
 export interface SectionAnalysisResult {
   sectionId: string;
   sectionContent: string;
-  queries: GeneratedQuery[];
-  legalContext: any[];
+  queries?: GeneratedQuery[];
+  legalContext?: any[];
   complianceAnalysis: {
     isCompliant: boolean;
     confidence: number;
     reasoning: string;
     violations: string[];
-    recommendations: string[];
   };
   findings: Finding[];
-  recommendations: Recommendation[];
 }
 
 // Compact data structure interfaces for Firestore 1MB limit optimization
 export interface CompactSectionResult {
   sectionId: string;
   sectionContent: string;
-  queries: GeneratedQuery[];
-  legalContext: any[];
+  queries?: GeneratedQuery[];
+  legalContext?: any[];
   complianceAnalysis: {
     isCompliant: boolean;
     confidence: number;
     reasoning: string;
     violations: string[];
-    recommendations: string[];
   };
   findingIds: string[]; // Only IDs instead of full Finding objects
-  recommendationIds: string[]; // Only IDs instead of full Recommendation objects
 }
 
 export interface AnalysisDetails {
@@ -173,6 +169,7 @@ Bestimme Dokumenttyp, Geschäftsdomäne und wichtige Schlüsselbegriffe:`;
     progressCallback?: (progress: number, message: string) => void
   ): Promise<SwissObligationAnalysisResult> {
     const analysisId = uuidv4();
+    const createDate = new Date();
 
     try {
       this.logger.info('Starting Swiss obligation law analysis', {
@@ -207,29 +204,8 @@ Bestimme Dokumenttyp, Geschäftsdomäne und wichtige Schlüsselbegriffe:`;
       // Filter out undefined sections and create promises for parallel processing
       const validSections = sections.filter(section => section !== undefined);
 
-      const sectionPromises = validSections.map(async (section, index) => {
-        try {
-          return await this.analyzeSectionAgainstSwissLaw(section, analysisId, documentContext, index, sections.length);
-        } catch (error) {
-          this.logger.error('Error analyzing section in parallel', error as Error, {
-            sectionId: section.id,
-            sectionIndex: index
-          });
-          // Return a fallback result instead of failing the entire analysis
-          return {
-            sectionId: section.id,
-            sectionContent: section.content,
-            queries: [],
-            legalContext: [],
-            complianceAnalysis: this.generateFallbackComplianceAnalysis(section),
-            findings: [],
-            recommendations: []
-          } as SectionAnalysisResult;
-        }
-      });
-
-      // Execute all section analyses in parallel
-      const sectionResults = await Promise.all(sectionPromises);
+      // Execute section analyses in batches to avoid rate limits
+      const sectionResults = await this.processSectionsInBatches(validSections, analysisId, documentContext);
 
       progressCallback?.(90, `Completed analysis of ${sectionResults.length} sections`);
 
@@ -251,7 +227,7 @@ Bestimme Dokumenttyp, Geschäftsdomäne und wichtige Schlüsselbegriffe:`;
         documentContext,
         sections: sectionResults,
         overallCompliance,
-        createdAt: new Date(),
+        createdAt: createDate,
         completedAt: new Date()
       };
 
@@ -579,7 +555,6 @@ Berücksichtige dabei den oben genannten Dokumentkontext und erstelle eine struk
 
       // Step 4: Generate findings and recommendations
       const findings = this.generateFindings(section, complianceAnalysis);
-      const recommendations = this.generateRecommendations(section, complianceAnalysis);
 
       return {
         sectionId: section.id,
@@ -587,8 +562,7 @@ Berücksichtige dabei den oben genannten Dokumentkontext und erstelle eine struk
         queries,
         legalContext,
         complianceAnalysis,
-        findings,
-        recommendations
+        findings
       };
 
     } catch (error) {
@@ -711,7 +685,6 @@ ANALYSE-FOKUS:
 - Analysiere NUR diesen spezifischen Abschnitt
 - Melde NUR Verstösse die DIREKT in diesem Text erkennbar sind
 - Ignoriere fehlende Regelungen (könnten in anderen Abschnitten stehen)
-- Gib NUR Empfehlungen zur Verbesserung DIESES Texts
 
 DOKUMENTKONTEXT:
 - Dokumenttyp: ${documentContext.documentType}
@@ -723,7 +696,6 @@ Antworte im JSON-Format:
   "confidence": number (0-1),
   "reasoning": "Begründung bezogen nur auf diesen Abschnitt",
   "violations": ["Direkte OR-Verstösse in diesem Text"],
-  "recommendations": ["Konkrete Verbesserungen nur für diesen Text"]
 }`;
 
     const contextText = legalContext
@@ -773,7 +745,6 @@ Fokussiere auf TEXTQUALITÄT dieses Abschnitts, nicht auf Vollständigkeit des V
           confidence: analysis.confidence || 0.5,
           reasoning: analysis.reasoning || 'Keine detaillierte Analyse verfügbar',
           violations: analysis.violations || [],
-          recommendations: analysis.violations
         };
       } catch (parseError) {
         this.logger.warn('Failed to parse compliance analysis JSON', { content });
@@ -797,7 +768,6 @@ Fokussiere auf TEXTQUALITÄT dieses Abschnitts, nicht auf Vollständigkeit des V
       confidence: 0.3,
       reasoning: 'Automatische Analyse nicht verfügbar. Manuelle Prüfung erforderlich.',
       violations: [],
-      recommendations: ['Manuelle rechtliche Prüfung durch Experten empfohlen']
     };
   }
 
@@ -827,27 +797,6 @@ Fokussiere auf TEXTQUALITÄT dieses Abschnitts, nicht auf Vollständigkeit des V
     }
 
     return findings;
-  }
-
-  /**
-   * Generate recommendations from compliance analysis
-   */
-  private generateRecommendations(section: ContractSection, analysis: SectionAnalysisResult['complianceAnalysis']): Recommendation[] {
-    const recommendations: Recommendation[] = [];
-
-    for (const recommendation of analysis.recommendations) {
-      recommendations.push({
-        id: uuidv4(),
-        type: RecommendationType.COMPLIANCE_UPDATE,
-        priority: analysis.isCompliant ? Priority.LOW : Priority.HIGH,
-        title: 'Empfehlung zur Rechtssicherheit',
-        description: recommendation,
-        suggestedAction: recommendation,
-        estimatedEffort: 'Mittel'
-      });
-    }
-
-    return recommendations;
   }
 
   /**
@@ -881,6 +830,209 @@ Fokussiere auf TEXTQUALITÄT dieses Abschnitts, nicht auf Vollständigkeit des V
   }
 
   /**
+   * Process sections in batches to avoid ChatGPT rate limits
+   * Dynamically calculates batch size based on available tokens and rate limits
+   */
+  private async processSectionsInBatches(
+    validSections: ContractSection[],
+    analysisId: string,
+    documentContext: DocumentContext
+  ): Promise<SectionAnalysisResult[]> {
+    // Calculate dynamic batch size based on available tokens
+    const batchSize = await this.calculateOptimalBatchSize(validSections, documentContext);
+    const delayBetweenBatches = 60000; // 60 seconds in milliseconds
+    const totalBatches = Math.ceil(validSections.length / batchSize);
+
+    this.logger.info('Starting batch processing of sections', {
+      totalSections: validSections.length,
+      batchSize,
+      totalBatches,
+      delayBetweenBatches: delayBetweenBatches / 1000 + ' seconds'
+    });
+
+    const allResults: SectionAnalysisResult[] = [];
+
+    for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+      const startIndex = batchIndex * batchSize;
+      const endIndex = Math.min(startIndex + batchSize, validSections.length);
+      const currentBatch = validSections.slice(startIndex, endIndex);
+
+      this.logger.info(`Processing batch ${batchIndex + 1}/${totalBatches}`, {
+        batchSize: currentBatch.length,
+        sectionsRange: `${startIndex + 1}-${endIndex}`
+      });
+
+      // Process current batch in parallel
+      const batchPromises = currentBatch.map(async (section, index) => {
+        try {
+          const globalIndex = startIndex + index;
+          return await this.analyzeSectionAgainstSwissLaw(
+            section, 
+            analysisId, 
+            documentContext, 
+            globalIndex, 
+            validSections.length
+          );
+        } catch (error) {
+          this.logger.error('Error analyzing section in batch', error as Error, {
+            sectionId: section.id,
+            batchIndex: batchIndex + 1,
+            sectionIndex: index
+          });
+          // Return a fallback result instead of failing the entire batch
+          return {
+            sectionId: section.id,
+            sectionContent: section.content,
+            queries: [],
+            legalContext: [],
+            complianceAnalysis: this.generateFallbackComplianceAnalysis(section),
+            findings: [],
+            recommendations: []
+          } as SectionAnalysisResult;
+        }
+      });
+
+      // Execute current batch
+      const batchResults = await Promise.all(batchPromises);
+      allResults.push(...batchResults);
+
+      this.logger.info(`Completed batch ${batchIndex + 1}/${totalBatches}`, {
+        processedSections: batchResults.length,
+        totalProcessedSoFar: allResults.length
+      });
+
+      // Wait between batches (except for the last batch)
+      if (batchIndex < totalBatches - 1) {
+        this.logger.info(`Waiting ${delayBetweenBatches / 1000} seconds before next batch...`);
+        await new Promise(resolve => setTimeout(resolve, delayBetweenBatches));
+      }
+    }
+
+    this.logger.info('Batch processing completed', {
+      totalSections: validSections.length,
+      totalBatches,
+      processedSections: allResults.length
+    });
+
+    return allResults;
+  }
+
+  /**
+   * Calculate optimal batch size based on available tokens and rate limits
+   * Considers the 200k TPM (tokens per minute) rate limit for OpenAI
+   */
+  private async calculateOptimalBatchSize(
+    validSections: ContractSection[],
+    documentContext: DocumentContext
+  ): Promise<number> {
+    try {
+      const modelName = process.env.OPENAI_MODEL || 'gpt-4.1-mini';
+
+      // Initialize tiktoken encoder for token counting
+      const encoder = encoding_for_model(modelName as any);
+
+      // Rate limits for OpenAI (conservative estimates)
+      const TOKENS_PER_MINUTE_LIMIT = 180000; // 200k TPM as mentioned in previous issue
+      const SAFETY_MARGIN = 0.8; // Use 80% of limit to be safe
+      const AVAILABLE_TOKENS_PER_MINUTE = TOKENS_PER_MINUTE_LIMIT * SAFETY_MARGIN;
+
+      // Estimate tokens per section analysis
+      const sampleSection = validSections[0] || { 
+        id: 'sample', 
+        content: '', 
+        title: '', 
+        startIndex: 0, 
+        endIndex: 0 
+      };
+      const tokensPerSectionAnalysis = this.estimateTokensPerSectionAnalysis(
+        sampleSection, 
+        documentContext, 
+        encoder
+      );
+
+      // Calculate how many sections can be processed per minute
+      const sectionsPerMinute = Math.floor(AVAILABLE_TOKENS_PER_MINUTE / tokensPerSectionAnalysis);
+
+      // Since we process batches in parallel and wait 60 seconds between batches,
+      // the batch size should not exceed what can be processed in one minute
+      const optimalBatchSize = Math.max(1, Math.min(sectionsPerMinute, validSections.length));
+
+      this.logger.info('Calculated optimal batch size', {
+        modelName,
+        tokensPerSectionAnalysis,
+        availableTokensPerMinute: AVAILABLE_TOKENS_PER_MINUTE,
+        sectionsPerMinute,
+        optimalBatchSize,
+        totalSections: validSections.length
+      });
+
+      // Clean up encoder
+      encoder.free();
+
+      return optimalBatchSize;
+
+    } catch (error) {
+      this.logger.error('Error calculating optimal batch size, using fallback', error as Error);
+      // Fallback to conservative batch size
+      return 3;
+    }
+  }
+
+  /**
+   * Estimate tokens required for analyzing a single section
+   */
+  private estimateTokensPerSectionAnalysis(
+    sampleSection: ContractSection,
+    documentContext: DocumentContext,
+    encoder: any
+  ): number {
+    // Estimate tokens for different parts of the analysis
+
+    // 1. Section content tokens
+    const sectionContentTokens = encoder.encode(sampleSection.content || '').length;
+
+    // 2. System prompt tokens (approximate)
+    const systemPromptTokens = 800; // Conservative estimate for system prompts
+
+    // 3. Document context tokens
+    const contextText = `${documentContext.documentType} ${documentContext.businessDomain} ${documentContext.keyTerms.join(' ')} ${documentContext.contextDescription}`;
+    const contextTokens = encoder.encode(contextText).length;
+
+    // 4. Query generation tokens (3 queries per section)
+    const queryGenerationTokens = 1500; // Conservative estimate for query generation
+
+    // 5. Compliance analysis tokens
+    const complianceAnalysisTokens = 2000; // Conservative estimate for compliance analysis
+
+    // 6. Response tokens (estimated output)
+    const responseTokens = 1000; // Conservative estimate for JSON responses
+
+    // Total tokens per section analysis (input + output)
+    const totalTokens = sectionContentTokens + 
+                       systemPromptTokens + 
+                       contextTokens + 
+                       queryGenerationTokens + 
+                       complianceAnalysisTokens + 
+                       responseTokens;
+
+    // Add 20% buffer for safety
+    const tokensWithBuffer = Math.ceil(totalTokens * 1.2);
+
+    this.logger.debug('Token estimation for section analysis', {
+      sectionContentTokens,
+      systemPromptTokens,
+      contextTokens,
+      queryGenerationTokens,
+      complianceAnalysisTokens,
+      responseTokens,
+      totalTokens,
+      tokensWithBuffer
+    });
+
+    return tokensWithBuffer;
+  }
+
+  /**
    * Save analysis result to Firestore with compact structure to avoid 1MB limit
    */
   private async saveAnalysisResult(result: SwissObligationAnalysisResult): Promise<void> {
@@ -892,17 +1044,15 @@ Fokussiere auf TEXTQUALITÄT dieses Abschnitts, nicht auf Vollständigkeit des V
       result.sections.forEach(section => {
         // Extract finding and recommendation IDs
         const findingIds = section.findings.map(f => f.id);
-        const recommendationIds = section.recommendations.map(r => r.id);
 
         // Create compact section
         const compactSection: CompactSectionResult = {
           sectionId: section.sectionId,
           sectionContent: section.sectionContent,
-          queries: section.queries,
-          legalContext: section.legalContext,
+          // queries: section.queries,
+          //legalContext: section.legalContext,
           complianceAnalysis: section.complianceAnalysis,
-          findingIds,
-          recommendationIds
+          findingIds
         };
 
         compactSections.push(compactSection);
@@ -910,9 +1060,6 @@ Fokussiere auf TEXTQUALITÄT dieses Abschnitts, nicht auf Vollständigkeit des V
         // Add full objects to details map
         section.findings.forEach(finding => {
           allDetails.items[finding.id] = finding;
-        });
-        section.recommendations.forEach(recommendation => {
-          allDetails.items[recommendation.id] = recommendation;
         });
       });
 
@@ -980,8 +1127,8 @@ Fokussiere auf TEXTQUALITÄT dieses Abschnitts, nicht auf Vollständigkeit des V
         const fallbackSections: SectionAnalysisResult[] = (mainResult.sections as CompactSectionResult[]).map(compactSection => ({
           sectionId: compactSection.sectionId,
           sectionContent: compactSection.sectionContent,
-          queries: compactSection.queries,
-          legalContext: compactSection.legalContext,
+          //queries: compactSection.queries,
+          //legalContext: compactSection.legalContext,
           complianceAnalysis: compactSection.complianceAnalysis,
           findings: [],
           recommendations: []
@@ -1007,24 +1154,13 @@ Fokussiere auf TEXTQUALITÄT dieses Abschnitts, nicht auf Vollständigkeit des V
           return finding;
         }).filter(Boolean) as Finding[];
 
-        // Reconstruct recommendations from IDs
-        const recommendations: Recommendation[] = compactSection.recommendationIds.map(id => {
-          const recommendation = details.items[id] as Recommendation;
-          if (!recommendation) {
-            this.logger.warn('Recommendation not found in details', { analysisId, recommendationId: id });
-            return null;
-          }
-          return recommendation;
-        }).filter(Boolean) as Recommendation[];
-
         return {
           sectionId: compactSection.sectionId,
           sectionContent: compactSection.sectionContent,
           queries: compactSection.queries,
           legalContext: compactSection.legalContext,
           complianceAnalysis: compactSection.complianceAnalysis,
-          findings,
-          recommendations
+          findings
         };
       });
 
@@ -1120,16 +1256,6 @@ Fokussiere auf TEXTQUALITÄT dieses Abschnitts, nicht auf Vollständigkeit des V
               return finding;
             }).filter(Boolean) as Finding[];
 
-            // Reconstruct recommendations from IDs
-            const recommendations: Recommendation[] = (compactSection.recommendationIds || []).map(id => {
-              const recommendation = details.items[id] as Recommendation;
-              if (!recommendation) {
-                this.logger.warn('Recommendation not found in details', { analysisId: data.analysisId, recommendationId: id });
-                return null;
-              }
-              return recommendation;
-            }).filter(Boolean) as Recommendation[];
-
             return {
               sectionId: compactSection.sectionId,
               sectionContent: compactSection.sectionContent,
@@ -1142,8 +1268,7 @@ Fokussiere auf TEXTQUALITÄT dieses Abschnitts, nicht auf Vollständigkeit des V
                 violations: [],
                 recommendations: []
               },
-              findings,
-              recommendations
+              findings
             };
           });
         }

@@ -320,9 +320,7 @@ export class JobQueueService {
           isCompliant: section.complianceAnalysis.isCompliant,
           confidence: section.complianceAnalysis.confidence,
           violationCount: section.complianceAnalysis.violations.length,
-          recommendationCount: section.recommendations.length,
           violations: section.complianceAnalysis.violations,
-          recommendations: section.recommendations,
           reasoning: section.complianceAnalysis.reasoning
         })),
         overallCompliance: analysisResult.overallCompliance,
@@ -330,7 +328,6 @@ export class JobQueueService {
           totalSections: analysisResult.sections.length,
           compliantSections: analysisResult.sections.filter(s => s.complianceAnalysis.isCompliant).length,
           totalViolations: analysisResult.sections.reduce((sum, s) => sum + s.complianceAnalysis.violations.length, 0),
-          totalRecommendations: analysisResult.sections.reduce((sum, s) => sum + s.recommendations.length, 0)
         },
         createdAt: analysisResult.createdAt.toISOString(),
         completedAt: analysisResult.completedAt?.toISOString()

@@ -35,7 +35,6 @@ export interface AnalysisResult {
     sources: any[];
     relevanceScores: number[];
   };
-  recommendations: any[];
   complianceScore?: number;
   status?: string;
   findings?: any[];

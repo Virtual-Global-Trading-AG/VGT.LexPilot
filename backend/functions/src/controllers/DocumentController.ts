@@ -1319,9 +1319,7 @@ STIL: Professionell, präzise, praxisorientiert für beide Jurisdiktionen`;
             isCompliant: section.complianceAnalysis?.isCompliant || false,
             confidence: section.complianceAnalysis?.confidence || 0,
             violationCount: section.complianceAnalysis?.violations?.length || 0,
-            recommendationCount: section.recommendations?.length || 0,
             violations: section.complianceAnalysis?.violations || [],
-            recommendations: section.recommendations || [],
             reasoning: section.complianceAnalysis?.reasoning || '',
             findings: section.findings || []
           })),
@@ -1334,9 +1332,6 @@ STIL: Professionell, präzise, praxisorientiert für beide Jurisdiktionen`;
             totalViolations: analysis.sections?.reduce((sum, s) => 
               sum + (s.complianceAnalysis?.violations?.length || 0), 0
             ) || 0,
-            totalRecommendations: analysis.sections?.reduce((sum, s) => 
-              sum + (s.recommendations?.length || 0), 0
-            ) || 0
           },
           createdAt: analysis.createdAt.toISOString(),
           completedAt: analysis.completedAt?.toISOString()

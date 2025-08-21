@@ -47,7 +47,7 @@ export class LLMFactory {
     }
 
     const config: LLMConfig = {
-      temperature: 1, // Niedrige Temperatur für konsistente, präzise Antworten
+      temperature: 0.1, // Niedrige Temperatur für konsistente, präzise Antworten
       maxTokens: 4000,
       modelName: env.OPENAI_CHAT_MODEL,
       responseFormat: 'json_object', // Strukturierte Ausgaben für Analysen
