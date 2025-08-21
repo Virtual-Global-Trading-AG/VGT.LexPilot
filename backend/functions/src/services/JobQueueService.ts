@@ -1,3 +1,4 @@
+import { user } from 'firebase-functions/v1/auth';
 import { Logger } from '../utils/logger';
 import { FirestoreService } from './FirestoreService';
 import { v4 as uuidv4 } from 'uuid';
@@ -239,9 +240,6 @@ export class JobQueueService {
         case 'swiss-obligation-analysis':
           await this.processSwissObligationAnalysis(job);
           break;
-        case 'swiss-obligation-analysis-direct':
-          await this.processSwissObligationAnalysisDirect(job);
-          break;
         default:
           throw new Error(`Unknown job type: ${job.type}`);
       }
@@ -249,22 +247,18 @@ export class JobQueueService {
       await this.failJob(jobId, (error as Error).message);
     }
   }
-
   /**
    * Process Swiss Obligation Law analysis job
    */
   private async processSwissObligationAnalysis(job: Job): Promise<void> {
     const { SwissObligationLawService } = await import('./SwissObligationLawService');
-    const { TextExtractionService } = await import('./TextExtractionService');
     const { AnalysisService } = await import('./AnalysisService');
     const { StorageService } = await import('./StorageService');
 
     const analysisService = new AnalysisService();
-    const textExtractionService = new TextExtractionService();
     const storageService = new StorageService();
     const swissObligationLawService = new SwissObligationLawService(
       analysisService,
-      textExtractionService,
       this.firestoreService
     );
 
@@ -277,117 +271,26 @@ export class JobQueueService {
         throw new Error('Document not found');
       }
 
-      // Get document content
-      const documentBuffer = await storageService.getDocumentContent(
+      const documentFileDownloadUrl = await storageService.getDocumentDownloadUrl(
+        userId,
         documentId,
-        document.fileName,
-        userId
-      );
-
-      // Extract text
-      const extractedText = await textExtractionService.extractText(
-        documentBuffer,
-        document.contentType,
         document.fileName
       );
 
-      // Clean text if needed
-      let contractText: string;
-      if (document.anonymizedKeywords?.length) {
-        contractText = textExtractionService.replaceSpecificTexts(extractedText, document.anonymizedKeywords);
-      } else {
-        contractText = extractedText;
-      }
-
       // Progress callback to update job status
       const progressCallback = async (progress: number, message: string) => {
         await this.updateJobProgress(job.id, progress, message);
       };
 
-      // Perform analysis
-      const analysisResult = await swissObligationLawService.analyzeContractAgainstSwissLaw(
-        contractText,
-        documentId,
+      const analysisResult = await swissObligationLawService.analyzeContractWithObligationLaw(
+        '',
         userId,
-        progressCallback
-      );
-
-      // Complete job with result
-      await this.completeJob(job.id, {
-        analysisId: analysisResult.analysisId,
-        documentId: analysisResult.documentId,
-        documentContext: analysisResult.documentContext,
-        sections: analysisResult.sections.map(section => ({
-          sectionId: section.sectionId,
-          title: section.sectionContent.slice(0, 100) + '...',
-          isCompliant: section.complianceAnalysis.isCompliant,
-          confidence: section.complianceAnalysis.confidence,
-          violationCount: section.complianceAnalysis.violations.length,
-          violations: section.complianceAnalysis.violations,
-          reasoning: section.complianceAnalysis.reasoning
-        })),
-        overallCompliance: analysisResult.overallCompliance,
-        summary: {
-          totalSections: analysisResult.sections.length,
-          compliantSections: analysisResult.sections.filter(s => s.complianceAnalysis.isCompliant).length,
-          totalViolations: analysisResult.sections.reduce((sum, s) => sum + s.complianceAnalysis.violations.length, 0),
-        },
-        createdAt: analysisResult.createdAt.toISOString(),
-        completedAt: analysisResult.completedAt?.toISOString()
-      });
-
-    } catch (error) {
-      throw error;
-    }
-  }
-
-  /**
-   * Process Swiss Obligation Law analysis job with direct PDF processing
-   */
-  private async processSwissObligationAnalysisDirect(job: Job): Promise<void> {
-    const { SwissObligationLawService } = await import('./SwissObligationLawService');
-    const { AnalysisService } = await import('./AnalysisService');
-    const { TextExtractionService } = await import('./TextExtractionService');
-    const { StorageService } = await import('./StorageService');
-
-    const analysisService = new AnalysisService();
-    const textExtractionService = new TextExtractionService();
-    const storageService = new StorageService();
-    const swissObligationLawService = new SwissObligationLawService(
-      analysisService,
-      textExtractionService,
-      this.firestoreService
-    );
-
-    const { documentId, userId } = job.data;
-
-    try {
-      // Get document metadata
-      const document = await this.firestoreService.getDocument(documentId, userId);
-      if (!document) {
-        throw new Error('Document not found');
-      }
-
-      // Get document content as buffer (PDF)
-      const documentBuffer = await storageService.getDocumentContent(
+        // todo: use vector store ID from config or environment
+        'vs_68a726b561888191ab1eeeb15e5c34e8',
         documentId,
-        document.fileName,
-        userId
-      );
-
-      // Progress callback to update job status
-      const progressCallback = async (progress: number, message: string) => {
-        await this.updateJobProgress(job.id, progress, message);
-      };
-
-      // Perform direct PDF analysis
-      const analysisResult = await swissObligationLawService.analyzeContractPdfDirectly(
-        documentBuffer,
-        document.fileName,
-        documentId,
-        userId,
+        documentFileDownloadUrl,
         progressCallback
-      );
+      )
 
       // Complete job with result (same structure as regular analysis)
       await this.completeJob(job.id, {

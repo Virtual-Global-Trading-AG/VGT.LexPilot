@@ -34,7 +34,6 @@ export class DocumentController extends BaseController {
     this.textExtractionService = new TextExtractionService();
     this.swissObligationLawService = new SwissObligationLawService(
       this.analysisService,
-      this.textExtractionService,
       this.firestoreService
     );
     this.jobQueueService = new JobQueueService(this.firestoreService);

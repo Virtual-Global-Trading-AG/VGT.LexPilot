@@ -1,58 +1,20 @@
 'use client';
 
 import MainLayout from '@/components/layouts/main-layout';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { useDocumentUpload, useDocuments } from '@/lib/hooks/useApi';
-import React, { useRef, useState, useEffect } from 'react';
-import { useToast } from '@/lib/hooks/use-toast';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, } from '@/components/ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  Upload,
-  Search,
-  Filter,
-  Eye,
-  Download,
-  Trash2,
-  AlertCircle,
-  CheckCircle,
-  Clock,
-  FileText,
-  FileSearch,
-  X,
-  Plus,
-  Scale,
-  ChevronRight,
-  ChevronDown,
-  Zap,
-} from 'lucide-react';
+import { useToast } from '@/lib/hooks/use-toast';
+import { useDocuments, useDocumentUpload } from '@/lib/hooks/useApi';
 import { SwissObligationAnalysisResult, SwissObligationSectionResult } from '@/types';
+import { AlertCircle, CheckCircle, ChevronDown, ChevronRight, Clock, Download, FileSearch, FileText, Filter, Plus, Scale, Search, Trash2, Upload, X, } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
 
 
 const getRiskBadge = (risk: string) => {
@@ -101,13 +63,13 @@ const getCategoryDisplayName = (category: string) => {
 const getStatusIcon = (status: string) => {
   switch (status) {
     case 'analyzed':
-      return <CheckCircle className="h-4 w-4 text-green-500" />;
+      return <CheckCircle className="h-4 w-4 text-green-500"/>;
     case 'processing':
-      return <Clock className="h-4 w-4 text-blue-500" />;
+      return <Clock className="h-4 w-4 text-blue-500"/>;
     case 'error':
-      return <AlertCircle className="h-4 w-4 text-red-500" />;
+      return <AlertCircle className="h-4 w-4 text-red-500"/>;
     default:
-      return <FileText className="h-4 w-4 text-gray-500" />;
+      return <FileText className="h-4 w-4 text-gray-500"/>;
   }
 };
 
@@ -127,20 +89,32 @@ const getStatusText = (status: string) => {
 export default function ContractsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { uploadDocumentDirect, uploading, uploadProgress, error, clearError } = useDocumentUpload();
-  const { getDocuments, deleteDocument, getDocumentText, analyzeSwissObligationLaw, analyzeSwissObligationLawDirect, getJobStatus, getUserJobs, getSwissObligationAnalysesByDocumentId, documents, pagination, loading: documentsLoading, error: documentsError, clearError: clearDocumentsError } = useDocuments();
+  const {
+    getDocuments,
+    deleteDocument,
+    getDocumentText,
+    analyzeSwissObligationLaw,
+    getJobStatus,
+    getUserJobs,
+    getSwissObligationAnalysesByDocumentId,
+    documents,
+    pagination,
+    loading: documentsLoading,
+    error: documentsError,
+    clearError: clearDocumentsError
+  } = useDocuments();
   const [dragActive, setDragActive] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [documentToDelete, setDocumentToDelete] = useState<{id: string, name: string} | null>(null);
+  const [documentToDelete, setDocumentToDelete] = useState<{ id: string, name: string } | null>(null);
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<'contract' | 'nda' | 'terms_conditions' | 'other'>('contract');
   const [extractedText, setExtractedText] = useState<string>('');
   const [extractingText, setExtractingText] = useState<boolean>(false);
-  const [extractedDocumentInfo, setExtractedDocumentInfo] = useState<{fileName: string, documentId: string} | null>(null);
+  const [extractedDocumentInfo, setExtractedDocumentInfo] = useState<{ fileName: string, documentId: string } | null>(null);
   const [anonymizedKeywords, setAnonymizedKeywords] = useState<string[]>([]);
   const [currentTextInput, setCurrentTextInput] = useState('');
   const [swissAnalysisLoading, setSwissAnalysisLoading] = useState<string | null>(null);
-  const [swissDirectAnalysisLoading, setSwissDirectAnalysisLoading] = useState<string | null>(null);
   const [expandedDocuments, setExpandedDocuments] = useState<Set<string>>(new Set());
   const [documentAnalyses, setDocumentAnalyses] = useState<Record<string, SwissObligationAnalysisResult[]>>({});
   const [selectedAnalysis, setSelectedAnalysis] = useState<SwissObligationAnalysisResult | null>(null);
@@ -254,9 +228,9 @@ export default function ContractsPage() {
 
     if (!allowedTypes.includes(file.type)) {
       toast({
-        variant: "destructive",
-        title: "Ungültiger Dateityp",
-        description: "Nur PDF und Word-Dokumente sind erlaubt."
+        variant: 'destructive',
+        title: 'Ungültiger Dateityp',
+        description: 'Nur PDF und Word-Dokumente sind erlaubt.'
       });
       return;
     }
@@ -264,9 +238,9 @@ export default function ContractsPage() {
     // Validate file size (50MB max)
     if (file.size > 52428800) {
       toast({
-        variant: "destructive",
-        title: "Datei zu groß",
-        description: "Die Datei ist zu groß. Maximale Größe: 50MB"
+        variant: 'destructive',
+        title: 'Datei zu groß',
+        description: 'Die Datei ist zu groß. Maximale Größe: 50MB'
       });
       return;
     }
@@ -286,9 +260,9 @@ export default function ContractsPage() {
 
       if (result) {
         toast({
-          variant: "success",
-          title: "Upload erfolgreich",
-          description: "Vertrag wurde erfolgreich hochgeladen!"
+          variant: 'success',
+          title: 'Upload erfolgreich',
+          description: 'Vertrag wurde erfolgreich hochgeladen!'
         });
         // Reset text replacement list
         setAnonymizedKeywords([]);
@@ -304,9 +278,9 @@ export default function ContractsPage() {
     } catch (err) {
       console.error('Upload error:', err);
       toast({
-        variant: "destructive",
-        title: "Upload fehlgeschlagen",
-        description: "Fehler beim Hochladen des Vertrags."
+        variant: 'destructive',
+        title: 'Upload fehlgeschlagen',
+        description: 'Fehler beim Hochladen des Vertrags.'
       });
     }
   };
@@ -367,9 +341,9 @@ export default function ContractsPage() {
       const success = await deleteDocument(documentToDelete.id);
       if (success) {
         toast({
-          variant: "success",
-          title: "Dokument gelöscht",
-          description: "Dokument wurde erfolgreich gelöscht!"
+          variant: 'success',
+          title: 'Dokument gelöscht',
+          description: 'Dokument wurde erfolgreich gelöscht!'
         });
         // Refresh the documents list
         getDocuments({
@@ -380,17 +354,17 @@ export default function ContractsPage() {
         });
       } else {
         toast({
-          variant: "destructive",
-          title: "Löschen fehlgeschlagen",
-          description: "Fehler beim Löschen des Dokuments."
+          variant: 'destructive',
+          title: 'Löschen fehlgeschlagen',
+          description: 'Fehler beim Löschen des Dokuments.'
         });
       }
     } catch (err) {
       console.error('Delete error:', err);
       toast({
-        variant: "destructive",
-        title: "Löschen fehlgeschlagen",
-        description: "Fehler beim Löschen des Dokuments."
+        variant: 'destructive',
+        title: 'Löschen fehlgeschlagen',
+        description: 'Fehler beim Löschen des Dokuments.'
       });
     } finally {
       setDeleteDialogOpen(false);
@@ -413,23 +387,23 @@ export default function ContractsPage() {
           documentId: result.data.documentId
         });
         toast({
-          variant: "success",
-          title: "Text extrahiert",
+          variant: 'success',
+          title: 'Text extrahiert',
           description: `Text wurde erfolgreich aus "${result.data.fileName}" extrahiert.`
         });
       } else {
         toast({
-          variant: "destructive",
-          title: "Textextraktion fehlgeschlagen",
-          description: result.error || "Fehler beim Extrahieren des Texts."
+          variant: 'destructive',
+          title: 'Textextraktion fehlgeschlagen',
+          description: result.error || 'Fehler beim Extrahieren des Texts.'
         });
       }
     } catch (err) {
       console.error('Text extraction error:', err);
       toast({
-        variant: "destructive",
-        title: "Textextraktion fehlgeschlagen",
-        description: "Unerwarteter Fehler beim Extrahieren des Texts."
+        variant: 'destructive',
+        title: 'Textextraktion fehlgeschlagen',
+        description: 'Unerwarteter Fehler beim Extrahieren des Texts.'
       });
     } finally {
       setExtractingText(false);
@@ -445,7 +419,7 @@ export default function ContractsPage() {
 
       if (result.success && result.data?.jobId) {
         toast({
-          title: "Analyse gestartet",
+          title: 'Analyse gestartet',
           description: `Schweizer Obligationenrecht-Analyse für "${fileName}" wurde im Hintergrund gestartet. Sie erhalten eine Benachrichtigung, wenn die Analyse abgeschlossen ist.`
         });
 
@@ -453,54 +427,20 @@ export default function ContractsPage() {
         setSwissAnalysisLoading(null);
       } else {
         toast({
-          variant: "destructive",
-          title: "Analyse fehlgeschlagen",
-          description: result.error || "Fehler beim Starten der Schweizer Obligationenrecht-Analyse."
+          variant: 'destructive',
+          title: 'Analyse fehlgeschlagen',
+          description: result.error || 'Fehler beim Starten der Schweizer Obligationenrecht-Analyse.'
         });
         setSwissAnalysisLoading(null);
       }
     } catch (err) {
       console.error('Swiss obligation analysis error:', err);
       toast({
-        variant: "destructive",
-        title: "Analyse fehlgeschlagen",
-        description: "Unerwarteter Fehler beim Starten der Schweizer Obligationenrecht-Analyse."
+        variant: 'destructive',
+        title: 'Analyse fehlgeschlagen',
+        description: 'Unerwarteter Fehler beim Starten der Schweizer Obligationenrecht-Analyse.'
       });
       setSwissAnalysisLoading(null);
-    }
-  };
-
-  const handleSwissObligationAnalysisDirect = async (documentId: string, fileName: string) => {
-    setSwissDirectAnalysisLoading(documentId);
-
-    try {
-      // Start the direct analysis job
-      const result = await analyzeSwissObligationLawDirect(documentId);
-
-      if (result.success && result.data?.jobId) {
-        toast({
-          title: "Direkte Analyse gestartet",
-          description: `Direkte PDF-Analyse für "${fileName}" wurde im Hintergrund gestartet. Sie erhalten eine Benachrichtigung, wenn die Analyse abgeschlossen ist.`
-        });
-
-        // Clear loading state immediately since global monitoring will handle the rest
-        setSwissDirectAnalysisLoading(null);
-      } else {
-        toast({
-          variant: "destructive",
-          title: "Direkte Analyse fehlgeschlagen",
-          description: result.error || "Fehler beim Starten der direkten PDF-Analyse."
-        });
-        setSwissDirectAnalysisLoading(null);
-      }
-    } catch (err) {
-      console.error('Direct Swiss obligation analysis error:', err);
-      toast({
-        variant: "destructive",
-        title: "Direkte Analyse fehlgeschlagen",
-        description: "Unerwarteter Fehler beim Starten der direkten PDF-Analyse."
-      });
-      setSwissDirectAnalysisLoading(null);
     }
   };
 
@@ -516,7 +456,7 @@ export default function ContractsPage() {
             </p>
           </div>
           <Button onClick={handleButtonClick} disabled={uploading}>
-            <Upload className="mr-2 h-4 w-4" />
+            <Upload className="mr-2 h-4 w-4"/>
             {uploading ? 'Wird hochgeladen...' : 'Vertrag hochladen'}
           </Button>
         </div>
@@ -525,7 +465,7 @@ export default function ContractsPage() {
         <div className="flex items-center space-x-4">
           <div className="flex-1">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/>
               <Input
                 placeholder="Verträge durchsuchen..."
                 className="pl-9"
@@ -533,7 +473,7 @@ export default function ContractsPage() {
             </div>
           </div>
           <Button variant="outline">
-            <Filter className="mr-2 h-4 w-4" />
+            <Filter className="mr-2 h-4 w-4"/>
             Filter
           </Button>
         </div>
@@ -552,9 +492,9 @@ export default function ContractsPage() {
               <div className="flex items-center justify-center py-8">
                 <div className="text-sm text-red-600">
                   Fehler beim Laden der Dokumente: {documentsError}
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
+                  <Button
+                    variant="outline"
+                    size="sm"
                     className="ml-2"
                     onClick={() => {
                       clearDocumentsError();
@@ -607,9 +547,9 @@ export default function ContractsPage() {
                                     onClick={() => toggleDocumentExpansion(document.documentId)}
                                   >
                                     {expandedDocuments.has(document.documentId) ? (
-                                      <ChevronDown className="h-4 w-4" />
+                                      <ChevronDown className="h-4 w-4"/>
                                     ) : (
-                                      <ChevronRight className="h-4 w-4" />
+                                      <ChevronRight className="h-4 w-4"/>
                                     )}
                                   </Button>
                                 )}
@@ -638,48 +578,40 @@ export default function ContractsPage() {
                               <TableCell>
                                 <div className="flex items-center space-x-2">
                                   <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                                    <Download className="h-4 w-4" />
+                                    <Download className="h-4 w-4"/>
                                     <span className="sr-only">Herunterladen</span>
                                   </Button>
-                                  <Button 
-                                    variant="ghost" 
-                                    size="sm" 
-                                    className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                                    onClick={() => handleExtractText(document.documentId, document.documentMetadata.fileName || 'Unbekannt')}
-                                    disabled={extractingText}
-                                  >
-                                    <FileSearch className="h-4 w-4" />
-                                    <span className="sr-only">Text extrahieren</span>
-                                  </Button>
-                                  <Button 
-                                    variant="ghost" 
-                                    size="sm" 
+                                  {/* Just for debugging */}
+                                  {false && (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                      onClick={() => handleExtractText(document.documentId, document.documentMetadata.fileName || 'Unbekannt')}
+                                      disabled={extractingText}
+                                    >
+                                      <FileSearch className="h-4 w-4"/>
+                                      <span className="sr-only">Text extrahieren</span>
+                                    </Button>
+                                  )}
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
                                     className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50"
                                     onClick={() => handleSwissObligationAnalysis(document.documentId, document.documentMetadata.fileName || 'Unbekannt')}
                                     disabled={swissAnalysisLoading === document.documentId}
                                     title="Schweizer Obligationenrecht-Analyse"
                                   >
-                                    <Scale className="h-4 w-4" />
+                                    <Scale className="h-4 w-4"/>
                                     <span className="sr-only">Schweizer Obligationenrecht-Analyse</span>
                                   </Button>
-                                  <Button 
-                                    variant="ghost" 
-                                    size="sm" 
-                                    className="h-8 w-8 p-0 text-purple-600 hover:text-purple-700 hover:bg-purple-50"
-                                    onClick={() => handleSwissObligationAnalysisDirect(document.documentId, document.documentMetadata.fileName || 'Unbekannt')}
-                                    disabled={swissDirectAnalysisLoading === document.documentId}
-                                    title="Direkte PDF-Analyse (Schweizer Obligationenrecht)"
-                                  >
-                                    <Zap className="h-4 w-4" />
-                                    <span className="sr-only">Direkte PDF-Analyse</span>
-                                  </Button>
-                                  <Button 
-                                    variant="ghost" 
-                                    size="sm" 
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
                                     className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
                                     onClick={() => handleDeleteDocument(document.documentId, document.documentMetadata.fileName || 'Unbekannt')}
                                   >
-                                    <Trash2 className="h-4 w-4" />
+                                    <Trash2 className="h-4 w-4"/>
                                     <span className="sr-only">Löschen</span>
                                   </Button>
                                 </div>
@@ -690,7 +622,7 @@ export default function ContractsPage() {
                             {expandedDocuments.has(document.documentId) && documentAnalyses[document.documentId] && (
                               <>
                                 {documentAnalyses[document.documentId].map((analysis, analysisIndex) => (
-                                  <TableRow 
+                                  <TableRow
                                     key={`${document.documentId}-analysis-${analysisIndex}`}
                                     className="bg-slate-50 hover:bg-slate-100 cursor-pointer border-l-4 border-l-blue-500"
                                     onClick={() => handleAnalysisRowClick(analysis)}
@@ -699,7 +631,7 @@ export default function ContractsPage() {
                                     <TableCell>
                                       <div className="pl-6 space-y-1">
                                         <div className="flex items-center space-x-2">
-                                          <Scale className="h-4 w-4 text-blue-600" />
+                                          <Scale className="h-4 w-4 text-blue-600"/>
                                           <span className="font-medium text-sm">Schweizer Obligationenrecht-Analyse</span>
                                         </div>
                                         <div className="text-xs text-muted-foreground">
@@ -708,8 +640,8 @@ export default function ContractsPage() {
                                       </div>
                                     </TableCell>
                                     <TableCell>
-                                      <Badge variant={analysis.overallCompliance?.isCompliant ? "default" : "destructive"} className="text-xs">
-                                        {analysis.overallCompliance?.isCompliant ? "Konform" : "Nicht konform"}
+                                      <Badge variant={analysis.overallCompliance?.isCompliant ? 'default' : 'destructive'} className="text-xs">
+                                        {analysis.overallCompliance?.isCompliant ? 'Konform' : 'Nicht konform'}
                                       </Badge>
                                     </TableCell>
                                     <TableCell>
@@ -719,7 +651,7 @@ export default function ContractsPage() {
                                     </TableCell>
                                     <TableCell>
                                       <div className="flex items-center space-x-2">
-                                        <CheckCircle className="h-4 w-4 text-green-500" />
+                                        <CheckCircle className="h-4 w-4 text-green-500"/>
                                         <span className="text-sm">Abgeschlossen</span>
                                       </div>
                                     </TableCell>
@@ -748,7 +680,7 @@ export default function ContractsPage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
-                <FileSearch className="h-5 w-5" />
+                <FileSearch className="h-5 w-5"/>
                 <span>Extrahierter Text</span>
               </CardTitle>
               <div className="text-sm text-muted-foreground">
@@ -773,9 +705,9 @@ export default function ContractsPage() {
                     onClick={() => {
                       navigator.clipboard.writeText(extractedText);
                       toast({
-                        variant: "success",
-                        title: "Text kopiert",
-                        description: "Der extrahierte Text wurde in die Zwischenablage kopiert."
+                        variant: 'success',
+                        title: 'Text kopiert',
+                        description: 'Der extrahierte Text wurde in die Zwischenablage kopiert.'
                       });
                     }}
                   >
@@ -855,7 +787,7 @@ export default function ContractsPage() {
             {/* File Selection Area */}
             <div className="space-y-2">
               <Label>Datei auswählen</Label>
-              <div 
+              <div
                 className={`flex flex-col items-center justify-center space-y-4 text-center border-2 border-dashed rounded-lg p-6 transition-colors ${
                   dragActive ? 'border-primary bg-primary/5' : 'border-muted-foreground/25'
                 } ${selectedFile ? 'border-green-500 bg-green-50' : ''}`}
@@ -865,7 +797,7 @@ export default function ContractsPage() {
                 onDrop={handleDrop}
               >
                 <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-                  <FileText className="h-6 w-6 text-muted-foreground" />
+                  <FileText className="h-6 w-6 text-muted-foreground"/>
                 </div>
                 {selectedFile ? (
                   <div className="space-y-1">
@@ -880,9 +812,9 @@ export default function ContractsPage() {
                     <p className="text-xs text-muted-foreground">PDF, DOC, DOCX (max. 50MB)</p>
                   </div>
                 )}
-                <Button 
-                  size="sm" 
-                  variant={selectedFile ? "outline" : "default"}
+                <Button
+                  size="sm"
+                  variant={selectedFile ? 'outline' : 'default'}
                   onClick={() => fileInputRef.current?.click()}
                 >
                   {selectedFile ? 'Andere Datei wählen' : 'Datei auswählen'}
@@ -895,7 +827,7 @@ export default function ContractsPage() {
               <Label htmlFor="category">Kategorie</Label>
               <Select value={selectedCategory} onValueChange={(value: 'contract' | 'nda' | 'terms_conditions' | 'other') => setSelectedCategory(value)}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Kategorie auswählen" />
+                  <SelectValue placeholder="Kategorie auswählen"/>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="contract">Vertrag</SelectItem>
@@ -926,7 +858,7 @@ export default function ContractsPage() {
                   onClick={addTextToReplace}
                   disabled={!currentTextInput.trim()}
                 >
-                  <Plus className="h-4 w-4" />
+                  <Plus className="h-4 w-4"/>
                 </Button>
               </div>
               {anonymizedKeywords.length > 0 && (
@@ -943,7 +875,7 @@ export default function ContractsPage() {
                           className="h-auto p-0 ml-1"
                           onClick={() => removeTextToReplace(index)}
                         >
-                          <X className="h-3 w-3" />
+                          <X className="h-3 w-3"/>
                         </Button>
                       </Badge>
                     ))}
@@ -981,7 +913,7 @@ export default function ContractsPage() {
       {sidenavOpen && selectedAnalysis && (
         <div className="fixed inset-0 z-50 overflow-hidden">
           {/* Backdrop */}
-          <div 
+          <div
             className="absolute inset-0 bg-opacity-50 transition-opacity"
             onClick={() => setSidenavOpen(false)}
           />
@@ -992,7 +924,7 @@ export default function ContractsPage() {
               {/* Header */}
               <div className="flex items-center justify-between p-6 border-b bg-slate-50">
                 <div className="flex items-center space-x-2">
-                  <Scale className="h-5 w-5 text-blue-600" />
+                  <Scale className="h-5 w-5 text-blue-600"/>
                   <h2 className="text-lg font-semibold">Detaillierte Analyse-Ergebnisse</h2>
                 </div>
                 <Button
@@ -1001,7 +933,7 @@ export default function ContractsPage() {
                   onClick={() => setSidenavOpen(false)}
                   className="h-8 w-8 p-0"
                 >
-                  <X className="h-4 w-4" />
+                  <X className="h-4 w-4"/>
                 </Button>
               </div>
 
@@ -1070,8 +1002,8 @@ export default function ContractsPage() {
                   <div className="p-4 border rounded-lg space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="font-medium">Status:</span>
-                      <Badge variant={selectedAnalysis.overallCompliance?.isCompliant ? "default" : "destructive"}>
-                        {selectedAnalysis.overallCompliance?.isCompliant ? "Konform" : "Nicht konform"}
+                      <Badge variant={selectedAnalysis.overallCompliance?.isCompliant ? 'default' : 'destructive'}>
+                        {selectedAnalysis.overallCompliance?.isCompliant ? 'Konform' : 'Nicht konform'}
                       </Badge>
                     </div>
                     <div className="flex items-center justify-between">
@@ -1116,8 +1048,8 @@ export default function ContractsPage() {
                           <div className="flex items-center justify-between">
                             <h4 className="font-medium">Abschnitt {index + 1}</h4>
                             <div className="flex items-center space-x-2">
-                              <Badge variant={section.isCompliant ? "default" : "destructive"} className="text-xs">
-                                {section.isCompliant ? "Konform" : "Nicht konform"}
+                              <Badge variant={section.isCompliant ? 'default' : 'destructive'} className="text-xs">
+                                {section.isCompliant ? 'Konform' : 'Nicht konform'}
                               </Badge>
                               <span className="text-xs text-muted-foreground">
                                 Vertrauen: {Math.round((section.confidence || 0) * 100)}%

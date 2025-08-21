@@ -203,6 +203,31 @@ export class StorageService {
     }
   }
 
+  async getDocumentDownloadUrl(
+    userId: string,
+    documentId: string,
+    fileName: string
+  ): Promise<string> {
+    try {
+      const filePath = this.getDocumentPath(userId, documentId, fileName);
+      const file = this.bucket.file(filePath);
+
+      // Check if file exists
+      const [exists] = await file.exists();
+      if (!exists) {
+        throw new Error('Document not found in storage');
+      }
+
+      const downloadUrl = await getDownloadURL(file);
+      this.logger.info('Generated document download URL', { documentId, downloadUrl });
+
+      return downloadUrl;
+    } catch (error) {
+      this.logger.error('Failed to generate document download URL', error as Error, { documentId });
+      throw new Error('Failed to generate document download URL');
+    }
+  }
+
   /**
    * Get document content as buffer
    */
