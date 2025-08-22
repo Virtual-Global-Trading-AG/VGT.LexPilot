@@ -113,7 +113,7 @@ export class SwissObligationLawService {
    * @param {string} userId - The ID of the user initiating the analysis process.
    * @param {string} vectorStoreId - The identifier for the vector store to be used for querying relevant legal information.
    * @param {string} documentId - The unique identifier of the document being analyzed.
-   * @param {string} documentFileDownloadUrl - A downloadable URL to the contract document file for analysis.
+   * @param {Buffer} documentFileBuffer - A buffer containing the contract document file content for analysis.
    * @param {function(progress: number, message: string): void} [progressCallback] - An optional callback function to report the progress of the analysis.
    * @return {Promise<SwissObligationAnalysisResult>} A promise that resolves with the compliance analysis results,
    * including structured insights on document context, compliance scores, and violations.
@@ -123,26 +123,35 @@ export class SwissObligationLawService {
     userId: string,
     vectorStoreId: string,
     documentId: string,
-    documentFileDownloadUrl: string,
+    fileName: string,
+    documentFileBuffer: Buffer,
     progressCallback?: (progress: number, message: string) => void
   ): Promise<SwissObligationAnalysisResult> {
     const analysisId = uuidv4();
     const createDate = new Date();
+
+    // Initialize OpenAI client and uploadedFile variable in broader scope
+    const openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY
+    });
+    let uploadedFile: any = null;
 
     try {
       this.logger.info('Starting vector database query', {
         input,
         userId,
         vectorStoreId,
-        documentFileDownloadUrl
-      });
-
-      // Initialize OpenAI client
-      const openai = new OpenAI({
-        apiKey: process.env.OPENAI_API_KEY
+        fileName,
+        documentFileBufferSize: documentFileBuffer.length
       });
 
       progressCallback?.(5, 'Search against vector database started');
+
+      const base64String = documentFileBuffer.toString('base64');
+
+      this.logger.info('file as base64', {
+        size: base64String.length
+      });
 
       const response = await openai.responses.create({
         model: "gpt-5-mini-2025-08-07",
@@ -203,7 +212,8 @@ Teile den Vertrag in logische Abschnitte auf und analysiere jeden Abschnitt einz
               },
               {
                 type: "input_file",
-                file_url: documentFileDownloadUrl,
+                filename: fileName,
+                file_data: `data:application/pdf;base64,${base64String}`,
               },
             ],
           },
@@ -368,12 +378,32 @@ Teile den Vertrag in logische Abschnitte auf und analysiere jeden Abschnitt einz
         overallCompliant: result.overallCompliance.isCompliant
       });
 
+      // Clean up uploaded file from OpenAI
+      if (uploadedFile) {
+        try {
+          await openai.files.delete(uploadedFile.id);
+          this.logger.debug('Cleaned up uploaded file from OpenAI', { fileId: uploadedFile.id });
+        } catch (cleanupError) {
+          this.logger.warn('Failed to cleanup uploaded file from OpenAI', cleanupError as Error);
+        }
+      }
+
       return result;
 
     } catch (error) {
+      // Clean up uploaded file from OpenAI in case of error
+      if (uploadedFile) {
+        try {
+          await openai.files.delete(uploadedFile.id);
+          this.logger.debug('Cleaned up uploaded file from OpenAI after error', { fileId: uploadedFile.id });
+        } catch (cleanupError) {
+          this.logger.warn('Failed to cleanup uploaded file from OpenAI after error', cleanupError as Error);
+        }
+      }
+
       this.logger.error('Error in vector analysis against Swiss obligation law', error as Error, {
         analysisId,
-        documentFileDownloadUrl,
+        documentFileBufferSize: documentFileBuffer.length,
         userId
       });
       throw error;

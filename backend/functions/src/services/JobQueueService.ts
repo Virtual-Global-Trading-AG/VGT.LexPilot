@@ -271,10 +271,10 @@ export class JobQueueService {
         throw new Error('Document not found');
       }
 
-      const documentFileDownloadUrl = await storageService.getDocumentDownloadUrl(
-        userId,
+      const documentFileBuffer = await storageService.getDocumentContent(
         documentId,
-        document.fileName
+        document.fileName,
+        userId
       );
 
       // Progress callback to update job status
@@ -288,7 +288,8 @@ export class JobQueueService {
         // todo: use vector store ID from config or environment
         'vs_68a726b561888191ab1eeeb15e5c34e8',
         documentId,
-        documentFileDownloadUrl,
+        document.fileName,
+        documentFileBuffer,
         progressCallback
       )
 

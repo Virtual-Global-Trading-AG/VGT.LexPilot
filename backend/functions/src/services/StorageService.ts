@@ -48,6 +48,7 @@ export class StorageService {
     });
 
     this.bucket = admin.storage().bucket();
+
   }
 
   /**
