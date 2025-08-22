@@ -3,6 +3,7 @@ import * as admin from 'firebase-admin';
 import { getDownloadURL } from 'firebase-admin/storage';
 import { Logger } from '../utils/logger';
 import { config } from '../config/environment';
+import { AnonymizedKeyword } from '../models';
 
 export interface DocumentMetadata {
   fileName: string;
@@ -12,7 +13,7 @@ export interface DocumentMetadata {
   processedAt?: string;
   status: 'uploading' | 'uploaded' | 'processing' | 'processed' | 'error';
   category?: 'contract' | 'nda' | 'terms_conditions' | 'other';
-  anonymizedKeywords: string[];
+  anonymizedKeywords: AnonymizedKeyword[];
   description?: string;
   tags?: string[];
   analyses?: string[];

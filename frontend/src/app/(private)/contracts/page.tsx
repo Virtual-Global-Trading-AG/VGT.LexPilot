@@ -112,7 +112,7 @@ export default function ContractsPage() {
   const [extractedText, setExtractedText] = useState<string>('');
   const [extractingText, setExtractingText] = useState<boolean>(false);
   const [extractedDocumentInfo, setExtractedDocumentInfo] = useState<{ fileName: string, documentId: string } | null>(null);
-  const [anonymizedKeywords, setAnonymizedKeywords] = useState<string[]>([]);
+  const [anonymizedKeywords, setAnonymizedKeywords] = useState<Array<{keyword: string, replaceWith: string}>>([]);
   const [currentTextInput, setCurrentTextInput] = useState('');
   const [swissAnalysisLoading, setSwissAnalysisLoading] = useState<string | null>(null);
   const [expandedDocuments, setExpandedDocuments] = useState<Set<string>>(new Set());
@@ -123,14 +123,21 @@ export default function ContractsPage() {
 
   // Helper functions for managing texts to replace
   const addTextToReplace = () => {
-    if (currentTextInput.trim() && !anonymizedKeywords.includes(currentTextInput.trim())) {
-      setAnonymizedKeywords([...anonymizedKeywords, currentTextInput.trim()]);
+    if (currentTextInput.trim() && !anonymizedKeywords.some(item => item.keyword === currentTextInput.trim())) {
+      const newReplaceWith = `ANONYM_${anonymizedKeywords.length + 1}`;
+      setAnonymizedKeywords([...anonymizedKeywords, { keyword: currentTextInput.trim(), replaceWith: newReplaceWith }]);
       setCurrentTextInput('');
     }
   };
 
   const removeTextToReplace = (index: number) => {
-    setAnonymizedKeywords(anonymizedKeywords.filter((_, i) => i !== index));
+    const updatedKeywords = anonymizedKeywords.filter((_, i) => i !== index);
+    // Re-number the replaceWith values to maintain sequential numbering
+    const renumberedKeywords = updatedKeywords.map((item, idx) => ({
+      ...item,
+      replaceWith: `ANONYM_${idx + 1}`
+    }));
+    setAnonymizedKeywords(renumberedKeywords);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -865,9 +872,9 @@ export default function ContractsPage() {
                 <div className="space-y-1">
                   <p className="text-xs font-medium">Zu ersetzende Texte:</p>
                   <div className="flex flex-wrap gap-1">
-                    {anonymizedKeywords.map((text, index) => (
+                    {anonymizedKeywords.map((item, index) => (
                       <Badge key={index} variant="secondary" className="text-xs">
-                        {text}
+                        {item.keyword} → {item.replaceWith}
                         <Button
                           type="button"
                           variant="ghost"

@@ -252,7 +252,7 @@ export function useDocumentUpload() {
       category?: 'contract' | 'nda' | 'other';
       description?: string;
       tags?: string[];
-      anonymizedKeywords?: string[];
+      anonymizedKeywords?: Array<{keyword: string, replaceWith: string}>;
     }
   ): Promise<{ documentId: string; fileName: string; size: number } | null> => {
     if (!isAuthenticated) {

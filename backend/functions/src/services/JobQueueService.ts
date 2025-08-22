@@ -254,9 +254,11 @@ export class JobQueueService {
     const { SwissObligationLawService } = await import('./SwissObligationLawService');
     const { AnalysisService } = await import('./AnalysisService');
     const { StorageService } = await import('./StorageService');
+    const { TextExtractionService } = await import('./TextExtractionService');
 
     const analysisService = new AnalysisService();
     const storageService = new StorageService();
+    const textExtractionService = new TextExtractionService();
     const swissObligationLawService = new SwissObligationLawService(
       analysisService,
       this.firestoreService
@@ -277,6 +279,25 @@ export class JobQueueService {
         userId
       );
 
+      // Extract text from original file
+      const extractedText = await textExtractionService.extractText(
+        documentFileBuffer,
+        document.contentType,
+        document.fileName
+      );
+
+      // Apply anonymization if anonymized keywords exist
+      let processedText = extractedText;
+      if (document.anonymizedKeywords && document.anonymizedKeywords.length > 0) {
+        processedText = textExtractionService.replaceSpecificTexts(
+          extractedText,
+          document.anonymizedKeywords
+        );
+      }
+
+      // Convert anonymized text back to PDF buffer for analysis
+      const processedBuffer = await textExtractionService.convertTextToPDF(processedText, document.fileName);
+
       // Progress callback to update job status
       const progressCallback = async (progress: number, message: string) => {
         await this.updateJobProgress(job.id, progress, message);
@@ -289,8 +310,9 @@ export class JobQueueService {
         'vs_68a726b561888191ab1eeeb15e5c34e8',
         documentId,
         document.fileName,
-        documentFileBuffer,
-        progressCallback
+        processedBuffer,
+        progressCallback,
+        document.anonymizedKeywords
       )
 
       // Complete job with result (same structure as regular analysis)

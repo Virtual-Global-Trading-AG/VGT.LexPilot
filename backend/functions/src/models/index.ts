@@ -156,6 +156,11 @@ export interface LegalReference {
   jurisdiction: string;
 }
 
+export interface AnonymizedKeyword {
+  keyword: string;
+  replaceWith: string;
+}
+
 export interface DocumentMetadata {
   fileName: string;
   contentType: string;
@@ -164,7 +169,7 @@ export interface DocumentMetadata {
   processedAt?: string;
   status: 'uploading' | 'uploaded' | 'processing' | 'processed' | 'error';
   category?: 'contract' | 'nda' | 'terms_conditions' | 'other';
-  anonymizedKeywords?: string[];
+  anonymizedKeywords?: AnonymizedKeyword[];
   description?: string;
   tags?: string[];
   analyses?: string[];

@@ -37,7 +37,12 @@ const uploadDocumentDirectSchema = Joi.object({
     category: Joi.string().valid('contract', 'nda', 'terms_conditions', 'other'),
     description: Joi.string().max(1000),
     tags: Joi.array().items(Joi.string().max(50)).max(10),
-    anonymizedKeywords: Joi.array().items(Joi.string().min(1).max(500)).max(50)
+    anonymizedKeywords: Joi.array().items(
+      Joi.object({
+        keyword: Joi.string().min(1).max(500).required(),
+        replaceWith: Joi.string().min(1).max(100).required()
+      })
+    ).max(50)
   }).optional()
 });
 

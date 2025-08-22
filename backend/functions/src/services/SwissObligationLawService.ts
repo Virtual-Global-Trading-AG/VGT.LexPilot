@@ -7,7 +7,7 @@ import { TextExtractionService } from './TextExtractionService';
 import { FirestoreService } from './FirestoreService';
 import { VectorStoreService } from './VectorStoreService';
 import { LLMFactory } from '../factories/LLMFactory';
-import { Analysis, AnalysisResult, AnalysisType, AnalysisStatus, Finding, FindingSeverity, FindingType, Recommendation, RecommendationType, Priority, TextLocation } from '../models';
+import { Analysis, AnalysisResult, AnalysisType, AnalysisStatus, Finding, FindingSeverity, FindingType, Recommendation, RecommendationType, Priority, TextLocation, AnonymizedKeyword } from '../models';
 import { v4 as uuidv4 } from 'uuid';
 import { encoding_for_model } from 'tiktoken';
 import OpenAI from 'openai';
@@ -17,8 +17,8 @@ export interface ContractSection {
   id: string;
   content: string;
   title?: string;
-    startIndex: number;
-    endIndex: number;
+  startIndex: number;
+  endIndex: number;
 }
 
 export interface GeneratedQuery {
@@ -125,7 +125,8 @@ export class SwissObligationLawService {
     documentId: string,
     fileName: string,
     documentFileBuffer: Buffer,
-    progressCallback?: (progress: number, message: string) => void
+    progressCallback?: (progress: number, message: string) => void,
+    anonymizedKeywords?: AnonymizedKeyword[]
   ): Promise<SwissObligationAnalysisResult> {
     const analysisId = uuidv4();
     const createDate = new Date();
@@ -161,54 +162,48 @@ export class SwissObligationLawService {
             content: [
               {
                 type: "input_text",
-                text: `Analysiere diesen Vertrag gegen das Schweizer Obligationenrecht (OR), welches du als Vektordatenbank hast. 
+                text: `Du bist Experte für Schweizer Obligationenrecht.  
+Analysiere den Vertrag nach OR (Art. 1–551), wobei du zuerst den Vertragstext und dann deine Vektordatenbank (OR) berücksichtigst.  
+Konvertierungsfehler (z. B. falsche Zeichen, Umbrüche) korrigierst du stillschweigend nur zur Lesbarkeit, sie dürfen nicht in die Analyse einfließen.  
+Ignoriere Platzhalter (ANONYM_x).  
 
-Gib AUSSCHLIESSLICH ein gültiges JSON-Objekt mit folgender exakter Struktur zurück:
+Analysiere:  
+- Dokumenttyp, Geschäftsbereich, Schlüsselbegriffe  
+- Relevante Klauseln und Vertragstyp  
+- Compliance mit OR (nur relevante Artikel prüfen)  
+- Ungültige/missbräuchliche Klauseln  
+- Transparenz und Verständlichkeit  
+- Strukturierung in logische Abschnitte mit Einzelbewertung  
+
+Antwort **ausschließlich** als gültiges JSON-Objekt:  
 
 {
   "documentContext": {
-    "documentType": "Software-AGB",
-    "businessDomain": "Software/IT",
-    "keyTerms": ["Haftung", "Gewährleistung", "Datenschutz"],
-    "contextDescription": "Allgemeine Geschäftsbedingungen für Software-Services"
+    "documentType": string,
+    "businessDomain": string,
+    "keyTerms": string[],
+    "contextDescription": string
   },
   "sections": [
     {
-      "sectionId": "section-1",
-      "sectionContent": "Vollständiger Text des Abschnitts...",
+      "sectionId": string,
+      "sectionContent": string,
       "complianceAnalysis": {
-        "isCompliant": true,
-        "confidence": 0.85,
-        "reasoning": "Detaillierte Begründung der Bewertung...",
-        "violations": []
+        "isCompliant": boolean,
+        "confidence": number,
+        "reasoning": string,
+        "violations": string[],
+        "recommendations": string[]
       }
     }
   ],
   "overallCompliance": {
-    "isCompliant": true,
-    "complianceScore": 0.92,
-    "summary": "Zusammenfassung der gesamten Analyse..."
+    "isCompliant": boolean,
+    "complianceScore": number,
+    "summary": string,
+    "recommendations": string[]
   }
-}
-
-WICHTIGE REGELN:
-1. Verwende AUSSCHLIESSLICH gültiges JSON
-2. isCompliant muss boolean sein (true/false, nicht "true"/"false")
-3. confidence und complianceScore müssen numbers zwischen 0 und 1 sein
-4. violations muss ein array von strings sein (kann leer sein: [])
-5. Keine zusätzlichen Kommentare oder Erklärungen außerhalb des JSON
-6. Alle strings müssen in Anführungszeichen stehen
-7. Keine trailing commas
-
-Analysiere den Vertrag auf Konformität mit dem Schweizer Obligationenrecht:
-- Allgemeine Geschäftsbedingungen (AGB) nach Art. 1-40 OR
-- Vertragsrecht nach Art. 1-183 OR
-- Besondere Vertragstypen nach Art. 184-551 OR
-- Ungültige oder missbräuchliche Klauseln
-- Transparenz und Verständlichkeit
-- Rechte und Pflichten der Parteien
-
-Teile den Vertrag in logische Abschnitte auf und analysiere jeden Abschnitt einzeln.`,
+}`,
               },
               {
                 type: "input_file",
@@ -225,9 +220,12 @@ Teile den Vertrag in logische Abschnitte auf und analysiere jeden Abschnitt einz
           },
         ],
         text: {
-          format: { "type": "json_object" }
+          format: {
+            type: 'json_object'
+          }
         }
       });
+
       progressCallback?.(70, 'Processing OpenAI response...');
 
       const responseContent = response.output_text;
@@ -317,6 +315,67 @@ Teile den Vertrag in logische Abschnitte auf und analysiere jeden Abschnitt einz
           sectionsCount: analysisData.sections?.length || 0,
           overallCompliant: analysisData.overallCompliance?.isCompliant
         });
+
+        // Apply de-anonymization if anonymized keywords were provided
+        if (anonymizedKeywords && anonymizedKeywords.length > 0) {
+          this.logger.info('Starting de-anonymization of analysis results', {
+            analysisId,
+            keywordsCount: anonymizedKeywords.length
+          });
+
+          const textExtractionService = new TextExtractionService();
+
+          // De-anonymize document context
+          if (analysisData.documentContext) {
+            if (analysisData.documentContext.contextDescription) {
+              analysisData.documentContext.contextDescription = textExtractionService.reverseAnonymization(
+                analysisData.documentContext.contextDescription,
+                anonymizedKeywords
+              );
+            }
+            if (Array.isArray(analysisData.documentContext.keyTerms)) {
+              analysisData.documentContext.keyTerms = analysisData.documentContext.keyTerms.map((term: string) =>
+                textExtractionService.reverseAnonymization(term, anonymizedKeywords)
+              );
+            }
+          }
+
+          // De-anonymize sections
+          if (Array.isArray(analysisData.sections)) {
+            analysisData.sections.forEach((section: any, index: number) => {
+              if (section.sectionContent) {
+                section.sectionContent = textExtractionService.reverseAnonymization(
+                  section.sectionContent,
+                  anonymizedKeywords
+                );
+              }
+              if (section.complianceAnalysis && section.complianceAnalysis.reasoning) {
+                section.complianceAnalysis.reasoning = textExtractionService.reverseAnonymization(
+                  section.complianceAnalysis.reasoning,
+                  anonymizedKeywords
+                );
+              }
+              if (section.complianceAnalysis && Array.isArray(section.complianceAnalysis.violations)) {
+                section.complianceAnalysis.violations = section.complianceAnalysis.violations.map((violation: string) =>
+                  textExtractionService.reverseAnonymization(violation, anonymizedKeywords)
+                );
+              }
+            });
+          }
+
+          // De-anonymize overall compliance summary
+          if (analysisData.overallCompliance && analysisData.overallCompliance.summary) {
+            analysisData.overallCompliance.summary = textExtractionService.reverseAnonymization(
+              analysisData.overallCompliance.summary,
+              anonymizedKeywords
+            );
+          }
+
+          this.logger.info('De-anonymization completed', {
+            analysisId,
+            keywordsCount: anonymizedKeywords.length
+          });
+        }
 
       } catch (parseError) {
         this.logger.error('Failed to parse OpenAI response as JSON', parseError as Error, {
@@ -586,10 +645,10 @@ Teile den Vertrag in logische Abschnitte auf und analysiere jeden Abschnitt einz
       const analysesRef = db.collection('swissObligationAnalyses');
 
       const querySnapshot = await analysesRef
-        .where('documentId', '==', documentId)
-        .where('userId', '==', userId)
-        .orderBy('createdAt', 'desc')
-        .get();
+      .where('documentId', '==', documentId)
+      .where('userId', '==', userId)
+      .orderBy('createdAt', 'desc')
+      .get();
 
       const analyses: SwissObligationAnalysisResult[] = [];
 

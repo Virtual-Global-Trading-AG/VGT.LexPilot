@@ -1,5 +1,7 @@
 import pdfParse from 'pdf-parse';
+import PDFDocument from 'pdfkit';
 import { Logger } from '../utils/logger';
+import { AnonymizedKeyword } from '../models';
 
 export class TextExtractionService {
   private logger: Logger;
@@ -128,9 +130,9 @@ export class TextExtractionService {
   }
 
   /**
-   * Replace specific texts with random dummy data
+   * Replace specific texts with predefined anonymized replacements
    */
-  replaceSpecificTexts(text: string, anonymizedKeywords: string[]): string {
+  replaceSpecificTexts(text: string, anonymizedKeywords: AnonymizedKeyword[]): string {
     try {
       this.logger.info('Starting specific text replacement', {
         originalLength: text.length,
@@ -139,47 +141,18 @@ export class TextExtractionService {
 
       let sanitizedText = text;
 
-      // Generate random replacement texts
-      const generateRandomText = (originalText: string): string => {
-        const randomWords = [
-          'Lorem', 'Ipsum', 'Dolor', 'Sit', 'Amet', 'Consectetur', 'Adipiscing', 'Elit',
-          'Sed', 'Do', 'Eiusmod', 'Tempor', 'Incididunt', 'Ut', 'Labore', 'Et', 'Dolore',
-          'Magna', 'Aliqua', 'Enim', 'Ad', 'Minim', 'Veniam', 'Quis', 'Nostrud',
-          'Exercitation', 'Ullamco', 'Laboris', 'Nisi', 'Aliquip', 'Ex', 'Ea', 'Commodo',
-          'Consequat', 'Duis', 'Aute', 'Irure', 'In', 'Reprehenderit', 'Voluptate',
-          'Velit', 'Esse', 'Cillum', 'Fugiat', 'Nulla', 'Pariatur', 'Excepteur', 'Sint',
-          'Occaecat', 'Cupidatat', 'Non', 'Proident', 'Sunt', 'Culpa', 'Qui', 'Officia',
-          'Deserunt', 'Mollit', 'Anim', 'Id', 'Est', 'Laborum'
-        ];
-
-        // If original text is short (likely a name or specific term), use a simple replacement
-        if (originalText.length <= 20) {
-          return randomWords[Math.floor(Math.random() * randomWords.length)] ?? '';
-        }
-
-        // For longer texts, generate a replacement of similar length
-        const words = originalText.split(/\s+/);
-        const replacementWords = [];
-
-        for (let i = 0; i < words.length; i++) {
-          replacementWords.push(randomWords[Math.floor(Math.random() * randomWords.length)]);
-        }
-
-        return replacementWords.join(' ');
-      };
-
-      // Replace each specified text with random dummy data
-      anonymizedKeywords.forEach((textToReplace, index) => {
-        if (textToReplace && textToReplace.trim()) {
-          const escapedText = textToReplace.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      // Replace each specified text with its predefined replacement
+      anonymizedKeywords.forEach((anonymizedKeyword, index) => {
+        if (anonymizedKeyword.keyword && anonymizedKeyword.keyword.trim() && 
+            anonymizedKeyword.replaceWith && anonymizedKeyword.replaceWith.trim()) {
+          const escapedText = anonymizedKeyword.keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
           const regex = new RegExp(escapedText, 'gi');
-          const replacement = generateRandomText(textToReplace);
 
-          sanitizedText = sanitizedText.replace(regex, replacement);
+          sanitizedText = sanitizedText.replace(regex, anonymizedKeyword.replaceWith);
 
           this.logger.info(`Replaced text ${index + 1}`, {
-            original: textToReplace,
-            replacement: replacement
+            original: anonymizedKeyword.keyword,
+            replacement: anonymizedKeyword.replaceWith
           });
         }
       });
@@ -194,6 +167,125 @@ export class TextExtractionService {
     } catch (error) {
       this.logger.error('Specific text replacement failed', error as Error);
       return text; // Fallback to original text in case of error
+    }
+  }
+
+  /**
+   * Reverse the anonymization process by replacing anonymized placeholders back with original keywords
+   */
+  reverseAnonymization(text: string, anonymizedKeywords: AnonymizedKeyword[]): string {
+    try {
+      this.logger.info('Starting reverse anonymization', {
+        originalLength: text.length,
+        keywordsCount: anonymizedKeywords.length
+      });
+
+      let deanonymizedText = text;
+
+      // Replace each anonymized placeholder back with its original keyword
+      anonymizedKeywords.forEach((anonymizedKeyword, index) => {
+        if (anonymizedKeyword.replaceWith && anonymizedKeyword.replaceWith.trim() && 
+            anonymizedKeyword.keyword && anonymizedKeyword.keyword.trim()) {
+          const escapedReplacement = anonymizedKeyword.replaceWith.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const regex = new RegExp(escapedReplacement, 'gi');
+
+          deanonymizedText = deanonymizedText.replace(regex, anonymizedKeyword.keyword);
+
+          this.logger.info(`Reversed anonymization ${index + 1}`, {
+            anonymized: anonymizedKeyword.replaceWith,
+            original: anonymizedKeyword.keyword
+          });
+        }
+      });
+
+      this.logger.info('Reverse anonymization completed', {
+        originalLength: text.length,
+        deanonymizedLength: deanonymizedText.length,
+        reversedKeywordsCount: anonymizedKeywords.length
+      });
+
+      return deanonymizedText;
+    } catch (error) {
+      this.logger.error('Reverse anonymization failed', error as Error);
+      return text; // Fallback to original text in case of error
+    }
+  }
+
+  /**
+   * Convert text back to PDF buffer
+   */
+  async convertTextToPDF(text: string, fileName: string = 'document.pdf'): Promise<Buffer> {
+    try {
+      this.logger.info('Starting text to PDF conversion', {
+        textLength: text.length,
+        fileName
+      });
+
+      return new Promise<Buffer>((resolve, reject) => {
+        const doc = new PDFDocument({
+          size: 'A4',
+          margins: {
+            top: 50,
+            bottom: 50,
+            left: 50,
+            right: 50
+          }
+        });
+
+        const buffers: Buffer[] = [];
+
+        // Collect PDF data
+        doc.on('data', (chunk: Buffer) => {
+          buffers.push(chunk);
+        });
+
+        doc.on('end', () => {
+          const pdfBuffer = Buffer.concat(buffers);
+          this.logger.info('Text to PDF conversion completed', {
+            textLength: text.length,
+            pdfBufferSize: pdfBuffer.length,
+            fileName
+          });
+          resolve(pdfBuffer);
+        });
+
+        doc.on('error', (error: Error) => {
+          this.logger.error('PDF generation failed', error);
+          reject(error);
+        });
+
+        // Add text content to PDF
+        doc.fontSize(12);
+        doc.font('Helvetica');
+
+        // Split text into paragraphs and add them to the PDF
+        const paragraphs = text.split('\n\n');
+
+        paragraphs.forEach((paragraph, index) => {
+          if (paragraph.trim()) {
+            // Add some spacing between paragraphs
+            if (index > 0) {
+              doc.moveDown(0.5);
+            }
+
+            // Handle long paragraphs by wrapping text
+            doc.text(paragraph.trim(), {
+              align: 'left',
+              width: doc.page.width - 100, // Account for margins
+              continued: false
+            });
+          }
+        });
+
+        // Finalize the PDF
+        doc.end();
+      });
+    } catch (error) {
+      this.logger.error('Text to PDF conversion failed', error as Error, {
+        textLength: text.length,
+        fileName
+      });
+      throw new Error(`Failed to convert text to PDF: ${(error as Error).message}`);
     }
   }
 }

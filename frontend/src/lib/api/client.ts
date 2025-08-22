@@ -233,7 +233,7 @@ class ApiClient {
       category?: 'contract' | 'legal_document' | 'policy' | 'other';
       description?: string;
       tags?: string[];
-      anonymizedKeywords?: string[];
+      anonymizedKeywords?: Array<{keyword: string, replaceWith: string}>;
     }
   ): Promise<ApiResponse<T>> {
     const payload = {
