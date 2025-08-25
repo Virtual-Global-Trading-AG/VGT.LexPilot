@@ -117,7 +117,6 @@ function ContractsPageContent() {
   const [anonymizedKeywords, setAnonymizedKeywords] = useState<Array<{keyword: string, replaceWith: string}>>([]);
   const [currentTextInput, setCurrentTextInput] = useState('');
   const [swissAnalysisLoading, setSwissAnalysisLoading] = useState<string | null>(null);
-  const [expandedDocuments, setExpandedDocuments] = useState<Set<string>>(new Set());
   const [documentAnalyses, setDocumentAnalyses] = useState<Record<string, SwissObligationAnalysisResult[]>>({});
   const [selectedAnalysis, setSelectedAnalysis] = useState<SwissObligationAnalysisResult | null>(null);
   const [sidenavOpen, setSidenavOpen] = useState(false);
@@ -150,20 +149,7 @@ function ContractsPageContent() {
     }
   };
 
-  // Helper functions for managing document expansion and analyses
-  const toggleDocumentExpansion = (documentId: string) => {
-    const newExpanded = new Set(expandedDocuments);
-
-    if (expandedDocuments.has(documentId)) {
-      newExpanded.delete(documentId);
-    } else {
-      newExpanded.add(documentId);
-    }
-
-    setExpandedDocuments(newExpanded);
-  };
-
-
+  // Helper function for handling analysis details
   const handleAnalysisRowClick = (analysis: SwissObligationAnalysisResult) => {
     setSelectedAnalysis(analysis);
     setSidenavOpen(true);
@@ -272,7 +258,7 @@ function ContractsPageContent() {
         toast({
           variant: 'success',
           title: 'Upload erfolgreich',
-          description: 'Vertrag wurde erfolgreich hochgeladen!'
+          description: 'Vertrag wurde erfolgreich hochgeladen! Eine Obligationenanalyse wird automatisch gestartet.'
         });
         // Reset text replacement list
         setAnonymizedKeywords([]);
@@ -446,7 +432,7 @@ function ContractsPageContent() {
         });
         setSwissAnalysisLoading(null);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Swiss obligation analysis error:', err);
       toast({
         variant: 'destructive',
@@ -539,7 +525,6 @@ function ContractsPageContent() {
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead className="w-8"></TableHead>
                           <TableHead>Titel</TableHead>
                           <TableHead>Risiko</TableHead>
                           <TableHead>Hochgeladen</TableHead>
@@ -550,32 +535,31 @@ function ContractsPageContent() {
                       <TableBody>
                         {categoryDocuments.map((document) => (
                           <React.Fragment key={document.documentId}>
-                            <TableRow className="border-b">
-                              <TableCell>
-                                {documentAnalyses[document.documentId] && (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-6 w-6 p-0"
-                                    onClick={() => toggleDocumentExpansion(document.documentId)}
-                                  >
-                                    {expandedDocuments.has(document.documentId) ? (
-                                      <ChevronDown className="h-4 w-4"/>
-                                    ) : (
-                                      <ChevronRight className="h-4 w-4"/>
-                                    )}
-                                  </Button>
-                                )}
-                              </TableCell>
+                            <TableRow 
+                              className={`border-b ${documentAnalyses[document.documentId] ? 'cursor-pointer hover:bg-gray-50' : ''}`}
+                              onClick={() => documentAnalyses[document.documentId] && handleAnalysisRowClick(documentAnalyses[document.documentId][0])}
+                            >
                               <TableCell>
                                 <div className="space-y-1">
                                   <div className="font-medium">{document.documentMetadata.fileName || document.documentMetadata.originalName || 'Unbekannt'}</div>
                                   <div className="text-sm text-muted-foreground">
                                     {document.documentMetadata.uploadedAt ? new Date(document.documentMetadata.uploadedAt).toLocaleDateString('de-DE') : 'Unbekannt'} • {document.documentMetadata.size ? `${(document.documentMetadata.size / 1024 / 1024).toFixed(1)} MB` : 'Unbekannt'}
+                                    {documentAnalyses[document.documentId] && (
+                                      <span className="ml-2">
+                                        • <span className="text-blue-600">Obligationenanalyse: {Math.round((documentAnalyses[document.documentId][0].overallCompliance?.complianceScore || 0) * 100)}% konform</span>
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
                               </TableCell>
                               <TableCell>
+                                {documentAnalyses[document.documentId] ? (
+                                  <Badge variant={documentAnalyses[document.documentId][0].overallCompliance?.isCompliant ? 'default' : 'destructive'} className="text-xs">
+                                    {documentAnalyses[document.documentId][0].overallCompliance?.isCompliant ? 'Konform' : 'Nicht konform'}
+                                  </Badge>
+                                ) : (
+                                  <span className="text-sm text-muted-foreground">-</span>
+                                )}
                               </TableCell>
                               <TableCell>
                                 <div className="text-sm">
@@ -590,7 +574,15 @@ function ContractsPageContent() {
                               </TableCell>
                               <TableCell>
                                 <div className="flex items-center space-x-2">
-                                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                  <Button 
+                                    variant="ghost" 
+                                    size="sm" 
+                                    className="h-8 w-8 p-0"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      // TODO: Implement download functionality
+                                    }}
+                                  >
                                     <Download className="h-4 w-4"/>
                                     <span className="sr-only">Herunterladen</span>
                                   </Button>
@@ -600,7 +592,10 @@ function ContractsPageContent() {
                                       variant="ghost"
                                       size="sm"
                                       className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                                      onClick={() => handleExtractText(document.documentId, document.documentMetadata.fileName || 'Unbekannt')}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleExtractText(document.documentId, document.documentMetadata.fileName || 'Unbekannt');
+                                      }}
                                       disabled={extractingText}
                                     >
                                       <FileSearch className="h-4 w-4"/>
@@ -611,18 +606,33 @@ function ContractsPageContent() {
                                     variant="ghost"
                                     size="sm"
                                     className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50"
-                                    onClick={() => handleSwissObligationAnalysis(document.documentId, document.documentMetadata.fileName || 'Unbekannt')}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleSwissObligationAnalysis(document.documentId, document.documentMetadata.fileName || 'Unbekannt');
+                                    }}
                                     disabled={swissAnalysisLoading === document.documentId}
-                                    title="Schweizer Obligationenrecht-Analyse"
+                                    title={
+                                      documentAnalyses[document.documentId]?.length > 0
+                                        ? 'Obligationenanalyse erneut ausführen (überschreibt bestehende Analyse)'
+                                        : 'Schweizer Obligationenrecht-Analyse starten'
+                                    }
                                   >
                                     <Scale className="h-4 w-4"/>
-                                    <span className="sr-only">Schweizer Obligationenrecht-Analyse</span>
+                                    <span className="sr-only">
+                                      {documentAnalyses[document.documentId]?.length > 0
+                                        ? 'Analyse erneut ausführen'
+                                        : 'Schweizer Obligationenrecht-Analyse'
+                                      }
+                                    </span>
                                   </Button>
                                   <Button
                                     variant="ghost"
                                     size="sm"
                                     className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
-                                    onClick={() => handleDeleteDocument(document.documentId, document.documentMetadata.fileName || 'Unbekannt')}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDeleteDocument(document.documentId, document.documentMetadata.fileName || 'Unbekannt');
+                                    }}
                                   >
                                     <Trash2 className="h-4 w-4"/>
                                     <span className="sr-only">Löschen</span>
@@ -630,53 +640,6 @@ function ContractsPageContent() {
                                 </div>
                               </TableCell>
                             </TableRow>
-
-                            {/* Analysis Results Sub-rows */}
-                            {expandedDocuments.has(document.documentId) && documentAnalyses[document.documentId] && (
-                              <>
-                                {documentAnalyses[document.documentId].map((analysis, analysisIndex) => (
-                                  <TableRow
-                                    key={`${document.documentId}-analysis-${analysisIndex}`}
-                                    className="bg-slate-50 hover:bg-slate-100 cursor-pointer border-l-4 border-l-blue-500"
-                                    onClick={() => handleAnalysisRowClick(analysis)}
-                                  >
-                                    <TableCell></TableCell>
-                                    <TableCell>
-                                      <div className="pl-6 space-y-1">
-                                        <div className="flex items-center space-x-2">
-                                          <Scale className="h-4 w-4 text-blue-600"/>
-                                          <span className="font-medium text-sm">Schweizer Obligationenrecht-Analyse</span>
-                                        </div>
-                                        <div className="text-xs text-muted-foreground">
-                                          ID: {analysis.analysisId} • {analysis.sections?.length || 0} Abschnitte
-                                        </div>
-                                      </div>
-                                    </TableCell>
-                                    <TableCell>
-                                      <Badge variant={analysis.overallCompliance?.isCompliant ? 'default' : 'destructive'} className="text-xs">
-                                        {analysis.overallCompliance?.isCompliant ? 'Konform' : 'Nicht konform'}
-                                      </Badge>
-                                    </TableCell>
-                                    <TableCell>
-                                      <div className="text-sm">
-                                        {analysis.createdAt ? new Date(analysis.createdAt).toLocaleDateString('de-DE') : 'Unbekannt'}
-                                      </div>
-                                    </TableCell>
-                                    <TableCell>
-                                      <div className="flex items-center space-x-2">
-                                        <CheckCircle className="h-4 w-4 text-green-500"/>
-                                        <span className="text-sm">Abgeschlossen</span>
-                                      </div>
-                                    </TableCell>
-                                    <TableCell>
-                                      <div className="text-sm text-muted-foreground">
-                                        Score: {Math.round((analysis.overallCompliance?.complianceScore || 0) * 100)}%
-                                      </div>
-                                    </TableCell>
-                                  </TableRow>
-                                ))}
-                              </>
-                            )}
                           </React.Fragment>
                         ))}
                       </TableBody>

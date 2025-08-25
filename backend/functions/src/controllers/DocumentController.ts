@@ -96,6 +96,42 @@ export class DocumentController extends BaseController {
         ...metadata
       });
 
+      // Automatically trigger Swiss obligation analysis after successful upload
+      try {
+        // Check if analysis already exists for this document
+        const existingAnalyses = await this.swissObligationLawService.getAnalysesByDocumentId(documentId, userId);
+
+        if (existingAnalyses.length === 0) {
+          // No existing analysis, create background job for analysis
+          const jobId = await this.jobQueueService.createJob(
+            'swiss-obligation-analysis',
+            userId,
+            { documentId, userId, fileName }
+          );
+
+          this.logger.info('Automatic Swiss obligation law analysis job created after upload', {
+            userId,
+            documentId,
+            jobId,
+            fileName
+          });
+        } else {
+          this.logger.info('Swiss obligation law analysis already exists for document, skipping automatic analysis', {
+            userId,
+            documentId,
+            fileName,
+            existingAnalysesCount: existingAnalyses.length
+          });
+        }
+      } catch (analysisError) {
+        // Log error but don't fail the upload
+        this.logger.error('Failed to trigger automatic Swiss obligation law analysis', analysisError as Error, {
+          userId,
+          documentId,
+          fileName
+        });
+      }
+
       this.sendSuccess(res, {
         documentId,
         fileName,
@@ -186,10 +222,11 @@ export class DocumentController extends BaseController {
         return;
       }
 
-      // Delete document from storage and database
+      // Delete document from storage, database, and associated Swiss obligation analyses
       await Promise.all([
         this.storageService.deleteDocument(documentId, userId),
-        this.firestoreService.deleteDocument(documentId, userId)
+        this.firestoreService.deleteDocument(documentId, userId),
+        this.swissObligationLawService.deleteAnalysesByDocumentId(documentId, userId)
       ]);
 
       this.sendSuccess(res, {
@@ -1160,6 +1197,26 @@ STIL: Professionell, präzise, praxisorientiert für beide Jurisdiktionen`;
       if (!document) {
         this.sendError(res, 404, 'Document not found', 'Document not found or access denied');
         return;
+      }
+
+      // Check if analysis already exists for this document and delete old ones
+      const existingAnalyses = await this.swissObligationLawService.getAnalysesByDocumentId(documentId, userId);
+
+      if (existingAnalyses.length > 0) {
+        this.logger.info('Existing analysis found, deleting old analysis before creating new one', {
+          userId,
+          documentId,
+          existingAnalysesCount: existingAnalyses.length
+        });
+
+        // Delete existing analyses
+        await this.swissObligationLawService.deleteAnalysesByDocumentId(documentId, userId);
+
+        this.logger.info('Old analyses deleted successfully', {
+          userId,
+          documentId,
+          deletedCount: existingAnalyses.length
+        });
       }
 
       // Create background job for analysis

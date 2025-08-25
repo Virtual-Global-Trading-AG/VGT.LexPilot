@@ -173,6 +173,10 @@ Analysiere:
 - Transparenz und Verständlichkeit  
 - Strukturierung in logische Abschnitte mit Einzelbewertung  
 
+**WICHTIG für recommendations pro section:**
+- Wenn violations vorhanden sind (violations.length > 0): Füge konkrete Empfehlungen hinzu
+- Wenn keine violations vorhanden sind: recommendations = []
+
 Antwort **ausschließlich** als gültiges JSON-Objekt:  
 
 {
@@ -191,8 +195,8 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
         "confidence": number,
         "reasoning": string,
         "violations": string[],
-        "recommendations"?: string[] // Nur bei violations?.length > 0
-      },
+        "recommendations": string[] // Optional, nur wenn isCompliant=false
+      }
     }
   ],
   "overallCompliance": {
@@ -608,6 +612,60 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
         userId
       });
       return [];
+    }
+  }
+
+  /**
+   * Delete all analyses for a specific document
+   */
+  public async deleteAnalysesByDocumentId(documentId: string, userId: string): Promise<void> {
+    try {
+      this.logger.info('Deleting Swiss obligation analyses by document ID', { documentId, userId });
+
+      // Query Firestore for analyses with the given documentId
+      const db = this.firestoreService['db'] || require('firebase-admin').firestore();
+      const analysesRef = db.collection('swissObligationAnalyses');
+
+      const querySnapshot = await analysesRef
+        .where('documentId', '==', documentId)
+        .where('userId', '==', userId)
+        .get();
+
+      // Delete each analysis and its details
+      const batch = db.batch();
+      let deletedCount = 0;
+
+      for (const doc of querySnapshot.docs) {
+        const data = doc.data();
+
+        // Delete main analysis document
+        batch.delete(doc.ref);
+
+        // Delete details sub-collection document
+        const detailsRef = db.doc(`swissObligationAnalyses/${data.analysisId}/details/items`);
+        batch.delete(detailsRef);
+
+        deletedCount++;
+      }
+
+      // Execute batch deletion
+      if (deletedCount > 0) {
+        await batch.commit();
+        this.logger.info('Successfully deleted Swiss obligation analyses', {
+          documentId,
+          userId,
+          deletedCount
+        });
+      } else {
+        this.logger.info('No analyses found to delete', { documentId, userId });
+      }
+
+    } catch (error) {
+      this.logger.error('Error deleting Swiss obligation analyses by document ID', error as Error, {
+        documentId,
+        userId
+      });
+      throw error;
     }
   }
 
