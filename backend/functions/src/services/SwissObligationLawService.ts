@@ -191,12 +191,12 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
         "confidence": number,
         "reasoning": string,
         "violations": string[],
-        "recommendations": string[] // Optional, nur bei Verstössen
+        "recommendations"?: string[] // Nur bei violations?.length > 0
       },
     }
   ],
   "overallCompliance": {
-    "isCompliant": boolean,
+    "isCompliant": boolean, // true wenn alle sections isCompliant=true
     "complianceScore": number, // 0 bis 1
     "summary": string
   }
