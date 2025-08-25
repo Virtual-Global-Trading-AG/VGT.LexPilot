@@ -1320,7 +1320,8 @@ STIL: Professionell, präzise, praxisorientiert für beide Jurisdiktionen`;
             violationCount: section.complianceAnalysis?.violations?.length || 0,
             violations: section.complianceAnalysis?.violations || [],
             reasoning: section.complianceAnalysis?.reasoning || '',
-            findings: section.findings || []
+            recommendations: section.complianceAnalysis.recommendations || [],
+            findings: section.findings || [],
           })),
           overallCompliance: analysis.overallCompliance,
           summary: {

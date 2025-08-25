@@ -72,7 +72,7 @@ export type AnalysisStatus =
 export interface AnalysisResult {
   summary: string;
   findings: Finding[];
-  recommendations: Recommendation[];
+  recommendations: string[];
   riskScore: number;
   complianceScore?: number;
 }
@@ -87,13 +87,6 @@ export interface Finding {
   legalBasis?: string;
 }
 
-export interface Recommendation {
-  id: string;
-  priority: 'low' | 'medium' | 'high';
-  title: string;
-  description: string;
-  actionRequired: boolean;
-}
 
 export interface WebSocketEvent {
   type: 'analysis_progress' | 'analysis_complete' | 'error';
@@ -138,7 +131,7 @@ export interface SwissObligationSectionResult {
   legalContext: any[];
   complianceAnalysis: SectionComplianceAnalysis;
   findings: Finding[];
-  recommendations: Recommendation[];
+  recommendations: string[];
   // Computed properties for display
   isCompliant: boolean;
   confidence: number;

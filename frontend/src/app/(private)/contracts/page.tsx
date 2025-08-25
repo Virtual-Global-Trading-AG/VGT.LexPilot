@@ -1114,6 +1114,20 @@ export default function ContractsPage() {
                               </div>
                             </div>
                           )}
+
+                          {/* Recommendations Section */}
+                          {section.recommendations && section.recommendations.length > 0 && (
+                            <div className="space-y-2">
+                              <Label className="text-sm font-medium text-blue-600">Empfehlungen ({section.recommendations.length}):</Label>
+                              <div className="space-y-2">
+                                {section.recommendations.map((recommendation: string, recommendationIndex: number) => (
+                                  <div key={recommendationIndex} className="text-sm bg-blue-50 p-3 rounded border-l-4 border-blue-400">
+                                    <div className="text-blue-800">• {recommendation}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
