@@ -1,17 +1,13 @@
-import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
 import { ChatOpenAI } from '@langchain/openai';
-import { HumanMessage, SystemMessage } from '@langchain/core/messages';
+import OpenAI from 'openai';
+import { v4 as uuidv4 } from 'uuid';
+import { LLMFactory } from '../factories/LLMFactory';
+import { AnonymizedKeyword, Finding, Recommendation } from '../models';
 import { Logger } from '../utils/logger';
 import { AnalysisService } from './AnalysisService';
-import { TextExtractionService } from './TextExtractionService';
 import { FirestoreService } from './FirestoreService';
+import { TextExtractionService } from './TextExtractionService';
 import { VectorStoreService } from './VectorStoreService';
-import { LLMFactory } from '../factories/LLMFactory';
-import { Analysis, AnalysisResult, AnalysisType, AnalysisStatus, Finding, FindingSeverity, FindingType, Recommendation, RecommendationType, Priority, TextLocation, AnonymizedKeyword } from '../models';
-import { v4 as uuidv4 } from 'uuid';
-import { encoding_for_model } from 'tiktoken';
-import OpenAI from 'openai';
-import * as fs from 'fs';
 
 export interface ContractSection {
   id: string;
@@ -44,6 +40,7 @@ export interface SectionAnalysisResult {
     confidence: number;
     reasoning: string;
     violations: string[];
+    recommendations: string[];
   };
   findings: Finding[];
 }
@@ -59,6 +56,7 @@ export interface CompactSectionResult {
     confidence: number;
     reasoning: string;
     violations: string[];
+    recommendations: string[];
   };
   findingIds: string[]; // Only IDs instead of full Finding objects
 }
@@ -164,8 +162,8 @@ export class SwissObligationLawService {
                 type: "input_text",
                 text: `Du bist Experte für Schweizer Obligationenrecht.  
 Analysiere den Vertrag nach OR (Art. 1–551), wobei du zuerst den Vertragstext und dann deine Vektordatenbank (OR) berücksichtigst.  
-Konvertierungsfehler (z. B. falsche Zeichen, Umbrüche) korrigierst du stillschweigend nur zur Lesbarkeit, sie dürfen nicht in die Analyse einfließen.  
-Ignoriere Platzhalter (ANONYM_x).  
+Konvertierungsfehler (z. B. falsche Zeichen, Umbrüche) korrigierst du stillschweigend nur zur Lesbarkeit, sie dürfen nicht in die Analyse einfliessen.  
+Ignoriere Platzhalter (ANONYM_x).
 
 Analysiere:  
 - Dokumenttyp, Geschäftsbereich, Schlüsselbegriffe  
@@ -187,21 +185,20 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
   "sections": [
     {
       "sectionId": string,
-      "sectionContent": string,
+      "sectionContent": string, // original text des abschnitts (Konvertierungsfehler korrigiert)
       "complianceAnalysis": {
         "isCompliant": boolean,
         "confidence": number,
         "reasoning": string,
         "violations": string[],
-        "recommendations": string[]
-      }
+        "recommendations": string[] // Optional, nur bei Verstössen
+      },
     }
   ],
   "overallCompliance": {
     "isCompliant": boolean,
-    "complianceScore": number,
-    "summary": string,
-    "recommendations": string[]
+    "complianceScore": number, // 0 bis 1
+    "summary": string
   }
 }`,
               },
@@ -235,7 +232,7 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
       }
 
       // Parse the JSON response
-      let analysisData;
+      let sanitizedData;
       try {
         // Log the raw response for debugging
         this.logger.info('Raw OpenAI response received', {
@@ -255,65 +252,18 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
         }
 
         // Parse the JSON
-        analysisData = JSON.parse(jsonString);
+        const analysisData = JSON.parse(jsonString);
 
-        // Validate the structure
-        if (!analysisData.documentContext || !analysisData.sections || !analysisData.overallCompliance) {
-          throw new Error('Missing required fields in OpenAI response');
-        }
+        sanitizedData = this.sanitizeAnalysisData(analysisData);
 
-        // Validate data types
-        if (typeof analysisData.overallCompliance.isCompliant !== 'boolean') {
-          this.logger.warn('Converting isCompliant to boolean', {
-            originalValue: analysisData.overallCompliance.isCompliant,
-            type: typeof analysisData.overallCompliance.isCompliant
-          });
-          analysisData.overallCompliance.isCompliant = analysisData.overallCompliance.isCompliant === true || analysisData.overallCompliance.isCompliant === 'true';
-        }
-
-        if (typeof analysisData.overallCompliance.complianceScore !== 'number') {
-          this.logger.warn('Converting complianceScore to number', {
-            originalValue: analysisData.overallCompliance.complianceScore,
-            type: typeof analysisData.overallCompliance.complianceScore
-          });
-          analysisData.overallCompliance.complianceScore = parseFloat(analysisData.overallCompliance.complianceScore) || 0;
-        }
-
-        // Validate sections
-        if (Array.isArray(analysisData.sections)) {
-          analysisData.sections.forEach((section: any, index: number) => {
-            if (section.complianceAnalysis) {
-              if (typeof section.complianceAnalysis.isCompliant !== 'boolean') {
-                this.logger.warn(`Converting section ${index} isCompliant to boolean`, {
-                  originalValue: section.complianceAnalysis.isCompliant,
-                  type: typeof section.complianceAnalysis.isCompliant
-                });
-                section.complianceAnalysis.isCompliant = section.complianceAnalysis.isCompliant === true || section.complianceAnalysis.isCompliant === 'true';
-              }
-
-              if (typeof section.complianceAnalysis.confidence !== 'number') {
-                this.logger.warn(`Converting section ${index} confidence to number`, {
-                  originalValue: section.complianceAnalysis.confidence,
-                  type: typeof section.complianceAnalysis.confidence
-                });
-                section.complianceAnalysis.confidence = parseFloat(section.complianceAnalysis.confidence) || 0;
-              }
-
-              if (!Array.isArray(section.complianceAnalysis.violations)) {
-                this.logger.warn(`Converting section ${index} violations to array`, {
-                  originalValue: section.complianceAnalysis.violations,
-                  type: typeof section.complianceAnalysis.violations
-                });
-                section.complianceAnalysis.violations = [];
-              }
-            }
-          });
+        if (!sanitizedData.documentContext || !sanitizedData.sections || !sanitizedData.overallCompliance) {
+          throw new Error('Invalid OpenAI response structure');
         }
 
         this.logger.info('Successfully parsed and validated OpenAI JSON response', {
           analysisId,
-          sectionsCount: analysisData.sections?.length || 0,
-          overallCompliant: analysisData.overallCompliance?.isCompliant
+          sectionsCount: sanitizedData.sections?.length || 0,
+          overallCompliant: sanitizedData.overallCompliance?.isCompliant
         });
 
         // Apply de-anonymization if anonymized keywords were provided
@@ -326,23 +276,23 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
           const textExtractionService = new TextExtractionService();
 
           // De-anonymize document context
-          if (analysisData.documentContext) {
-            if (analysisData.documentContext.contextDescription) {
-              analysisData.documentContext.contextDescription = textExtractionService.reverseAnonymization(
-                analysisData.documentContext.contextDescription,
+          if (sanitizedData.documentContext) {
+            if (sanitizedData.documentContext.contextDescription) {
+              sanitizedData.documentContext.contextDescription = textExtractionService.reverseAnonymization(
+                sanitizedData.documentContext.contextDescription,
                 anonymizedKeywords
               );
             }
-            if (Array.isArray(analysisData.documentContext.keyTerms)) {
-              analysisData.documentContext.keyTerms = analysisData.documentContext.keyTerms.map((term: string) =>
+            if (Array.isArray(sanitizedData.documentContext.keyTerms)) {
+              sanitizedData.documentContext.keyTerms = sanitizedData.documentContext.keyTerms.map((term: string) =>
                 textExtractionService.reverseAnonymization(term, anonymizedKeywords)
               );
             }
           }
 
           // De-anonymize sections
-          if (Array.isArray(analysisData.sections)) {
-            analysisData.sections.forEach((section: any, index: number) => {
+          if (Array.isArray(sanitizedData.sections)) {
+            sanitizedData.sections.forEach((section: any, index: number) => {
               if (section.sectionContent) {
                 section.sectionContent = textExtractionService.reverseAnonymization(
                   section.sectionContent,
@@ -360,13 +310,18 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
                   textExtractionService.reverseAnonymization(violation, anonymizedKeywords)
                 );
               }
+              if (section.complianceAnalysis && Array.isArray(section.complianceAnalysis.recommendations)) {
+                section.complianceAnalysis.recommendations = section.complianceAnalysis.recommendations.map((recommondation: string) =>
+                  textExtractionService.reverseAnonymization(recommondation, anonymizedKeywords)
+                );
+              }
             });
           }
 
           // De-anonymize overall compliance summary
-          if (analysisData.overallCompliance && analysisData.overallCompliance.summary) {
-            analysisData.overallCompliance.summary = textExtractionService.reverseAnonymization(
-              analysisData.overallCompliance.summary,
+          if (sanitizedData.overallCompliance && sanitizedData.overallCompliance.summary) {
+            sanitizedData.overallCompliance.summary = textExtractionService.reverseAnonymization(
+              sanitizedData.overallCompliance.summary,
               anonymizedKeywords
             );
           }
@@ -390,14 +345,15 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
       progressCallback?.(80, 'Creating analysis result...');
 
       // Transform the response to match our expected structure
-      const sectionResults: SectionAnalysisResult[] = analysisData.sections.map((section: any) => ({
+      const sectionResults: SectionAnalysisResult[] = sanitizedData.sections.map((section: any) => ({
         sectionId: section.sectionId || uuidv4(),
         sectionContent: section.sectionContent || '',
         complianceAnalysis: {
           isCompliant: section.complianceAnalysis?.isCompliant || false,
           confidence: section.complianceAnalysis?.confidence || 0,
           reasoning: section.complianceAnalysis?.reasoning || '',
-          violations: section.complianceAnalysis?.violations || []
+          violations: section.complianceAnalysis?.violations || [],
+          recommendations: section.complianceAnalysis?.recommendations || []
         },
         findings: [] // Empty for now, could be enhanced later
       }));
@@ -408,16 +364,16 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
         documentId,
         userId,
         documentContext: {
-          documentType: analysisData.documentContext?.documentType || 'Unbekannter Vertragstyp',
-          businessDomain: analysisData.documentContext?.businessDomain || 'Unbekannte Domäne',
-          keyTerms: analysisData.documentContext?.keyTerms || [],
-          contextDescription: analysisData.documentContext?.contextDescription || 'Kontextanalyse nicht verfügbar'
+          documentType: sanitizedData.documentContext?.documentType || 'Unbekannter Vertragstyp',
+          businessDomain: sanitizedData.documentContext?.businessDomain || 'Unbekannte Domäne',
+          keyTerms: sanitizedData.documentContext?.keyTerms || [],
+          contextDescription: sanitizedData.documentContext?.contextDescription || 'Kontextanalyse nicht verfügbar'
         },
         sections: sectionResults,
         overallCompliance: {
-          isCompliant: analysisData.overallCompliance?.isCompliant || false,
-          complianceScore: analysisData.overallCompliance?.complianceScore || 0,
-          summary: analysisData.overallCompliance?.summary || 'Keine Zusammenfassung verfügbar'
+          isCompliant: sanitizedData.overallCompliance?.isCompliant || false,
+          complianceScore: sanitizedData.overallCompliance?.complianceScore || 0,
+          summary: sanitizedData.overallCompliance?.summary || 'Keine Zusammenfassung verfügbar'
         },
         createdAt: createDate,
         completedAt: new Date()
@@ -467,6 +423,28 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
       });
       throw error;
     }
+  }
+
+  private sanitizeAnalysisData(data: any): any {
+    return {
+      ...data,
+      overallCompliance: {
+        ...data.overallCompliance,
+        isCompliant: Boolean(data.overallCompliance?.isCompliant),
+        complianceScore: Math.min(1, Math.max(0, parseFloat(data.overallCompliance?.complianceScore) || 0))
+      },
+      sections: (data.sections || []).map((section: any) => ({
+        ...section,
+        complianceAnalysis: {
+          ...section.complianceAnalysis,
+          isCompliant: Boolean(section.complianceAnalysis?.isCompliant),
+          confidence: Math.min(1, Math.max(0, parseFloat(section.complianceAnalysis?.confidence) || 0)),
+          violations: Array.isArray(section.complianceAnalysis?.violations)
+            ? section.complianceAnalysis.violations
+            : []
+        }
+      }))
+    };
   }
 
   /**
