@@ -343,9 +343,32 @@ export function useGlobalJobMonitor() {
     }
   }, [isAuthenticated, getUserJobs, activeJobs, monitorJob]);
 
+  // Function to immediately start monitoring a specific job
+  const startJobMonitoring = useCallback((jobId: string, jobType: string, documentId?: string, fileName?: string) => {
+    const activeJob: ActiveJob = {
+      jobId,
+      type: jobType,
+      documentId,
+      fileName,
+      startTime: Date.now(),
+      pollCount: 0
+    };
+
+    // Add to active jobs immediately
+    setActiveJobs(prev => {
+      const newMap = new Map(prev);
+      newMap.set(jobId, activeJob);
+      return newMap;
+    });
+
+    // Start monitoring immediately
+    monitorJob(jobId, activeJob);
+  }, [monitorJob]);
+
   return {
     activeJobs: Array.from(activeJobs.values()),
     hasActiveJobs: activeJobs.size > 0,
-    checkForActiveJobs
+    checkForActiveJobs,
+    startJobMonitoring
   };
 }

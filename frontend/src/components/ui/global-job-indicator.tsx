@@ -1,6 +1,6 @@
 'use client';
 
-import { useGlobalJobMonitor } from '@/lib/hooks/useGlobalJobMonitor';
+import { useJobMonitor } from '@/lib/contexts/JobMonitorContext';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -11,7 +11,7 @@ import {
 import { Clock, Loader2, FileText } from 'lucide-react';
 
 export function GlobalJobIndicator() {
-  const { activeJobs, hasActiveJobs } = useGlobalJobMonitor();
+  const { activeJobs, hasActiveJobs } = useJobMonitor();
 
   if (!hasActiveJobs) {
     return null;

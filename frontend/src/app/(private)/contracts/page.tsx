@@ -12,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, } from '
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/lib/hooks/use-toast';
 import { useDocuments, useDocumentUpload } from '@/lib/hooks/useApi';
+import { useJobMonitor } from '@/lib/contexts/JobMonitorContext';
 import { SwissObligationAnalysisResult, SwissObligationSectionResult } from '@/types';
 import { AlertCircle, CheckCircle, ChevronDown, ChevronRight, Clock, Download, FileSearch, FileText, Filter, Plus, Scale, Search, Trash2, Upload, X, } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
@@ -86,7 +87,8 @@ const getStatusText = (status: string) => {
   }
 };
 
-export default function ContractsPage() {
+// Inner component that uses the JobMonitor context
+function ContractsPageContent() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { uploadDocumentDirect, uploading, uploadProgress, error, clearError } = useDocumentUpload();
   const {
@@ -120,6 +122,7 @@ export default function ContractsPage() {
   const [selectedAnalysis, setSelectedAnalysis] = useState<SwissObligationAnalysisResult | null>(null);
   const [sidenavOpen, setSidenavOpen] = useState(false);
   const { toast } = useToast();
+  const { startJobMonitoring } = useJobMonitor();
 
   // Helper functions for managing texts to replace
   const addTextToReplace = () => {
@@ -425,12 +428,15 @@ export default function ContractsPage() {
       const result = await analyzeSwissObligationLaw(documentId);
 
       if (result.success && result.data?.jobId) {
+        // Start monitoring the job immediately for instant feedback
+        startJobMonitoring(result.data.jobId, 'swiss-obligation-analysis', documentId, fileName);
+
         toast({
           title: 'Analyse gestartet',
           description: `Schweizer Obligationenrecht-Analyse für "${fileName}" wurde im Hintergrund gestartet. Sie erhalten eine Benachrichtigung, wenn die Analyse abgeschlossen ist.`
         });
 
-        // Clear loading state immediately since global monitoring will handle the rest
+        // Clear loading state immediately since job monitoring will handle the rest
         setSwissAnalysisLoading(null);
       } else {
         toast({
@@ -452,7 +458,7 @@ export default function ContractsPage() {
   };
 
   return (
-    <MainLayout>
+    <>
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -1155,6 +1161,14 @@ export default function ContractsPage() {
         </div>
       )}
 
+    </>
+  );
+}
+
+export default function ContractsPage() {
+  return (
+    <MainLayout>
+      <ContractsPageContent />
     </MainLayout>
   );
 }
