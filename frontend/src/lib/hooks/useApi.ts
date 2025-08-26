@@ -445,7 +445,6 @@ export function useDocuments() {
       return { success: false, error: 'Authentication required' };
     }
 
-    setLoading(true);
     setError(null);
 
     try {
@@ -462,8 +461,6 @@ export function useDocuments() {
       const errorMsg = 'Network error while starting analysis';
       setError(errorMsg);
       return { success: false, error: errorMsg };
-    } finally {
-      setLoading(false);
     }
   }, [isAuthenticated]);
 

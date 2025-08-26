@@ -121,7 +121,7 @@ function ContractsPageContent() {
   const [selectedAnalysis, setSelectedAnalysis] = useState<SwissObligationAnalysisResult | null>(null);
   const [sidenavOpen, setSidenavOpen] = useState(false);
   const { toast } = useToast();
-  const { startJobMonitoring } = useJobMonitor();
+  const { startJobMonitoring, activeJobs } = useJobMonitor();
 
   // Helper functions for managing texts to replace
   const addTextToReplace = () => {
@@ -153,6 +153,23 @@ function ContractsPageContent() {
   const handleAnalysisRowClick = (analysis: SwissObligationAnalysisResult) => {
     setSelectedAnalysis(analysis);
     setSidenavOpen(true);
+  };
+
+  // Helper function to check if a document has an active analysis job
+  const isDocumentAnalysisRunning = (documentId: string) => {
+    return activeJobs.some(job => 
+      job.type === 'swiss-obligation-analysis' && 
+      job.documentId === documentId
+    );
+  };
+
+  // Helper function to get analysis status for a document
+  const getDocumentAnalysisStatus = (documentId: string) => {
+    const runningJob = activeJobs.find(job => 
+      job.type === 'swiss-obligation-analysis' && 
+      job.documentId === documentId
+    );
+    return runningJob ? 'running' : 'idle';
   };
 
   // Group documents by category
@@ -192,6 +209,28 @@ function ContractsPageContent() {
     setDocumentAnalyses(analysesMap);
   };
 
+  // Load analyses for a single document
+  const loadSingleDocumentAnalysis = async (documentId: string) => {
+    try {
+      const result = await getSwissObligationAnalysesByDocumentId(documentId);
+      if (result.success && result.data?.analyses) {
+        setDocumentAnalyses(prev => ({
+          ...prev,
+          [documentId]: result.data.analyses
+        }));
+      } else {
+        // Remove analyses if none found
+        setDocumentAnalyses(prev => {
+          const newAnalyses = { ...prev };
+          delete newAnalyses[documentId];
+          return newAnalyses;
+        });
+      }
+    } catch (err) {
+      console.error(`Error loading analysis for document ${documentId}:`, err);
+    }
+  };
+
   // Fetch documents on component mount
   useEffect(() => {
     getDocuments({
@@ -208,6 +247,41 @@ function ContractsPageContent() {
       loadAllDocumentAnalyses(documents);
     }
   }, [documents]);
+
+  // Track previous jobs to detect completed jobs
+  const previousJobsRef = useRef<Map<string, { jobId: string; documentId?: string }>>(new Map());
+
+  // Monitor active jobs and update only specific document rows when Swiss obligation analysis completes
+  useEffect(() => {
+    // Create a map of current Swiss obligation analysis jobs
+    const currentSwissJobs = new Map<string, { jobId: string; documentId?: string }>();
+    activeJobs
+      .filter(job => job.type === 'swiss-obligation-analysis')
+      .forEach(job => {
+        currentSwissJobs.set(job.jobId, { jobId: job.jobId, documentId: job.documentId });
+      });
+
+    // Check if any Swiss obligation analysis jobs have completed (removed from active jobs)
+    const completedJobs: { jobId: string; documentId?: string }[] = [];
+    previousJobsRef.current.forEach((jobInfo, jobId) => {
+      if (!currentSwissJobs.has(jobId)) {
+        completedJobs.push(jobInfo);
+      }
+    });
+
+    // If jobs completed, update only the specific document analyses instead of reloading entire table
+    if (completedJobs.length > 0) {
+      console.log('Swiss obligation analysis completed, updating specific document rows...');
+      completedJobs.forEach(({ documentId }) => {
+        if (documentId) {
+          loadSingleDocumentAnalysis(documentId);
+        }
+      });
+    }
+
+    // Update the previous jobs for next comparison
+    previousJobsRef.current = currentSwissJobs;
+  }, [activeJobs, loadSingleDocumentAnalysis]);
 
   const handleFileSelect = (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -407,8 +481,6 @@ function ContractsPageContent() {
   };
 
   const handleSwissObligationAnalysis = async (documentId: string, fileName: string) => {
-    setSwissAnalysisLoading(documentId);
-
     try {
       // Start the analysis job
       const result = await analyzeSwissObligationLaw(documentId);
@@ -528,7 +600,6 @@ function ContractsPageContent() {
                           <TableHead>Titel</TableHead>
                           <TableHead>Risiko</TableHead>
                           <TableHead>Hochgeladen</TableHead>
-                          <TableHead>Status</TableHead>
                           <TableHead>Aktionen</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -536,15 +607,19 @@ function ContractsPageContent() {
                         {categoryDocuments.map((document) => (
                           <React.Fragment key={document.documentId}>
                             <TableRow 
-                              className={`border-b ${documentAnalyses[document.documentId] ? 'cursor-pointer hover:bg-gray-50' : ''}`}
-                              onClick={() => documentAnalyses[document.documentId] && handleAnalysisRowClick(documentAnalyses[document.documentId][0])}
+                              className={`border-b ${documentAnalyses[document.documentId] && !isDocumentAnalysisRunning(document.documentId) ? 'cursor-pointer hover:bg-gray-50' : ''}`}
+                              onClick={() => documentAnalyses[document.documentId] && !isDocumentAnalysisRunning(document.documentId) && handleAnalysisRowClick(documentAnalyses[document.documentId][0])}
                             >
                               <TableCell>
                                 <div className="space-y-1">
                                   <div className="font-medium">{document.documentMetadata.fileName || document.documentMetadata.originalName || 'Unbekannt'}</div>
                                   <div className="text-sm text-muted-foreground">
                                     {document.documentMetadata.uploadedAt ? new Date(document.documentMetadata.uploadedAt).toLocaleDateString('de-DE') : 'Unbekannt'} • {document.documentMetadata.size ? `${(document.documentMetadata.size / 1024 / 1024).toFixed(1)} MB` : 'Unbekannt'}
-                                    {documentAnalyses[document.documentId] && (
+                                    {isDocumentAnalysisRunning(document.documentId) ? (
+                                      <span className="ml-2">
+                                        • <span className="text-blue-600 flex items-center"><Clock className="h-3 w-3 mr-1 animate-spin"/>Analyse läuft</span>
+                                      </span>
+                                    ) : documentAnalyses[document.documentId] && (
                                       <span className="ml-2">
                                         • <span className="text-blue-600">Obligationenanalyse: {Math.round((documentAnalyses[document.documentId][0].overallCompliance?.complianceScore || 0) * 100)}% konform</span>
                                       </span>
@@ -553,7 +628,7 @@ function ContractsPageContent() {
                                 </div>
                               </TableCell>
                               <TableCell>
-                                {documentAnalyses[document.documentId] ? (
+                                {!isDocumentAnalysisRunning(document.documentId) && documentAnalyses[document.documentId] ? (
                                   <Badge variant={documentAnalyses[document.documentId][0].overallCompliance?.isCompliant ? 'default' : 'destructive'} className="text-xs">
                                     {documentAnalyses[document.documentId][0].overallCompliance?.isCompliant ? 'Konform' : 'Nicht konform'}
                                   </Badge>
@@ -564,12 +639,6 @@ function ContractsPageContent() {
                               <TableCell>
                                 <div className="text-sm">
                                   {document.documentMetadata.uploadedAt ? new Date(document.documentMetadata.uploadedAt).toLocaleDateString('de-DE') : 'Unbekannt'}
-                                </div>
-                              </TableCell>
-                              <TableCell>
-                                <div className="flex items-center space-x-2">
-                                  {getStatusIcon(document.documentMetadata.status || 'unknown')}
-                                  <span className="text-sm">{getStatusText(document.documentMetadata.status || 'unknown')}</span>
                                 </div>
                               </TableCell>
                               <TableCell>
@@ -610,9 +679,11 @@ function ContractsPageContent() {
                                       e.stopPropagation();
                                       handleSwissObligationAnalysis(document.documentId, document.documentMetadata.fileName || 'Unbekannt');
                                     }}
-                                    disabled={swissAnalysisLoading === document.documentId}
+                                    disabled={swissAnalysisLoading === document.documentId || isDocumentAnalysisRunning(document.documentId)}
                                     title={
-                                      documentAnalyses[document.documentId]?.length > 0
+                                      isDocumentAnalysisRunning(document.documentId)
+                                        ? 'Obligationenanalyse läuft bereits - bitte warten Sie bis zum Abschluss'
+                                        : documentAnalyses[document.documentId]?.length > 0
                                         ? 'Obligationenanalyse erneut ausführen (überschreibt bestehende Analyse)'
                                         : 'Schweizer Obligationenrecht-Analyse starten'
                                     }
