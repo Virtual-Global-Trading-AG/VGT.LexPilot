@@ -1,0 +1,161 @@
+body {
+  font-family: "Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif;
+  font-size: 11pt;
+  line-height: 1.6;
+  text-align: left;
+  margin: 2.5cm;
+  color: #1a1a1a;
+  background-color: #ffffff;
+}
+
+/* Haupttitel */
+h1 {
+  text-align: center;
+  font-size: 24pt;
+  font-weight: 700;
+  margin-top: 0pt;
+  margin-bottom: 32pt;
+  color: #2563eb;
+  letter-spacing: -0.5pt;
+  border-bottom: 3px solid #e5e7eb;
+  padding-bottom: 16pt;
+}
+
+/* Kapitelüberschriften */
+h2 {
+  font-size: 16pt;
+  font-weight: 600;
+  margin-top: 32pt;
+  margin-bottom: 16pt;
+  color: #374151;
+  border-left: 4px solid #2563eb;
+  padding-left: 12pt;
+  background-color: #f8fafc;
+  padding-top: 8pt;
+  padding-bottom: 8pt;
+  margin-left: -12pt;
+  padding-right: 12pt;
+}
+
+/* Unterüberschriften */
+h3 {
+  font-size: 13pt;
+  font-weight: 600;
+  margin-top: 24pt;
+  margin-bottom: 12pt;
+  color: #4b5563;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 4pt;
+}
+
+/* Fließtext */
+p {
+  margin: 0 0 14pt 0;
+  text-align: justify;
+  hyphens: auto;
+}
+
+/* Nummerierte Absätze */
+ol, ul {
+  margin: 0 0 16pt 0;
+  padding-left: 24pt;
+}
+
+ol li, ul li {
+  margin-bottom: 6pt;
+  line-height: 1.5;
+}
+
+/* Starke Betonung */
+strong {
+  font-weight: 600;
+  color: #1f2937;
+}
+
+/* Betonung */
+em {
+  font-style: italic;
+  color: #4b5563;
+}
+
+/* Horizontale Trennlinien */
+hr {
+  border: none;
+  height: 2px;
+  background: linear-gradient(to right, #e5e7eb, #9ca3af, #e5e7eb);
+  margin: 32pt 0;
+}
+
+/* Tabellen */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16pt 0;
+  font-size: 10pt;
+}
+
+th, td {
+  border: 1px solid #e5e7eb;
+  padding: 8pt 12pt;
+  text-align: left;
+}
+
+th {
+  background-color: #f8fafc;
+  font-weight: 600;
+  color: #374151;
+}
+
+/* Signaturblock */
+.signature-block {
+  margin-top: 80pt;
+  padding-top: 24pt;
+  border-top: 2px solid #e5e7eb;
+}
+
+.signature-line {
+  display: inline-block;
+  width: 45%;
+  margin: 0 2.5%;
+  text-align: center;
+}
+
+.signature-line::before {
+  content: "";
+  display: block;
+  width: 100%;
+  height: 1px;
+  background-color: #9ca3af;
+  margin-bottom: 8pt;
+}
+
+.signature-line-label {
+  font-size: 10pt;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+/* Datum und Ort */
+.date-place {
+  margin-top: 40pt;
+  margin-bottom: 24pt;
+  font-size: 10pt;
+  color: #6b7280;
+}
+
+/* Vertragsdetails Box */
+.contract-details {
+  background-color: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 6pt;
+  padding: 16pt;
+  margin: 16pt 0;
+}
+
+.contract-details h4 {
+  margin-top: 0;
+  margin-bottom: 12pt;
+  font-size: 12pt;
+  font-weight: 600;
+  color: #374151;
+}

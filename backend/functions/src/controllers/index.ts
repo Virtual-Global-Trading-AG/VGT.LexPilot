@@ -4,3 +4,4 @@ export { AnalysisController } from './AnalysisController';
 export { DocumentController } from './DocumentController';
 export { UserController } from './UserController';
 export { AdminController } from './AdminController';
+export { ContractGenerationController } from './ContractGenerationController';

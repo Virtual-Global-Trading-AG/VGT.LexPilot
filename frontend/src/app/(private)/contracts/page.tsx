@@ -120,6 +120,8 @@ function ContractsPageContent() {
   const [documentAnalyses, setDocumentAnalyses] = useState<Record<string, SwissObligationAnalysisResult[]>>({});
   const [selectedAnalysis, setSelectedAnalysis] = useState<SwissObligationAnalysisResult | null>(null);
   const [sidenavOpen, setSidenavOpen] = useState(false);
+
+
   const { toast } = useToast();
   const { startJobMonitoring, activeJobs } = useJobMonitor();
 
@@ -171,6 +173,7 @@ function ContractsPageContent() {
     );
     return runningJob ? 'running' : 'idle';
   };
+
 
   // Group documents by category
   const groupedDocuments = documents.reduce((groups: Record<string, any[]>, document) => {
@@ -282,6 +285,7 @@ function ContractsPageContent() {
     // Update the previous jobs for next comparison
     previousJobsRef.current = currentSwissJobs;
   }, [activeJobs, loadSingleDocumentAnalysis]);
+
 
   const handleFileSelect = (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -547,7 +551,15 @@ function ContractsPageContent() {
             <Filter className="mr-2 h-4 w-4"/>
             Filter
           </Button>
+          <Button 
+            onClick={() => window.location.href = '/generator'}
+            className="bg-green-600 hover:bg-green-700"
+          >
+            <Plus className="mr-2 h-4 w-4"/>
+            Vertrag generieren
+          </Button>
         </div>
+
 
         {/* Contracts Table */}
         <Card>
@@ -1194,6 +1206,7 @@ function ContractsPageContent() {
           </div>
         </div>
       )}
+
 
     </>
   );

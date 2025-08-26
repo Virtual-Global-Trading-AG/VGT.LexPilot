@@ -1,6 +1,7 @@
 // React hooks für die RAG-API Endpunkte
 import { useState, useCallback } from 'react';
 import apiClient from '../api/client';
+import AuthService from '../api/auth';
 import { useAuthStore } from '../stores/authStore';
 
 export interface ContractAnalysisRequest {
@@ -562,6 +563,94 @@ export function useDocuments() {
     pagination,
     loading,
     error,
+    clearError: () => setError(null)
+  };
+}
+
+// Contract Generation interfaces
+export interface ContractGenerationRequest {
+  contractType: string;
+  parameters: Record<string, any>;
+}
+
+export interface ContractGenerationProgress {
+  progress: number;
+  message: string;
+  result?: any;
+  error?: string;
+}
+
+export function useContractGeneration() {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState(0);
+  const [progressMessage, setProgressMessage] = useState('');
+  const isAuthenticated = useAuthStore(state => state.isAuthenticated);
+
+  const generateContract = useCallback(async (
+    request: ContractGenerationRequest
+  ): Promise<{ downloadUrl: string; documentId: string; contractType: string; status: string } | null> => {
+    if (!isAuthenticated) {
+      setError('Not authenticated');
+      return null;
+    }
+
+    setLoading(true);
+    setError(null);
+    setProgress(0);
+    setProgressMessage('Starte Vertragsgenerierung...');
+
+    try {
+      const response = await apiClient.post('/contracts/generate', request);
+
+      if (!response.success || !response.data) {
+        throw new Error(response.error || 'Failed to generate contract');
+      }
+
+      setProgress(100);
+      setProgressMessage('Vertragsgenerierung abgeschlossen!');
+
+      return response.data as { downloadUrl: string; documentId: string; contractType: string; status: string };
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      setError(errorMessage);
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, [isAuthenticated]);
+
+  const downloadContractPDF = useCallback(async (generationId: string): Promise<boolean> => {
+    if (!isAuthenticated) {
+      setError('Not authenticated');
+      return false;
+    }
+
+    try {
+      const result = await apiClient.downloadFile(
+        `/contracts/${generationId}/pdf`,
+        `contract-${generationId}.pdf`
+      );
+
+      if (!result.success) {
+        setError(result.error || 'Failed to download PDF');
+        return false;
+      }
+
+      return true;
+    } catch (err) {
+      setError('Network error during PDF download');
+      return false;
+    }
+  }, [isAuthenticated]);
+
+  return {
+    generateContract,
+    downloadContractPDF,
+    loading,
+    error,
+    progress,
+    progressMessage,
     clearError: () => setError(null)
   };
 }

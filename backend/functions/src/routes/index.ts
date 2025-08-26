@@ -16,6 +16,7 @@ import {
 import documentRoutes from './documentRoutes';
 import createAuthRoutes from './authRoutes';
 import adminRoutes from './adminRoutes';
+import contractRoutes from './contractRoutes';
 
 /**
  * Zentrale API-Router-Konfiguration
@@ -23,12 +24,6 @@ import adminRoutes from './adminRoutes';
  */
 export function createApiRoutes(): Router {
   const router = Router();
-
-  // Controller Instanzen erstellen
-  const userController = new UserController();
-  const documentController = new DocumentController();
-  const analysisController = new AnalysisController();
-  const adminController = new AdminController();
 
   // ==========================================
   // ROUTE MODULES
@@ -45,6 +40,9 @@ export function createApiRoutes(): Router {
 
   // Admin routes (authentication and admin required)
   router.use('/admin', adminRoutes);
+
+  // Contract routes (with authentication)
+  router.use('/contracts', contractRoutes);
 
 
 
