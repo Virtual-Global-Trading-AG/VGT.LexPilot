@@ -1,69 +1,72 @@
 body {
   font-family: "Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif;
-  font-size: 11pt;
+  font-size: 10pt;
   line-height: 1.6;
   text-align: left;
   margin: 2.5cm;
-  color: #1a1a1a;
+  color: #1f2937;
   background-color: #ffffff;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* Haupttitel */
 h1 {
   text-align: center;
-  font-size: 24pt;
+  font-size: 20pt;
   font-weight: 700;
   margin-top: 0pt;
-  margin-bottom: 32pt;
-  color: #2563eb;
+  margin-bottom: 24pt;
+  color: #111827;
   letter-spacing: -0.5pt;
-  border-bottom: 3px solid #e5e7eb;
-  padding-bottom: 16pt;
+  border-bottom: 3px solid #3b82f6;
+  padding-bottom: 12pt;
 }
 
 /* Kapitelüberschriften */
 h2 {
-  font-size: 16pt;
+  font-size: 14pt;
   font-weight: 600;
-  margin-top: 32pt;
-  margin-bottom: 16pt;
-  color: #374151;
-  border-left: 4px solid #2563eb;
+  margin-top: 24pt;
+  margin-bottom: 12pt;
+  color: #111827;
+  border-left: 4px solid #3b82f6;
   padding-left: 12pt;
   background-color: #f8fafc;
   padding-top: 8pt;
   padding-bottom: 8pt;
   margin-left: -12pt;
   padding-right: 12pt;
+  border-radius: 0 4pt 4pt 0;
 }
 
 /* Unterüberschriften */
 h3 {
-  font-size: 13pt;
+  font-size: 10pt;
   font-weight: 600;
-  margin-top: 24pt;
-  margin-bottom: 12pt;
+  margin-top: 16pt;
+  margin-bottom: 8pt;
   color: #4b5563;
   border-bottom: 1px solid #e5e7eb;
-  padding-bottom: 4pt;
+  padding-bottom: 3pt;
 }
 
 /* Fließtext */
 p {
-  margin: 0 0 14pt 0;
+  margin: 0 0 8pt 0;
   text-align: justify;
   hyphens: auto;
 }
 
 /* Nummerierte Absätze */
 ol, ul {
-  margin: 0 0 16pt 0;
-  padding-left: 24pt;
+  margin: 0 0 10pt 0;
+  padding-left: 18pt;
 }
 
 ol li, ul li {
-  margin-bottom: 6pt;
-  line-height: 1.5;
+  margin-bottom: 4pt;
+  line-height: 1.3;
 }
 
 /* Starke Betonung */
@@ -90,13 +93,13 @@ hr {
 table {
   width: 100%;
   border-collapse: collapse;
-  margin: 16pt 0;
-  font-size: 10pt;
+  margin: 10pt 0;
+  font-size: 8pt;
 }
 
 th, td {
   border: 1px solid #e5e7eb;
-  padding: 8pt 12pt;
+  padding: 6pt 8pt;
   text-align: left;
 }
 
@@ -108,8 +111,8 @@ th {
 
 /* Signaturblock */
 .signature-block {
-  margin-top: 80pt;
-  padding-top: 24pt;
+  margin-top: 50pt;
+  padding-top: 16pt;
   border-top: 2px solid #e5e7eb;
 }
 
@@ -137,9 +140,9 @@ th {
 
 /* Datum und Ort */
 .date-place {
-  margin-top: 40pt;
-  margin-bottom: 24pt;
-  font-size: 10pt;
+  margin-top: 25pt;
+  margin-bottom: 16pt;
+  font-size: 8pt;
   color: #6b7280;
 }
 
@@ -147,15 +150,15 @@ th {
 .contract-details {
   background-color: #f8fafc;
   border: 1px solid #e5e7eb;
-  border-radius: 6pt;
-  padding: 16pt;
-  margin: 16pt 0;
+  border-radius: 4pt;
+  padding: 10pt;
+  margin: 10pt 0;
 }
 
 .contract-details h4 {
   margin-top: 0;
-  margin-bottom: 12pt;
-  font-size: 12pt;
+  margin-bottom: 8pt;
+  font-size: 10pt;
   font-weight: 600;
   color: #374151;
 }

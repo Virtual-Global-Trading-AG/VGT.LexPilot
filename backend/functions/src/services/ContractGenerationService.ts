@@ -1,6 +1,5 @@
 import OpenAI from 'openai';
-import * as puppeteer from 'puppeteer';
-import MarkdownIt from 'markdown-it';
+import markdownpdf from 'markdown-pdf';
 import * as path from 'path';
 import * as fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
@@ -363,7 +362,7 @@ Berücksichtige zwingend die relevanten Artikel aus dem Schweizer OR (Art. 319 f
 ⚠️ Wichtig:
 - Gib den Vertrag ausschließlich in **Markdown** zurück.
 - Markdown orientiert sich an der Vorlage
-- Brauche genau die Struktur der Vorlage
+- Brauche exakt die Struktur der Vorlage, keine zusätzlichen Abschnitte oder Erklärungen.
 - Überschriften = \`##\`
 - Unterüberschriften = \`###\`
 - Absätze normaler Text
@@ -376,7 +375,8 @@ Vertragsdaten:
 - Adresse des Arbeitnehmers: ${parameters['employeeAddress']}
 - Beginn: ${formattedStartDate}
 - Funktion: ${parameters['position']}
-- Monatslohn: ${parameters['salary'] / 12} CHF
+- Jahreslohn Brutto: ${parameters['salary']} CHF
+- Monatslohn Brutto: ${parameters['salary'] / 12} CHF // rundet auf ganze Franken
 - Arbeitspensum: ${parameters['workingHours'] || 100}%
 - Ferien: ${parameters['vacationDays'] || 25} Tage
 - Probezeit: ${parameters['probationPeriod'] || 3} Monate
@@ -391,81 +391,43 @@ Vertragsdaten:
    * Generate PDF from markdown content
    */
   public async generatePDF(markdownContent: string, contractTitle: string): Promise<Buffer> {
-    let browser: puppeteer.Browser | null = null;
+    return new Promise((resolve, reject) => {
+      try {
+        // Add title to markdown content if provided
+        /*const fullMarkdownContent = contractTitle
+          ? `# ${contractTitle}\n\n${markdownContent}`
+          : markdownContent;
+          */
 
-    try {
-      // Initialize markdown-it
-      const md = new MarkdownIt();
 
-      // Add title to markdown content if provided
-      const fullMarkdownContent = contractTitle 
-        ? `# ${contractTitle}\n\n${markdownContent}`
-        : markdownContent;
+        // Read CSS stylesheet
+        const cssPath = path.join(__dirname, '../../assets/pdf-styles.css');
+        const cssContent = fs.readFileSync(cssPath, 'utf8');
 
-      // Convert markdown to HTML
-      const htmlContent = md.render(fullMarkdownContent);
+        // Configure markdown-pdf options
+        const options = {
+          cssPath: cssPath,
+          paperFormat: 'A4' as const,
+          paperBorder: '1cm',
+          renderDelay: 1000
+        };
 
-      // Read CSS stylesheet
-      const cssPath = path.join(__dirname, '../../assets/pdf-styles.css');
-      const cssContent = fs.readFileSync(cssPath, 'utf8');
+        // Generate PDF from markdown
+        markdownpdf(options).from.string(markdownContent).to.buffer((err: Error | null, buffer: Buffer) => {
+          if (err) {
+            this.logger.error('Error in generatePDF method', err);
+            reject(err);
+          } else {
+            this.logger.info('PDF generated successfully using markdown-pdf');
+            resolve(buffer);
+          }
+        });
 
-      // Create complete HTML document
-      const fullHtml = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <style>
-    ${cssContent}
-  </style>
-</head>
-<body>
-  ${htmlContent}
-</body>
-</html>
-`;
-
-      // Launch puppeteer
-      browser = await puppeteer.launch({
-        headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
-      });
-
-      const page = await browser.newPage();
-
-      // Set content and generate PDF
-      await page.setContent(fullHtml, { waitUntil: 'networkidle0' });
-
-      const pdfUint8Array = await page.pdf({
-        format: 'A4',
-        margin: {
-          top: '2.5cm',
-          right: '2.5cm',
-          bottom: '2.5cm',
-          left: '2.5cm'
-        },
-        printBackground: true
-      });
-
-      await browser.close();
-      browser = null;
-
-      return Buffer.from(pdfUint8Array);
-
-    } catch (error) {
-      this.logger.error('Error in generatePDF method', error as Error);
-
-      // Ensure browser is closed in case of error
-      if (browser) {
-        try {
-          await browser.close();
-        } catch (closeError) {
-          this.logger.error('Error closing browser', closeError as Error);
-        }
+      } catch (error) {
+        this.logger.error('Error in generatePDF method', error as Error);
+        reject(error);
       }
-
-      throw error;
-    }
+    });
   }
 
   /**
