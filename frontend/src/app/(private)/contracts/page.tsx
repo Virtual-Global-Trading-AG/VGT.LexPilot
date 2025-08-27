@@ -537,30 +537,23 @@ function ContractsPageContent() {
         </div>
 
         {/* Filters and Search */}
-        <div className="flex items-center space-x-4">
-          <div className="flex-1">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/>
-              <Input
-                placeholder="Verträge durchsuchen..."
-                className="pl-9"
-              />
+        {false && (
+          <div className="flex items-center space-x-4">
+            <div className="flex-1">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/>
+                <Input
+                  placeholder="Verträge durchsuchen..."
+                  className="pl-9"
+                />
+              </div>
             </div>
+            <Button variant="outline">
+              <Filter className="mr-2 h-4 w-4"/>
+              Filter
+            </Button>
           </div>
-          <Button variant="outline">
-            <Filter className="mr-2 h-4 w-4"/>
-            Filter
-          </Button>
-          <Button 
-            onClick={() => window.location.href = '/generator'}
-            className="bg-green-600 hover:bg-green-700"
-          >
-            <Plus className="mr-2 h-4 w-4"/>
-            Vertrag generieren
-          </Button>
-        </div>
-
-
+        )}
         {/* Contracts Table */}
         <Card>
           <CardHeader>

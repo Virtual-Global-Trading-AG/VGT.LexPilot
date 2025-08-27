@@ -240,6 +240,9 @@ export class JobQueueService {
         case 'swiss-obligation-analysis':
           await this.processSwissObligationAnalysis(job);
           break;
+        case 'contract-generation':
+          await this.processContractGeneration(job);
+          break;
         default:
           throw new Error(`Unknown job type: ${job.type}`);
       }
@@ -345,6 +348,56 @@ export class JobQueueService {
   }
 
   /**
+   * Process contract generation job
+   */
+  private async processContractGeneration(job: Job): Promise<void> {
+    const { ContractGenerationService } = await import('./ContractGenerationService');
+    const { StorageService } = await import('./StorageService');
+
+    const storageService = new StorageService();
+    const contractGenerationService = new ContractGenerationService(
+      this.firestoreService,
+      storageService
+    );
+
+    const { contractType, parameters, userId } = job.data;
+
+    try {
+      // Progress callback to update job status
+      const progressCallback = async (progress: number, message: string) => {
+        await this.updateJobProgress(job.id, progress, message);
+      };
+
+      // Update progress: Starting contract generation
+      await progressCallback(10, 'Starte Vertragsgenerierung...');
+
+      // Update progress: Creating prompt
+      await progressCallback(20, 'Erstelle Prompt für ChatGPT...');
+
+      // Generate contract using the existing service
+      const result = await contractGenerationService.generateContract({
+        contractType,
+        parameters,
+        userId
+      });
+
+      // Update progress: Contract generated
+      await progressCallback(90, 'Vertrag erfolgreich generiert...');
+
+      // Complete job with result
+      await this.completeJob(job.id, {
+        downloadUrl: result.downloadUrl,
+        documentId: result.documentId,
+        contractType,
+        status: 'completed'
+      });
+
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
    * Send job completion notification to user
    */
   private async sendJobCompletionNotification(jobId: string, result: any): Promise<void> {
@@ -360,18 +413,47 @@ export class JobQueueService {
 
       const job = jobDoc.data() as Job;
 
-      // Create notification
+      // Create notification based on job type
+      let notificationType: string;
+      let title: string;
+      let message: string;
+      let data: any = { jobId };
+
+      switch (job.type) {
+        case 'swiss-obligation-analysis':
+          notificationType = 'analysis_completed';
+          title = 'Analyse abgeschlossen';
+          message = 'Die Schweizer Obligationenrecht-Analyse wurde erfolgreich abgeschlossen.';
+          data = {
+            ...data,
+            analysisId: result.analysisId,
+            documentId: result.documentId
+          };
+          break;
+        case 'contract-generation':
+          notificationType = 'contract_generated';
+          title = 'Vertrag generiert';
+          message = 'Die Vertragsgenerierung wurde erfolgreich abgeschlossen.';
+          data = {
+            ...data,
+            downloadUrl: result.downloadUrl,
+            documentId: result.documentId,
+            contractType: result.contractType
+          };
+          break;
+        default:
+          notificationType = 'job_completed';
+          title = 'Auftrag abgeschlossen';
+          message = 'Der Auftrag wurde erfolgreich abgeschlossen.';
+      }
+
       const notification = {
         id: uuidv4(),
         userId: job.userId,
-        type: 'analysis_completed',
-        title: 'Analyse abgeschlossen',
-        message: `Die Schweizer Obligationenrecht-Analyse wurde erfolgreich abgeschlossen.`,
-        data: {
-          jobId,
-          analysisId: result.analysisId,
-          documentId: result.documentId
-        },
+        type: notificationType,
+        title,
+        message,
+        data,
         read: false,
         createdAt: new Date()
       };
@@ -403,13 +485,34 @@ export class JobQueueService {
 
       const job = jobDoc.data() as Job;
 
-      // Create notification
+      // Create notification based on job type
+      let notificationType: string;
+      let title: string;
+      let message: string;
+
+      switch (job.type) {
+        case 'swiss-obligation-analysis':
+          notificationType = 'analysis_failed';
+          title = 'Analyse fehlgeschlagen';
+          message = `Die Schweizer Obligationenrecht-Analyse ist fehlgeschlagen: ${error}`;
+          break;
+        case 'contract-generation':
+          notificationType = 'contract_generation_failed';
+          title = 'Vertragsgenerierung fehlgeschlagen';
+          message = `Die Vertragsgenerierung ist fehlgeschlagen: ${error}`;
+          break;
+        default:
+          notificationType = 'job_failed';
+          title = 'Auftrag fehlgeschlagen';
+          message = `Der Auftrag ist fehlgeschlagen: ${error}`;
+      }
+
       const notification = {
         id: uuidv4(),
         userId: job.userId,
-        type: 'analysis_failed',
-        title: 'Analyse fehlgeschlagen',
-        message: `Die Schweizer Obligationenrecht-Analyse ist fehlgeschlagen: ${error}`,
+        type: notificationType,
+        title,
+        message,
         data: {
           jobId,
           error

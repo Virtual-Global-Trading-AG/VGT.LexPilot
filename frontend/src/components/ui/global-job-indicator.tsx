@@ -8,7 +8,7 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Clock, Loader2, FileText } from 'lucide-react';
+import { Clock, Loader2, FileText, PenTool } from 'lucide-react';
 
 export function GlobalJobIndicator() {
   const { activeJobs, hasActiveJobs } = useJobMonitor();
@@ -21,6 +21,8 @@ export function GlobalJobIndicator() {
     switch (type) {
       case 'swiss-obligation-analysis':
         return <FileText className="h-3 w-3" />;
+      case 'contract-generation':
+        return <PenTool className="h-3 w-3" />;
       default:
         return <Clock className="h-3 w-3" />;
     }
@@ -30,6 +32,8 @@ export function GlobalJobIndicator() {
     switch (type) {
       case 'swiss-obligation-analysis':
         return 'Obligationenrecht-Analyse';
+      case 'contract-generation':
+        return 'Vertragsgenerierung';
       default:
         return 'Analyse';
     }
@@ -46,6 +50,59 @@ export function GlobalJobIndicator() {
     return `${seconds}s`;
   };
 
+  // Helper functions for context-aware labels
+  const getContextLabel = () => {
+    const hasAnalysis = activeJobs.some(job => job.type === 'swiss-obligation-analysis');
+    const hasGeneration = activeJobs.some(job => job.type === 'contract-generation');
+
+    if (hasAnalysis && hasGeneration) {
+      return 'Auftrag';
+    } else if (hasGeneration) {
+      return 'Vertragsgenerierung';
+    } else {
+      return 'Analyse';
+    }
+  };
+
+  const getContextPluralLabel = () => {
+    const hasAnalysis = activeJobs.some(job => job.type === 'swiss-obligation-analysis');
+    const hasGeneration = activeJobs.some(job => job.type === 'contract-generation');
+
+    if (hasAnalysis && hasGeneration) {
+      return 'Aufträge';
+    } else if (hasGeneration) {
+      return 'Vertragsgenerierungen';
+    } else {
+      return 'Analysen';
+    }
+  };
+
+  const getDropdownTitle = () => {
+    const hasAnalysis = activeJobs.some(job => job.type === 'swiss-obligation-analysis');
+    const hasGeneration = activeJobs.some(job => job.type === 'contract-generation');
+
+    if (hasAnalysis && hasGeneration) {
+      return 'Laufende Aufträge';
+    } else if (hasGeneration) {
+      return 'Laufende Vertragsgenerierungen';
+    } else {
+      return 'Laufende Analysen';
+    }
+  };
+
+  const getFooterMessage = () => {
+    const hasAnalysis = activeJobs.some(job => job.type === 'swiss-obligation-analysis');
+    const hasGeneration = activeJobs.some(job => job.type === 'contract-generation');
+
+    if (hasAnalysis && hasGeneration) {
+      return 'Sie erhalten eine Benachrichtigung, wenn die Aufträge abgeschlossen sind.';
+    } else if (hasGeneration) {
+      return 'Sie erhalten eine Benachrichtigung, wenn die Vertragsgenerierungen abgeschlossen sind.';
+    } else {
+      return 'Sie erhalten eine Benachrichtigung, wenn die Analysen abgeschlossen sind.';
+    }
+  };
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -56,7 +113,7 @@ export function GlobalJobIndicator() {
         >
           <Loader2 className="h-3 w-3 mr-1 animate-spin" />
           <span className="text-xs font-medium">
-            {activeJobs.length} Analyse{activeJobs.length !== 1 ? 'n' : ''}
+            {activeJobs.length} {activeJobs.length === 1 ? getContextLabel() : getContextPluralLabel()}
           </span>
           <Badge 
             variant="secondary" 
@@ -69,7 +126,7 @@ export function GlobalJobIndicator() {
       <DropdownMenuContent className="w-80 p-3" align="end">
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <h4 className="font-medium text-sm">Laufende Analysen</h4>
+            <h4 className="font-medium text-sm">{getDropdownTitle()}</h4>
             <Badge variant="secondary" className="text-xs">
               {activeJobs.length} aktiv
             </Badge>
@@ -108,7 +165,7 @@ export function GlobalJobIndicator() {
           </div>
 
           <div className="text-xs text-gray-500 text-center pt-2 border-t">
-            Sie erhalten eine Benachrichtigung, wenn die Analysen abgeschlossen sind.
+            {getFooterMessage()}
           </div>
         </div>
       </DropdownMenuContent>

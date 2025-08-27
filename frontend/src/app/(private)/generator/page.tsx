@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/lib/hooks/use-toast';
 import { useContractGeneration } from '@/lib/hooks/useApi';
 import {
@@ -18,6 +19,8 @@ import {
   Zap,
   BookOpen,
   Download,
+  Trash2,
+  Eye,
 } from 'lucide-react';
 import React, { useState, useEffect } from 'react';
 
@@ -662,27 +665,23 @@ export default function GeneratorPage() {
                     <div className="border rounded-lg p-4 bg-green-50">
                       <p className="text-sm text-green-800">
                         Ihr {generatedContract.contractType} wurde erfolgreich erstellt und gespeichert. 
-                        Sie können das PDF jetzt herunterladen.
+                        Sie können das PDF öffnen
                       </p>
                     </div>
                     <div className="flex items-center space-x-2">
-                      <Button
-                        onClick={async () => {
-                          const success = await downloadContractPDFAPI(generatedContract.documentId);
-                          if (!success) {
-                            toast({
-                              variant: 'destructive',
-                              title: 'Download fehlgeschlagen',
-                              description: 'PDF konnte nicht heruntergeladen werden.'
-                            });
-                          }
-                        }}
-                        variant="outline"
+                      <a
+                        href={generatedContract.downloadUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex"
                       >
-                        <Download className="h-4 w-4 mr-2"/>
-                        PDF herunterladen
-                      </Button>
+                        <Button variant="outline">
+                          <Download className="h-4 w-4 mr-2"/>
+                          PDF öffnen
+                        </Button>
+                      </a>
                     </div>
+
                   </div>
                 )}
 

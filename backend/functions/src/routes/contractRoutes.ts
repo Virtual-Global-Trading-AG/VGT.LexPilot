@@ -13,7 +13,7 @@ router.use(authMiddleware);
 // Contract Types
 router.get('/types', contractGenerationController.getContractTypes.bind(contractGenerationController));
 
-// Contract Generation
+// Contract Generation (synchronous)
 router.post('/generate', 
   ValidationMiddleware.validate({
     body: Joi.object({
@@ -24,44 +24,24 @@ router.post('/generate',
   contractGenerationController.generateContract.bind(contractGenerationController)
 );
 
-// Get Contract Generation Result
-router.get('/:generationId',
+// Contract Generation (asynchronous with job queue)
+router.post('/generate-async', 
+  ValidationMiddleware.validate({
+    body: Joi.object({
+      contractType: Joi.string().required(),
+      parameters: Joi.object().required()
+    })
+  }),
+  contractGenerationController.generateContractAsync.bind(contractGenerationController)
+);
+
+// Get Contract Generation Job Status
+router.get('/jobs/:jobId',
   ValidationMiddleware.validate({
     params: Joi.object({
-      generationId: Joi.string().required()
+      jobId: Joi.string().required()
     })
   }),
-  contractGenerationController.getGenerationResult.bind(contractGenerationController)
+  contractGenerationController.getContractGenerationJobStatus.bind(contractGenerationController)
 );
-
-// Download Contract PDF
-router.get('/:generationId/pdf',
-  ValidationMiddleware.validate({
-    params: Joi.object({
-      generationId: Joi.string().required()
-    })
-  }),
-  contractGenerationController.downloadContractPDF.bind(contractGenerationController)
-);
-
-// List User's Contract Generations
-router.get('/',
-  ValidationMiddleware.validate({
-    query: Joi.object({
-      limit: Joi.number().integer().min(1).max(100).default(20)
-    })
-  }),
-  contractGenerationController.listUserGenerations.bind(contractGenerationController)
-);
-
-// Delete Contract Generation
-router.delete('/:generationId',
-  ValidationMiddleware.validate({
-    params: Joi.object({
-      generationId: Joi.string().required()
-    })
-  }),
-  contractGenerationController.deleteGeneration.bind(contractGenerationController)
-);
-
 export default router;

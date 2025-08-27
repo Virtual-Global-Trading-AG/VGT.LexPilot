@@ -1,14 +1,20 @@
+import { FirestoreService } from '@services/FirestoreService';
 import { Request, Response, NextFunction } from 'express';
 import { Logger } from '../utils/logger';
 import { BaseController } from './BaseController';
 import { ContractGenerationService, ContractGenerationRequest } from '../services/ContractGenerationService';
+import { JobQueueService } from '../services/JobQueueService';
 
 export class ContractGenerationController extends BaseController {
   private contractGenerationService: ContractGenerationService;
+  private jobQueueService: JobQueueService;
+  private fireStoreService: FirestoreService;
 
   constructor() {
     super();
     this.contractGenerationService = new ContractGenerationService();
+    this.fireStoreService = new FirestoreService();
+    this.jobQueueService = new JobQueueService(this.fireStoreService);
   }
 
   /**
@@ -72,185 +78,89 @@ export class ContractGenerationController extends BaseController {
   }
 
   /**
-   * Get contract generation result
+   * Generate a new contract asynchronously using job queue
    */
-  async getGenerationResult(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async generateContractAsync(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const userId = (req as any).user?.uid;
       if (!userId) {
         return this.sendError(res, 401, 'User not authenticated');
       }
 
-      const { generationId } = req.params;
+      const { contractType, parameters } = req.body;
 
-      if (!generationId) {
-        return this.sendError(res, 400, 'Generation ID is required');
+      if (!contractType || !parameters) {
+        return this.sendError(res, 400, 'Contract type and parameters are required');
       }
 
-      this.logger.info('Getting contract generation result', {
+      this.logger.info('Starting async contract generation', {
         userId,
-        generationId
+        contractType
       });
 
-      const result = await this.contractGenerationService.getGenerationResult(generationId, userId);
-
-      if (!result) {
-        return this.sendError(res, 404, 'Contract generation not found');
-      }
-
-      this.sendSuccess(res, {
-        result: {
-          id: result.id,
-          contractType: result.contractType,
-          parameters: result.parameters,
-          markdownContent: result.markdownContent,
-          status: result.status,
-          createdAt: result.createdAt,
-          error: result.error
+      // Create job for contract generation
+      const jobId = await this.jobQueueService.createJob(
+        'contract-generation',
+        userId,
+        {
+          contractType,
+          parameters,
+          userId
         }
-      });
-    } catch (error) {
-      this.logger.error('Error getting contract generation result', error as Error, {
-        userId: (req as any).user?.uid,
-        generationId: req.params.generationId
-      });
-      next(error);
-    }
-  }
-
-  /**
-   * Download contract as PDF
-   */
-  async downloadContractPDF(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const userId = (req as any).user?.uid;
-      if (!userId) {
-        return this.sendError(res, 401, 'User not authenticated');
-      }
-
-      const { generationId } = req.params;
-
-      if (!generationId) {
-        return this.sendError(res, 400, 'Generation ID is required');
-      }
-
-      this.logger.info('Downloading contract PDF', {
-        userId,
-        generationId
-      });
-
-      const result = await this.contractGenerationService.getGenerationResult(generationId, userId);
-
-      if (!result) {
-        return this.sendError(res, 404, 'Contract generation not found');
-      }
-
-      if (result.status !== 'completed') {
-        return this.sendError(res, 400, 'Contract generation not completed');
-      }
-
-      // Regenerate PDF if not available (since we don't store it in Firestore)
-      const contractTypes = this.contractGenerationService.getContractTypes();
-      const contractType = contractTypes.find(ct => ct.id === result.contractType);
-
-      if (!contractType) {
-        return this.sendError(res, 404, 'Contract type not found');
-      }
-
-      // Generate PDF from the stored markdown content
-      const pdfBuffer = await (this.contractGenerationService as any).generatePDF(
-        result.markdownContent, 
-        contractType.name
       );
 
-      // Set headers for PDF download
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename="contract-${generationId}.pdf"`);
-      res.setHeader('Content-Length', pdfBuffer.length);
-
-      res.send(pdfBuffer);
-    } catch (error) {
-      this.logger.error('Error downloading contract PDF', error as Error, {
-        userId: (req as any).user?.uid,
-        generationId: req.params.generationId
+      this.sendSuccess(res, {
+        jobId,
+        status: 'queued',
+        message: 'Contract generation job created successfully'
       });
+
+    } catch (error) {
+      this.logger.error('Error in async contract generation endpoint', error as Error);
       next(error);
     }
   }
 
   /**
-   * List user's contract generations
+   * Get job status for contract generation
    */
-  async listUserGenerations(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async getContractGenerationJobStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const userId = (req as any).user?.uid;
       if (!userId) {
         return this.sendError(res, 401, 'User not authenticated');
       }
 
-      const limit = parseInt(req.query.limit as string) || 20;
+      const { jobId } = req.params;
 
-      this.logger.info('Listing user contract generations', {
-        userId,
-        limit
-      });
-
-      const results = await this.contractGenerationService.listUserGenerations(userId, limit);
-
-      // Remove sensitive data and large content for list view
-      const sanitizedResults = results.map(result => ({
-        id: result.id,
-        contractType: result.contractType,
-        parameters: result.parameters,
-        status: result.status,
-        createdAt: result.createdAt,
-        error: result.error
-      }));
-
-      this.sendSuccess(res, {
-        results: sanitizedResults,
-        total: sanitizedResults.length
-      });
-    } catch (error) {
-      this.logger.error('Error listing user contract generations', error as Error, {
-        userId: (req as any).user?.uid,
-        limit: parseInt(req.query.limit as string) || 20
-      });
-      next(error);
-    }
-  }
-
-  /**
-   * Delete contract generation
-   */
-  async deleteGeneration(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const userId = (req as any).user?.uid;
-      if (!userId) {
-        return this.sendError(res, 401, 'User not authenticated');
+      if (!jobId) {
+        return this.sendError(res, 400, 'Job ID is required');
       }
 
-      const { generationId } = req.params;
+      this.logger.info('Getting contract generation job status', {
+        userId,
+        jobId
+      });
 
-      if (!generationId) {
-        return this.sendError(res, 400, 'Generation ID is required');
+      const job = await this.jobQueueService.getJob(jobId, userId);
+
+      if (!job) {
+        return this.sendError(res, 404, 'Job not found');
       }
 
-      this.logger.info('Deleting contract generation', {
-        userId,
-        generationId
-      });
-
-      await this.contractGenerationService.deleteGeneration(generationId, userId);
-
       this.sendSuccess(res, {
-        message: 'Contract generation deleted successfully'
+        jobId: job.id,
+        status: job.status,
+        progress: job.progress,
+        progressMessage: job.progressMessage,
+        result: job.result,
+        error: job.error,
+        createdAt: job.createdAt,
+        completedAt: job.completedAt
       });
+
     } catch (error) {
-      this.logger.error('Error deleting contract generation', error as Error, {
-        userId: (req as any).user?.uid,
-        generationId: req.params.generationId
-      });
+      this.logger.error('Error getting contract generation job status', error as Error);
       next(error);
     }
   }

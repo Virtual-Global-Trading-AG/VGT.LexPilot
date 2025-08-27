@@ -314,7 +314,7 @@ export class ContractGenerationService {
       await this.firestoreService.createDocument(request.userId, documentId, {
         fileName,
         size: pdfBuffer.length,
-        contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        contentType: asWord ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : 'application/pdf',
         uploadedAt: new Date().toISOString(),
         status: 'uploaded',
         category: 'contract',
@@ -546,129 +546,6 @@ Vertragsdaten:
         }
       }
 
-      throw error;
-    }
-  }
-
-
-  /**
-   * Save generation result to Firestore
-   */
-  private async saveGenerationResult(result: ContractGenerationResult): Promise<void> {
-    try {
-      const docRef = this.firestoreService.db
-      .collection('contractGenerations')
-      .doc(result.id);
-
-      // Don't save the PDF buffer to Firestore (too large)
-      const { pdfBuffer, ...resultWithoutBuffer } = result;
-
-      await docRef.set(resultWithoutBuffer);
-
-      this.logger.info('Contract generation result saved to Firestore', {
-        generationId: result.id,
-        userId: result.userId
-      });
-    } catch (error) {
-      this.logger.error('Error saving contract generation result', error as Error, {
-        generationId: result.id,
-        userId: result.userId
-      });
-      throw error;
-    }
-  }
-
-  /**
-   * Get contract generation result by ID
-   */
-  async getGenerationResult(generationId: string, userId: string): Promise<ContractGenerationResult | null> {
-    try {
-      const docRef = this.firestoreService.db
-      .collection('contractGenerations')
-      .doc(generationId);
-
-      const doc = await docRef.get();
-
-      if (!doc.exists) {
-        return null;
-      }
-
-      const data = doc.data() as ContractGenerationResult;
-
-      // Verify user access
-      if (data.userId !== userId) {
-        throw new Error('Unauthorized access to contract generation result');
-      }
-
-      return data;
-    } catch (error) {
-      this.logger.error('Error retrieving contract generation result', error as Error, {
-        generationId,
-        userId
-      });
-      throw error;
-    }
-  }
-
-  /**
-   * List user's contract generations
-   */
-  async listUserGenerations(userId: string, limit: number = 20): Promise<ContractGenerationResult[]> {
-    try {
-      const querySnapshot = await this.firestoreService.db
-      .collection('contractGenerations')
-      .where('userId', '==', userId)
-      .orderBy('createdAt', 'desc')
-      .limit(limit)
-      .get();
-
-      const results: ContractGenerationResult[] = [];
-      querySnapshot.forEach(doc => {
-        results.push(doc.data() as ContractGenerationResult);
-      });
-
-      return results;
-    } catch (error) {
-      this.logger.error('Error listing user contract generations', error as Error, {
-        userId
-      });
-      throw error;
-    }
-  }
-
-  /**
-   * Delete contract generation
-   */
-  async deleteGeneration(generationId: string, userId: string): Promise<void> {
-    try {
-      const docRef = this.firestoreService.db
-      .collection('contractGenerations')
-      .doc(generationId);
-
-      const doc = await docRef.get();
-
-      if (!doc.exists) {
-        throw new Error('Contract generation not found');
-      }
-
-      const data = doc.data() as ContractGenerationResult;
-
-      // Verify user access
-      if (data.userId !== userId) {
-        throw new Error('Unauthorized access to contract generation');
-      }
-
-      await docRef.delete();
-
-      this.logger.info('Contract generation deleted', {
-        generationId,
-        userId
-      });
-    } catch (error) {
-      this.logger.error('Error deleting contract generation', error as Error, {
-        generationId,
-        userId
-      });
       throw error;
     }
   }

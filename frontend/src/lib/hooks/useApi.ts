@@ -601,22 +601,69 @@ export function useContractGeneration() {
     setProgressMessage('Starte Vertragsgenerierung...');
 
     try {
-      const response = await apiClient.post('/contracts/generate', request);
+      // Create job for contract generation
+      const jobResponse = await apiClient.post('/contracts/generate-async', request);
 
-      if (!response.success || !response.data) {
-        throw new Error(response.error || 'Failed to generate contract');
+      if (!jobResponse.success || !jobResponse.data) {
+        throw new Error(jobResponse.error || 'Failed to create contract generation job');
       }
 
-      setProgress(100);
-      setProgressMessage('Vertragsgenerierung abgeschlossen!');
+      const { jobId } = jobResponse.data;
+      setProgressMessage('Auftrag erstellt, verarbeite...');
 
-      return response.data as { downloadUrl: string; documentId: string; contractType: string; status: string };
+      // Poll for job status
+      const pollInterval = 2000; // Poll every 2 seconds
+      const maxPollingTime = 300000; // Max 5 minutes
+      const startTime = Date.now();
+
+      return new Promise((resolve, reject) => {
+        const pollJobStatus = async () => {
+          try {
+            if (Date.now() - startTime > maxPollingTime) {
+              reject(new Error('Contract generation timed out'));
+              return;
+            }
+
+            const statusResponse = await apiClient.get(`/contracts/jobs/${jobId}`);
+
+            if (!statusResponse.success || !statusResponse.data) {
+              reject(new Error(statusResponse.error || 'Failed to get job status'));
+              return;
+            }
+
+            const jobData = statusResponse.data;
+            setProgress(jobData.progress || 0);
+            setProgressMessage(jobData.progressMessage || 'Verarbeite...');
+
+            if (jobData.status === 'completed') {
+              setProgress(100);
+              setProgressMessage('Vertragsgenerierung abgeschlossen!');
+              resolve({
+                downloadUrl: jobData.result.downloadUrl,
+                documentId: jobData.result.documentId,
+                contractType: jobData.result.contractType,
+                status: 'completed'
+              });
+              setLoading(false);
+            } else if (jobData.status === 'failed') {
+              reject(new Error(jobData.error || 'Contract generation failed'));
+            } else {
+              // Job is still processing, continue polling
+              setTimeout(pollJobStatus, pollInterval);
+            }
+          } catch (err) {
+            reject(err);
+          }
+        };
+
+        // Start polling
+        pollJobStatus();
+      });
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       setError(errorMessage);
-      return null;
-    } finally {
       setLoading(false);
+      return null;
     }
   }, [isAuthenticated]);
 
@@ -644,9 +691,53 @@ export function useContractGeneration() {
     }
   }, [isAuthenticated]);
 
+  const getGeneratedContracts = useCallback(async (limit: number = 20): Promise<any[] | null> => {
+    if (!isAuthenticated) {
+      setError('Not authenticated');
+      return null;
+    }
+
+    try {
+      const response = await apiClient.get(`/contracts?limit=${limit}`);
+
+      if (!response.success || !response.data) {
+        setError(response.error || 'Failed to fetch generated contracts');
+        return null;
+      }
+
+      return response.data.results || [];
+    } catch (err) {
+      setError('Network error while fetching contracts');
+      return null;
+    }
+  }, [isAuthenticated]);
+
+  const deleteGeneratedContract = useCallback(async (generationId: string): Promise<boolean> => {
+    if (!isAuthenticated) {
+      setError('Not authenticated');
+      return false;
+    }
+
+    try {
+      const response = await apiClient.delete(`/contracts/${generationId}`);
+
+      if (!response.success) {
+        setError(response.error || 'Failed to delete contract');
+        return false;
+      }
+
+      return true;
+    } catch (err) {
+      setError('Network error while deleting contract');
+      return false;
+    }
+  }, [isAuthenticated]);
+
   return {
     generateContract,
     downloadContractPDF,
+    getGeneratedContracts,
+    deleteGeneratedContract,
     loading,
     error,
     progress,
