@@ -1,11 +1,11 @@
+import HTMLtoDOCX from '@turbodocx/html-to-docx';
 import OpenAI from 'openai';
-import markdownpdf from 'markdown-pdf';
-import * as path from 'path';
-import * as fs from 'fs';
+import * as puppeteer from 'puppeteer';
 import { v4 as uuidv4 } from 'uuid';
 import { Logger } from '../utils/logger';
 import { FirestoreService } from './FirestoreService';
 import { StorageService } from './StorageService';
+
 
 // Contract generation interfaces
 export interface ContractGenerationRequest {
@@ -245,6 +245,8 @@ export class ContractGenerationService {
     request: ContractGenerationRequest
   ): Promise<{ downloadUrl: string; documentId: string }> {
     const documentId = uuidv4();
+    // for now fix false, later allow user to choose
+    const asWord = false;
 
     this.logger.info('Starting contract generation', {
       documentId,
@@ -265,11 +267,11 @@ export class ContractGenerationService {
       const prompt = this.createContractPrompt(request.parameters);
 
       const response = await this.openai.responses.create({
-        model: "gpt-5-mini-2025-08-07",
+        model: 'gpt-5-mini-2025-08-07',
         input: prompt,
         tools: [
           {
-            type: "file_search",
+            type: 'file_search',
             vector_store_ids: ['vs_68adafe6de688191b7728412c74f57b1', 'vs_68a726b561888191ab1eeeb15e5c34e8']
           },
         ],
@@ -277,17 +279,17 @@ export class ContractGenerationService {
 
       const markdownContent = response.output_text;
 
-      this.logger.info('Contract generation completed successfully', {markdownContent})
+      this.logger.info('Contract generation completed successfully', { markdownContent })
 
       if (!markdownContent) {
         throw new Error('Keine Antwort von ChatGPT erhalten');
       }
 
       // Generate PDF from markdown
-      const pdfBuffer = await this.generatePDF(markdownContent, contractType.name);
+      const pdfBuffer = await this.generatePDF(markdownContent, request.parameters, asWord);
 
       // Create filename for the PDF
-      const fileName = `${contractType.name.replace(/[^a-zA-Z0-9]/g, '_')}_${documentId}.pdf`;
+      const fileName = `${contractType.name.replace(/[^a-zA-Z0-9]/g, '_')}_${documentId}.${asWord ? 'docx' : 'pdf'}`;
 
       // Save PDF to Firebase Storage at /users/userId/documents/generated/documentId
       const base64Content = pdfBuffer.toString('base64');
@@ -296,15 +298,15 @@ export class ContractGenerationService {
       await this.storageService.uploadDocumentDirect(
         `generated/${documentId}`,
         fileName,
-        'application/pdf',
+        asWord ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : 'application/pdf',
         base64Content,
         request.userId
       );
 
       // Get download URL
       const downloadUrl = await this.storageService.getDocumentDownloadUrl(
-        request.userId, 
-        `generated/${documentId}`, 
+        request.userId,
+        `generated/${documentId}`,
         fileName
       );
 
@@ -312,7 +314,7 @@ export class ContractGenerationService {
       await this.firestoreService.createDocument(request.userId, documentId, {
         fileName,
         size: pdfBuffer.length,
-        contentType: 'application/pdf',
+        contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         uploadedAt: new Date().toISOString(),
         status: 'uploaded',
         category: 'contract',
@@ -356,17 +358,90 @@ export class ContractGenerationService {
       }
     }
 
-    let prompt = `Erstelle einen Arbeitsvertrag basierend auf der Vertragsvorlage.
-Berücksichtige zwingend die relevanten Artikel aus dem Schweizer OR (Art. 319 ff.).
+    let prompt = `Erstelle einen Arbeitsvertrag nach der angehängten Vertragsvorlage.  
+Berücksichtige die relevanten Artikel der angehängten Schweizer OR (insbesondere Art. 319 ff. OR).
 
-⚠️ Wichtig:
-- Gib den Vertrag ausschließlich in **Markdown** zurück.
-- Markdown orientiert sich an der Vorlage
-- Brauche exakt die Struktur der Vorlage, keine zusätzlichen Abschnitte oder Erklärungen.
-- Überschriften = \`##\`
-- Unterüberschriften = \`###\`
-- Absätze normaler Text
-- Kein zusätzlicher Text, keine Kommentare, nur den Vertrag.
+Gib das Ergebnis als vollständiges HTML-Dokument zurück:
+- Verwende <!DOCTYPE html>, <html>, <head>, <meta charset="UTF-8">, <style>, <body>.
+- Nutze ein modernes, aber seriöses, SCHLICHTES Layout (keine farbigen Hintergründe, keine Boxen, keine Schatten).
+- Kein Markdown, nur valides HTML.
+- Verwende ausschließlich die Abschnitte der Vorlage, KEINE zusätzlichen Abschnitte.
+- Abschnitte nummerieren
+- Struktur: Jeder Abschnitt ist ein <section class="section"> mit <h2> und den zugehörigen Inhalten (Absätze, Listen, dl/dt/dd).
+- Abschnitte sollen NICHT über Seiten hinweg getrennt werden. Wenn ein Abschnitt länger als eine Seite ist, soll zumindest die Überschrift mit dem ersten Absatz zusammenbleiben.
+- Verwende folgendes CSS im <style>-Block (nicht ändern):
+
+body {
+  font-family: 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  line-height: 1.7;
+  margin: 35mm 20mm;
+  color: #222;
+  background: none;
+}
+
+h1 {
+  font-size: 1.8em;
+  font-weight: 600;
+  letter-spacing: -0.5px;
+  margin: 0 0 15mm 0;
+  text-align: center;
+}
+
+h2 {
+  font-size: 1.2em;
+  font-weight: 600;
+  margin: 0 0 5mm 0;
+  border-bottom: 0.3mm solid #aaa;
+  padding-bottom: 2mm;
+  page-break-after: avoid;
+  break-after: avoid;
+}
+
+.section {
+  margin: 15mm 0;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+p, li, dd {
+  margin: 0 0 5mm 0;
+  font-size: 0.95em;
+}
+
+dl { margin: 0; }
+dt { font-weight: 600; margin-top: 4mm; }
+dd { margin-left: 0; }
+
+.signature-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10mm;
+  margin-top: 25mm;
+}
+
+.signature {
+  width: 45%;
+  text-align: center;
+  border-top: 0.2mm solid #444;
+  padding-top: 4mm;
+  font-size: 0.9em;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+@page {
+  size: A4;
+  margin: 20mm;
+}
+
+@media print {
+  body { margin: 0; }
+  * { background: none !important; box-shadow: none !important; }
+  h2 { page-break-after: avoid; }
+  .section { page-break-inside: avoid; }
+}
+
+Achte auf juristisch korrekte Formulierungen gemäß OR und keine Platzhaltertexte. Nimm genau die Angaben aus den Vertragsdaten unten. Verwende keine anderen Daten.
 
 Vertragsdaten:
 - Arbeitgeber: ${parameters['employerName']}
@@ -376,12 +451,10 @@ Vertragsdaten:
 - Beginn: ${formattedStartDate}
 - Funktion: ${parameters['position']}
 - Jahreslohn Brutto: ${parameters['salary']} CHF
-- Monatslohn Brutto: ${parameters['salary'] / 12} CHF // rundet auf ganze Franken
+- Monatslohn Brutto: ${Math.round(parameters['salary'] / 12)} CHF
 - Arbeitspensum: ${parameters['workingHours'] || 100}%
 - Ferien: ${parameters['vacationDays'] || 25} Tage
-- Probezeit: ${parameters['probationPeriod'] || 3} Monate
-
- Gib den Vertrag in Markdown-Struktur zurück (Überschriften = ##, Unterpunkte = -, Absätze klar getrennt)`;
+- Probezeit: ${parameters['probationPeriod'] || 3} Monate`;
 
     return prompt;
   }
@@ -390,45 +463,93 @@ Vertragsdaten:
   /**
    * Generate PDF from markdown content
    */
-  public async generatePDF(markdownContent: string, contractTitle: string): Promise<Buffer> {
-    return new Promise((resolve, reject) => {
-      try {
-        // Add title to markdown content if provided
-        /*const fullMarkdownContent = contractTitle
-          ? `# ${contractTitle}\n\n${markdownContent}`
-          : markdownContent;
-          */
+  public async generatePDF(content: string, parameters: Record<string, any>, asWord: boolean = false): Promise<Buffer> {
+    let browser: puppeteer.Browser | null = null;
 
+    try {
 
-        // Read CSS stylesheet
-        const cssPath = path.join(__dirname, '../../assets/pdf-styles.css');
-        const cssContent = fs.readFileSync(cssPath, 'utf8');
+      if (asWord) {
+        this.logger.info('Generating Word document from HTML content');
 
-        // Configure markdown-pdf options
-        const options = {
-          cssPath: cssPath,
-          paperFormat: 'A4' as const,
-          paperBorder: '1cm',
-          renderDelay: 1000
-        };
+        // @turbodocx/html-to-docx gibt einen ArrayBuffer zurück
+        const docxArrayBuffer: ArrayBuffer = await HTMLtoDOCX(content, null, {
+          table: { row: { cantSplit: true } },
+          footer: true,
+          pageNumber: true,
+        }) as ArrayBuffer;
 
-        // Generate PDF from markdown
-        markdownpdf(options).from.string(markdownContent).to.buffer((err: Error | null, buffer: Buffer) => {
-          if (err) {
-            this.logger.error('Error in generatePDF method', err);
-            reject(err);
-          } else {
-            this.logger.info('PDF generated successfully using markdown-pdf');
-            resolve(buffer);
-          }
+        // ArrayBuffer zu Buffer konvertieren
+        const docxBuffer = Buffer.from(docxArrayBuffer);
+
+        this.logger.info('Word document generated successfully', {
+          bufferSize: docxBuffer.length
         });
 
-      } catch (error) {
-        this.logger.error('Error in generatePDF method', error as Error);
-        reject(error);
+        return docxBuffer;
+
+      } else {
+        // Launch puppeteer
+        browser = await puppeteer.launch({
+          headless: true,
+          args: ['--no-sandbox', '--disable-setuid-sandbox']
+        });
+
+        const page = await browser.newPage();
+
+        // Set content and generate PDF
+        await page.setContent(content, { waitUntil: 'networkidle0' });
+
+        await page.emulateMediaType('print');
+
+        const pdfUint8Array = await page.pdf({
+          format: 'A4',
+          printBackground: false,
+          preferCSSPageSize: true,
+          displayHeaderFooter: true,
+          footerTemplate: `
+            <div style="width: 100%; font-size: 9px; color: #444; display: flex; justify-content: space-between;  padding: 0 10mm;">
+              <div style="display: flex; gap: 15px;">
+                <div>
+                  ${parameters['employerName']}<br>
+                  ${parameters['employerAddress']}
+                </div>
+                <div>
+                  ${parameters['employerPhone'] ? parameters['employerPhone'] : ''}
+                  ${parameters['employerWebsite'] ? `${parameters['employerPhone'] ? '<br>' : ''}${parameters['employerWebsite']}` : ''}
+                </div>
+              </div>
+              <div>
+                <span class="pageNumber"></span>
+              </div>
+            </div>
+          `,
+          headerTemplate: `<div></div>`, // leer, wenn kein Header gewünscht
+          margin: { top: '0mm', right: '0mm', bottom: '0mm', left: '0mm' }
+        });
+
+        await browser.close();
+        browser = null;
+
+        return Buffer.from(pdfUint8Array);
       }
-    });
+
+
+    } catch (error) {
+      this.logger.error('Error in generatePDF method', error as Error);
+
+      // Ensure browser is closed in case of error
+      if (browser) {
+        try {
+          await browser.close();
+        } catch (closeError) {
+          this.logger.error('Error closing browser', closeError as Error);
+        }
+      }
+
+      throw error;
+    }
   }
+
 
   /**
    * Save generation result to Firestore
@@ -436,8 +557,8 @@ Vertragsdaten:
   private async saveGenerationResult(result: ContractGenerationResult): Promise<void> {
     try {
       const docRef = this.firestoreService.db
-        .collection('contractGenerations')
-        .doc(result.id);
+      .collection('contractGenerations')
+      .doc(result.id);
 
       // Don't save the PDF buffer to Firestore (too large)
       const { pdfBuffer, ...resultWithoutBuffer } = result;
@@ -463,8 +584,8 @@ Vertragsdaten:
   async getGenerationResult(generationId: string, userId: string): Promise<ContractGenerationResult | null> {
     try {
       const docRef = this.firestoreService.db
-        .collection('contractGenerations')
-        .doc(generationId);
+      .collection('contractGenerations')
+      .doc(generationId);
 
       const doc = await docRef.get();
 
@@ -495,11 +616,11 @@ Vertragsdaten:
   async listUserGenerations(userId: string, limit: number = 20): Promise<ContractGenerationResult[]> {
     try {
       const querySnapshot = await this.firestoreService.db
-        .collection('contractGenerations')
-        .where('userId', '==', userId)
-        .orderBy('createdAt', 'desc')
-        .limit(limit)
-        .get();
+      .collection('contractGenerations')
+      .where('userId', '==', userId)
+      .orderBy('createdAt', 'desc')
+      .limit(limit)
+      .get();
 
       const results: ContractGenerationResult[] = [];
       querySnapshot.forEach(doc => {
@@ -521,8 +642,8 @@ Vertragsdaten:
   async deleteGeneration(generationId: string, userId: string): Promise<void> {
     try {
       const docRef = this.firestoreService.db
-        .collection('contractGenerations')
-        .doc(generationId);
+      .collection('contractGenerations')
+      .doc(generationId);
 
       const doc = await docRef.get();
 

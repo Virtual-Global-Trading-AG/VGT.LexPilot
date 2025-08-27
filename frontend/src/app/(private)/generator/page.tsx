@@ -75,6 +75,8 @@ export default function GeneratorPage() {
     employeeName: '',
     employerName: '',
     employerAddress: '',
+    employerPhone: '',
+    employerWebsite: '',
     employeeAddress: '',
     position: '',
     salary: '',
@@ -118,6 +120,8 @@ export default function GeneratorPage() {
       employeeName: '',
       employerName: '',
       employerAddress: '',
+      employerPhone: '',
+      employerWebsite: '',
       employeeAddress: '',
       position: '',
       salary: '',
@@ -151,6 +155,8 @@ export default function GeneratorPage() {
         employeeName: formData.employeeName,
         employerName: formData.employerName,
         employerAddress: formData.employerAddress,
+        employerPhone: formData.employerPhone,
+        employerWebsite: formData.employerWebsite,
         employeeAddress: formData.employeeAddress,
         position: formData.position,
         salary: formData.salary,
@@ -424,6 +430,26 @@ export default function GeneratorPage() {
                             placeholder="Vollständige Adresse des Arbeitnehmers"
                             value={formData.employeeAddress}
                             onChange={(e) => handleInputChange('employeeAddress', e.target.value)}
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label htmlFor="employerPhone">Telefonnummer des Arbeitgebers</Label>
+                          <Input
+                            id="employerPhone"
+                            placeholder="z.B. +41 44 123 45 67"
+                            value={formData.employerPhone}
+                            onChange={(e) => handleInputChange('employerPhone', e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="employerWebsite">Website des Arbeitgebers</Label>
+                          <Input
+                            id="employerWebsite"
+                            placeholder="z.B. https://www.beispiel.ch"
+                            value={formData.employerWebsite}
+                            onChange={(e) => handleInputChange('employerWebsite', e.target.value)}
                           />
                         </div>
                       </div>
