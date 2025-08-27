@@ -23,28 +23,30 @@ import React, { useState, useEffect } from 'react';
 
 const contractTemplates = [
   {
-    id: 'nda',
-    title: 'Geheimhaltungsvereinbarung (NDA)',
-    description: 'Standardvorlage für Geheimhaltungsvereinbarungen',
-    category: 'Geschäft',
-    icon: Shield,
-    selected: true,
-  },
-  {
     id: 'employment',
     title: 'Arbeitsvertrag',
     description: 'Standardvorlage für Arbeitsverträge',
     category: 'Personal',
     icon: Briefcase,
+    selected: true,
+  },
+  {
+    id: 'nda',
+    title: 'Geheimhaltungsvereinbarung (NDA)',
+    description: 'Standardvorlage für Geheimhaltungsvereinbarungen (Comming Soon)',
+    category: 'Geschäft',
+    icon: Shield,
     selected: false,
+    disabled: true,
   },
   {
     id: 'terms',
     title: 'Allgemeine Geschäftsbedingungen',
-    description: 'AGB-Vorlage für Online-Shops und Dienstleister',
+    description: 'AGB-Vorlage für Online-Shops und Dienstleister (Comming Soon)',
     category: 'E-Commerce',
     icon: BookOpen,
     selected: false,
+    disabled: true,
   },
 ];
 
@@ -61,7 +63,7 @@ export default function GeneratorPage() {
   } = useContractGeneration();
 
   // State for template selection
-  const [selectedTemplate, setSelectedTemplate] = useState('nda');
+  const [selectedTemplate, setSelectedTemplate] = useState('employment');
 
   // State for form fields
   const [formData, setFormData] = useState<Record<string, any>>({
@@ -107,6 +109,12 @@ export default function GeneratorPage() {
 
   // Handle template selection
   const handleTemplateSelect = (templateId: string) => {
+    // Check if template is disabled
+    const template = contractTemplates.find(t => t.id === templateId);
+    if (template?.disabled) {
+      return; // Don't allow selection of disabled templates
+    }
+
     setSelectedTemplate(templateId);
     // Reset form data when template changes - keep default values
     setFormData({
@@ -272,26 +280,32 @@ export default function GeneratorPage() {
               <CardContent className="space-y-4">
                 {updatedContractTemplates.map((template) => {
                   const Icon = template.icon;
+                  const isDisabled = template.disabled;
                   return (
                     <div
                       key={template.id}
-                      onClick={() => handleTemplateSelect(template.id)}
-                      className={`cursor-pointer rounded-lg border-2 p-4 transition-all hover:border-primary ${
-                        template.selected
-                          ? 'border-primary bg-primary/5'
-                          : 'border-border'
+                      onClick={() => !isDisabled && handleTemplateSelect(template.id)}
+                      className={`rounded-lg border-2 p-4 transition-all ${
+                        isDisabled
+                          ? 'cursor-not-allowed opacity-50 border-gray-200 bg-gray-50'
+                          : `cursor-pointer hover:border-primary ${
+                              template.selected
+                                ? 'border-primary bg-primary/5'
+                                : 'border-border'
+                            }`
                       }`}
                     >
                       <div className="flex items-start space-x-3">
-                        <Icon className="h-6 w-6 text-primary shrink-0" />
+                        <Icon className={`h-6 w-6 shrink-0 ${isDisabled ? 'text-gray-400' : 'text-primary'}`} />
                         <div className="flex-1">
-                          <h3 className="font-medium text-foreground">
+                          <h3 className={`font-medium ${isDisabled ? 'text-gray-500' : 'text-foreground'}`}>
                             {template.title}
+                            {isDisabled && <span className="ml-2 text-xs">(Momentan deaktiviert)</span>}
                           </h3>
-                          <p className="text-sm text-muted-foreground mt-1">
+                          <p className={`text-sm mt-1 ${isDisabled ? 'text-gray-400' : 'text-muted-foreground'}`}>
                             {template.description}
                           </p>
-                          <Badge variant="secondary" className="mt-2 text-xs">
+                          <Badge variant={isDisabled ? "outline" : "secondary"} className="mt-2 text-xs">
                             {template.category}
                           </Badge>
                         </div>
@@ -682,9 +696,6 @@ export default function GeneratorPage() {
                   >
                     <Zap className="mr-2 h-4 w-4" />
                     {isGenerating ? 'Generiert...' : 'Vertrag generieren'}
-                  </Button>
-                  <Button variant="outline" size="lg">
-                    Als Vorlage speichern
                   </Button>
                 </div>
               </CardContent>
