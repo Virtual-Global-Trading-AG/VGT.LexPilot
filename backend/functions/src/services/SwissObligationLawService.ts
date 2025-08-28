@@ -80,6 +80,7 @@ export interface SwissObligationAnalysisResult {
   };
   createdAt: Date;
   completedAt?: Date;
+  lawyer_status?: 'UNCHECKED' | 'CHECK_PENDING' | 'APPROVED' | 'DECLINE';
 }
 
 export class SwissObligationLawService {
@@ -492,7 +493,8 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
         sections: compactSections,
         overallCompliance: result.overallCompliance,
         createdAt: result.createdAt.toISOString(),
-        completedAt: result.completedAt?.toISOString()
+        completedAt: result.completedAt?.toISOString(),
+        lawyer_status: 'UNCHECKED' as const
       };
 
       // Prepare batch operations
@@ -558,7 +560,8 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
           ...mainResult,
           sections: fallbackSections,
           createdAt: new Date(mainResult.createdAt),
-          completedAt: mainResult.completedAt ? new Date(mainResult.completedAt) : undefined
+          completedAt: mainResult.completedAt ? new Date(mainResult.completedAt) : undefined,
+          lawyer_status: mainResult.lawyer_status || 'UNCHECKED'
         } as SwissObligationAnalysisResult;
       }
 
@@ -588,7 +591,8 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
         ...mainResult,
         sections: fullSections,
         createdAt: new Date(mainResult.createdAt),
-        completedAt: mainResult.completedAt ? new Date(mainResult.completedAt) : undefined
+        completedAt: mainResult.completedAt ? new Date(mainResult.completedAt) : undefined,
+        lawyer_status: mainResult.lawyer_status || 'UNCHECKED'
       } as SwissObligationAnalysisResult;
     } catch (error) {
       this.logger.error('Error getting Swiss obligation analysis result', error as Error, {
@@ -683,7 +687,8 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
           sections: fullSections,
           overallCompliance: data.overallCompliance,
           createdAt: new Date(data.createdAt),
-          completedAt: data.completedAt ? new Date(data.completedAt) : undefined
+          completedAt: data.completedAt ? new Date(data.completedAt) : undefined,
+          lawyer_status: data.lawyer_status || 'UNCHECKED'
         });
       }
 
@@ -787,7 +792,8 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
           sections: fullSections,
           overallCompliance: data.overallCompliance,
           createdAt: new Date(data.createdAt),
-          completedAt: data.completedAt ? new Date(data.completedAt) : undefined
+          completedAt: data.completedAt ? new Date(data.completedAt) : undefined,
+          lawyer_status: data.lawyer_status || 'UNCHECKED'
         });
       }
 
@@ -946,7 +952,8 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
           sections: fullSections,
           overallCompliance: data.overallCompliance,
           createdAt: new Date(data.createdAt),
-          completedAt: data.completedAt ? new Date(data.completedAt) : undefined
+          completedAt: data.completedAt ? new Date(data.completedAt) : undefined,
+          lawyer_status: data.lawyer_status || 'UNCHECKED'
         });
       }
 
@@ -972,25 +979,27 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
   public async updateAnalysis(
     analysisId: string,
     sharedUserId: string,
-    status: string
+    lawyerStatus?: 'UNCHECKED' | 'CHECK_PENDING' | 'APPROVED' | 'DECLINE'
   ): Promise<void> {
     try {
-      this.logger.info('Updating analysis status', { analysisId, status });
+      this.logger.info('Updating analysis status', { analysisId, lawyerStatus });
 
       const db = this.firestoreService['db'] || require('firebase-admin').firestore();
       const analysisRef = db.collection('swissObligationAnalyses').doc(analysisId);
 
-      await analysisRef.update({
-        status: status,
+      const updateData: any = {
+        lawyerStatus,
         sharedUserId: sharedUserId,
         updatedAt: new Date()
-      });
+      };
 
-      this.logger.info('Analysis status updated successfully', { analysisId, status });
+      await analysisRef.update(updateData);
+
+      this.logger.info('Analysis status updated successfully', { analysisId, lawyerStatus });
     } catch (error) {
       this.logger.error('Error updating analysis status', error as Error, {
         analysisId,
-        status
+        lawyerStatus
       });
       throw error;
     }

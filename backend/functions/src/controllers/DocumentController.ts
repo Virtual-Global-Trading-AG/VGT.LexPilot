@@ -1,5 +1,6 @@
 import { HumanMessage } from '@langchain/core/messages';
 import { ChatOpenAI } from '@langchain/openai';
+import { UserDocument } from '@models/index';
 import { NextFunction, Request, Response } from 'express';
 import { UserRepository } from '../repositories/UserRepository';
 import { AnalysisService, DocumentFilters, FirestoreService, JobQueueService, PaginationOptions, SortOptions, StorageService, SwissObligationLawService, TextExtractionService } from '../services';
@@ -1345,6 +1346,27 @@ STIL: Professionell, präzise, praxisorientiert für beide Jurisdiktionen`;
   }
 
   /**
+   * Helper method to get user document information including downloadUrl
+   */
+  private async getUserDocumentInfo(documentId: string, userId: string): Promise<UserDocument | null> {
+    try {
+      const user = await this.userRepository.findByUid(userId);
+      if (!user || !user.documents) {
+        return null;
+      }
+
+      const document = user.documents.find(doc => doc.documentId === documentId);
+      return document || null;
+    } catch (error) {
+      this.logger.error('Failed to get user document info', error as Error, {
+        documentId,
+        userId
+      });
+      return null;
+    }
+  }
+
+  /**
    * List shared Swiss obligation law analyses for lawyers
    * GET /api/documents/swiss-obligation-analyses-shared
    */
@@ -1360,38 +1382,91 @@ STIL: Professionell, präzise, praxisorientiert für beide Jurisdiktionen`;
 
       const analyses = await this.swissObligationLawService.listSharedAnalyses(userId, limit);
 
-      this.sendSuccess(res, {
-        analyses: analyses.map(analysis => ({
-          analysisId: analysis.analysisId,
-          documentId: analysis.documentId,
-          documentContext: analysis.documentContext,
-          sections: analysis.sections.map(section => ({
-            sectionId: section.sectionId,
-            title: section.sectionContent,
-            isCompliant: section.complianceAnalysis?.isCompliant || false,
-            confidence: section.complianceAnalysis?.confidence || 0,
-            violationCount: section.complianceAnalysis?.violations?.length || 0,
-            violations: section.complianceAnalysis?.violations || [],
-            reasoning: section.complianceAnalysis?.reasoning || '',
-            recommendations: section.complianceAnalysis.recommendations || [],
-            findings: section.findings || [],
-          })),
-          overallCompliance: analysis.overallCompliance,
-          summary: {
-            totalSections: analysis.sections?.length || 0,
-            compliantSections: analysis.sections?.filter(s =>
-              s.complianceAnalysis?.isCompliant === true
-            ).length || 0,
-            totalViolations: analysis.sections?.reduce((sum, s) =>
-              sum + (s.complianceAnalysis?.violations?.length || 0), 0
-            ) || 0,
-          },
-          createdAt: analysis.createdAt.toISOString(),
-          completedAt: analysis.completedAt?.toISOString()
-        })),
-        total: analyses.length
-      }, 'Swiss obligation law analyses by document ID retrieved successfully');
+      // For each analysis, fetch the corresponding document information to get downloadUrl
+      const analysesWithDocuments = await Promise.all(
+        analyses.map(async (analysis) => {
+          try {
+            // Get document information from the original document owner
+            const documentInfo = await this.getUserDocumentInfo(analysis.documentId, analysis.userId);
 
+            return {
+              analysisId: analysis.analysisId,
+              documentId: analysis.documentId,
+              documentContext: analysis.documentContext,
+              sections: analysis.sections.map(section => ({
+                sectionId: section.sectionId,
+                title: section.sectionContent,
+                isCompliant: section.complianceAnalysis?.isCompliant || false,
+                confidence: section.complianceAnalysis?.confidence || 0,
+                violationCount: section.complianceAnalysis?.violations?.length || 0,
+                violations: section.complianceAnalysis?.violations || [],
+                reasoning: section.complianceAnalysis?.reasoning || '',
+                recommendations: section.complianceAnalysis.recommendations || [],
+                findings: section.findings || [],
+              })),
+              overallCompliance: analysis.overallCompliance,
+              summary: {
+                totalSections: analysis.sections?.length || 0,
+                compliantSections: analysis.sections?.filter(s =>
+                  s.complianceAnalysis?.isCompliant === true
+                ).length || 0,
+                totalViolations: analysis.sections?.reduce((sum, s) =>
+                  sum + (s.complianceAnalysis?.violations?.length || 0), 0
+                ) || 0,
+              },
+              createdAt: analysis.createdAt.toISOString(),
+              completedAt: analysis.completedAt?.toISOString(),
+              // Include document information for lawyers to access the document
+              document: documentInfo ? {
+                downloadUrl: documentInfo.downloadUrl,
+                documentMetadata: documentInfo.documentMetadata
+              } : null
+            };
+          } catch (error) {
+            this.logger.warn('Failed to fetch document info for shared analysis', {
+              analysisId: analysis.analysisId,
+              documentId: analysis.documentId,
+              error: (error as Error).message
+            });
+
+            // Return analysis without document info if document fetch fails
+            return {
+              analysisId: analysis.analysisId,
+              documentId: analysis.documentId,
+              documentContext: analysis.documentContext,
+              sections: analysis.sections.map(section => ({
+                sectionId: section.sectionId,
+                title: section.sectionContent,
+                isCompliant: section.complianceAnalysis?.isCompliant || false,
+                confidence: section.complianceAnalysis?.confidence || 0,
+                violationCount: section.complianceAnalysis?.violations?.length || 0,
+                violations: section.complianceAnalysis?.violations || [],
+                reasoning: section.complianceAnalysis?.reasoning || '',
+                recommendations: section.complianceAnalysis.recommendations || [],
+                findings: section.findings || [],
+              })),
+              overallCompliance: analysis.overallCompliance,
+              summary: {
+                totalSections: analysis.sections?.length || 0,
+                compliantSections: analysis.sections?.filter(s =>
+                  s.complianceAnalysis?.isCompliant === true
+                ).length || 0,
+                totalViolations: analysis.sections?.reduce((sum, s) =>
+                  sum + (s.complianceAnalysis?.violations?.length || 0), 0
+                ) || 0,
+              },
+              createdAt: analysis.createdAt.toISOString(),
+              completedAt: analysis.completedAt?.toISOString(),
+              document: null
+            };
+          }
+        })
+      );
+
+      this.sendSuccess(res, {
+        analyses: analysesWithDocuments,
+        total: analyses.length
+      }, 'Shared Swiss obligation law analyses retrieved successfully');
 
     } catch (error) {
       this.logger.error('Failed to list shared Swiss obligation law analyses', error as Error, {
@@ -1601,13 +1676,13 @@ STIL: Professionell, präzise, praxisorientiert für beide Jurisdiktionen`;
       if (existingAnalyses.length > 0) {
         // Update the most recent analysis with lawyer review status
         const latestAnalysis = existingAnalyses[0]; // Assuming they are sorted by creation date
-        await this.swissObligationLawService.updateAnalysis(latestAnalysis!.analysisId, fixedLawyerUserUiId, 'Prüfung durch Anwalt');
+        await this.swissObligationLawService.updateAnalysis(latestAnalysis!.analysisId, fixedLawyerUserUiId, 'CHECK_PENDING');
 
         this.logger.info('Analysis status updated for lawyer review', {
           userId,
           documentId,
           analysisId: latestAnalysis!.analysisId,
-          status: 'Prüfung durch Anwalt'
+          lawyerStatus: 'CHECK_PENDING'
         });
       }
 

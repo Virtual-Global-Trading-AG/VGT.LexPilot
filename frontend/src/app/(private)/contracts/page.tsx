@@ -700,19 +700,18 @@ function ContractsPageContent() {
                               </TableCell>
                               <TableCell>
                                 <div className="flex items-center space-x-2">
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleAnalysisRowClick(analysis);
-                                    }}
-                                    title="Analyse öffnen"
-                                  >
-                                    <FileText className="h-4 w-4" />
-                                    <span className="sr-only">Analyse öffnen</span>
-                                  </Button>
+                                  {analysis.document?.downloadUrl && (
+                                    <a
+                                      href={analysis.document.downloadUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center justify-center w-8 h-8 rounded-md hover:bg-muted transition-colors"
+                                      title="Dokument öffnen"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <ExternalLink className="h-4 w-4" />
+                                    </a>
+                                  )}
                                 </div>
                               </TableCell>
                             </TableRow>

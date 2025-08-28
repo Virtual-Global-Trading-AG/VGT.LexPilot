@@ -163,4 +163,5 @@ export interface SwissObligationAnalysisResult {
   summary?: SwissObligationAnalysisSummary;
   createdAt: string;
   completedAt?: string;
+  lawyer_status?: 'UNCHECKED' | 'CHECK_PENDING' | 'APPROVED' | 'DECLINE';
 }
