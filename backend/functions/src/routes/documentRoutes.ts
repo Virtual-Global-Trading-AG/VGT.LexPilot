@@ -181,6 +181,11 @@ router.get('/:documentId/swiss-obligation-analyses',
   documentController.getSwissObligationAnalysesByDocumentId.bind(documentController)
 );
 
+// Start Lawyer Review for Swiss Obligation Analysis
+router.post('/:documentId/start-lawyer-review',
+  documentController.startLawyerReview.bind(documentController)
+);
+
 // Job Management Routes
 router.get('/jobs/:jobId',
   documentController.getJobStatus.bind(documentController)

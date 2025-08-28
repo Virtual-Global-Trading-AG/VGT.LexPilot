@@ -1508,6 +1508,82 @@ STIL: Professionell, präzise, praxisorientiert für beide Jurisdiktionen`;
     }
   }
 
+  /**
+   * Start lawyer review for Swiss obligation analysis
+   * POST /api/documents/:documentId/start-lawyer-review
+   */
+  public async startLawyerReview(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = this.getUserId(req);
+      const { documentId } = req.params;
+
+      if (!documentId) {
+        this.sendError(res, 400, 'Missing required parameter', 'documentId is required');
+        return;
+      }
+
+      this.logger.info('Lawyer review requested', {
+        userId,
+        documentId
+      });
+
+      // Verify document exists and user has access
+      const document = await this.firestoreService.getDocument(documentId, userId);
+
+      if (!document) {
+        this.sendError(res, 404, 'Document not found', 'Document not found or access denied');
+        return;
+      }
+
+      // Find and update the linked analysis in swissObligationAnalyses collection
+      const existingAnalyses = await this.swissObligationLawService.getAnalysesByDocumentId(documentId, userId);
+
+      if (existingAnalyses.length > 0) {
+        // Update the most recent analysis with lawyer review status
+        const latestAnalysis = existingAnalyses[0]; // Assuming they are sorted by creation date
+        await this.swissObligationLawService.updateAnalysis(latestAnalysis!.analysisId, fixedLawyerId, 'Prüfung durch Anwalt');
+
+        this.logger.info('Analysis status updated for lawyer review', {
+          userId,
+          documentId,
+          analysisId: latestAnalysis!.analysisId,
+          status: 'Prüfung durch Anwalt'
+        });
+      }
+
+      this.logger.info('Lawyer review started successfully', {
+        userId,
+        documentId,
+        sharedUserId: fixedLawyerId
+      });
+
+      this.sendSuccess(res, {
+        documentId,
+        sharedUserId: fixedLawyerId,
+        status: 'Prüfung durch Anwalt',
+        message: 'Document has been shared with lawyer for review'
+      }, 'Lawyer review started successfully');
+
+    } catch (error) {
+      this.logger.error('Failed to start lawyer review', error as Error, {
+        userId: this.getUserId(req),
+        documentId: req.params.documentId
+      });
+
+      if (error instanceof Error) {
+        if (error.message.includes('not found')) {
+          this.sendError(res, 404, 'Document not found', error.message);
+        } else {
+          this.sendError(res, 500, 'Failed to start lawyer review', error.message);
+        }
+      } else {
+        this.sendError(res, 500, 'Unexpected error during lawyer review setup');
+      }
+
+      next(error);
+    }
+  }
+
   // ==========================================
   // PRIVATE HELPER METHODS
   // ==========================================

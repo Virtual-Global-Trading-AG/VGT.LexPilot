@@ -15,7 +15,7 @@ import { useToast } from '@/lib/hooks/use-toast';
 import { useDocuments, useDocumentUpload } from '@/lib/hooks/useApi';
 import { useJobMonitor } from '@/lib/contexts/JobMonitorContext';
 import { SwissObligationAnalysisResult, SwissObligationSectionResult } from '@/types';
-import { AlertCircle, CheckCircle, ChevronDown, ChevronRight, Clock, Download, FileSearch, FileText, Filter, Plus, Scale, Search, Trash2, Upload, X, } from 'lucide-react';
+import { AlertCircle, CheckCircle, ChevronDown, ChevronRight, Clock, Download, FileSearch, FileText, Filter, Plus, Scale, Search, Trash2, Upload, UserCheck, X, } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
 import { ExternalLink } from "lucide-react";
 
@@ -102,6 +102,7 @@ function ContractsPageContent() {
     getJobStatus,
     getUserJobs,
     getSwissObligationAnalysesByDocumentId,
+    startLawyerReview,
     getAllUserDocuments,
     documents,
     pagination,
@@ -540,6 +541,32 @@ function ContractsPageContent() {
     }
   };
 
+  const handleStartLawyerReview = async (documentId: string, fileName: string) => {
+    try {
+      const result = await startLawyerReview(documentId);
+
+      if (result.success) {
+        toast({
+          title: 'Anwaltsprüfung gestartet',
+          description: `Die Analyse für "${fileName}" wird durch einen Anwalt erledigt.`
+        });
+      } else {
+        toast({
+          variant: 'destructive',
+          title: 'Anwaltsprüfung fehlgeschlagen',
+          description: result.error || 'Fehler beim Starten der Anwaltsprüfung.'
+        });
+      }
+    } catch (err: any) {
+      console.error('Lawyer review error:', err);
+      toast({
+        variant: 'destructive',
+        title: 'Anwaltsprüfung fehlgeschlagen',
+        description: 'Unerwarteter Fehler beim Starten der Anwaltsprüfung.'
+      });
+    }
+  };
+
   return (
     <>
       <div className="space-y-6">
@@ -730,6 +757,22 @@ function ContractsPageContent() {
                                           }
                                         </span>
                                       </Button>
+                                      {/* Only show lawyer review button if document has analysis */}
+                                      {documentAnalyses[document.documentId]?.length > 0 && (
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleStartLawyerReview(document.documentId, document.documentMetadata.fileName || 'Unbekannt');
+                                          }}
+                                          title="Kontrolle durch Anwalt starten"
+                                        >
+                                          <UserCheck className="h-4 w-4"/>
+                                          <span className="sr-only">Kontrolle durch Anwalt starten</span>
+                                        </Button>
+                                      )}
                                       <Button
                                         variant="ghost"
                                         size="sm"

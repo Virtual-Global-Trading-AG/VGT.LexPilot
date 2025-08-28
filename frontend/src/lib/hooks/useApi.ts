@@ -551,6 +551,35 @@ export function useDocuments() {
     }
   }, [isAuthenticated]);
 
+  const startLawyerReview = useCallback(async (documentId: string): Promise<{
+    success: boolean;
+    data?: any;
+    error?: string;
+  }> => {
+    if (!isAuthenticated) {
+      setError('Authentication required');
+      return { success: false, error: 'Authentication required' };
+    }
+
+    setError(null);
+
+    try {
+      const response = await apiClient.post(`/documents/${documentId}/start-lawyer-review`);
+
+      if (response.success && response.data) {
+        return { success: true, data: response.data };
+      } else {
+        const errorMsg = response.error || 'Failed to start lawyer review';
+        setError(errorMsg);
+        return { success: false, error: errorMsg };
+      }
+    } catch (err) {
+      const errorMsg = 'Network error while starting lawyer review';
+      setError(errorMsg);
+      return { success: false, error: errorMsg };
+    }
+  }, [isAuthenticated]);
+
   const getAllUserDocuments = useCallback(async (tag?: string): Promise<{
     success: boolean;
     data?: {
@@ -604,6 +633,7 @@ export function useDocuments() {
     getJobStatus,
     getUserJobs,
     getSwissObligationAnalysesByDocumentId,
+    startLawyerReview,
     getAllUserDocuments,
     documents,
     pagination,

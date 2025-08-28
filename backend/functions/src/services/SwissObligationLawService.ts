@@ -774,4 +774,34 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
       return [];
     }
   }
+
+  /**
+   * Update analysis status
+   */
+  public async updateAnalysis(
+    analysisId: string,
+    sharedUserId: string,
+    status: string
+  ): Promise<void> {
+    try {
+      this.logger.info('Updating analysis status', { analysisId, status });
+
+      const db = this.firestoreService['db'] || require('firebase-admin').firestore();
+      const analysisRef = db.collection('swissObligationAnalyses').doc(analysisId);
+
+      await analysisRef.update({
+        status: status,
+        sharedUserId: sharedUserId,
+        updatedAt: new Date()
+      });
+
+      this.logger.info('Analysis status updated successfully', { analysisId, status });
+    } catch (error) {
+      this.logger.error('Error updating analysis status', error as Error, {
+        analysisId,
+        status
+      });
+      throw error;
+    }
+  }
 }
