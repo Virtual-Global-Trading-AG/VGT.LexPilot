@@ -103,6 +103,8 @@ export function useGlobalJobMonitor() {
         return fileName 
           ? `Schweizer Obligationenrecht-Analyse für "${fileName}" wurde erfolgreich abgeschlossen.`
           : 'Schweizer Obligationenrecht-Analyse wurde erfolgreich abgeschlossen.';
+      case 'contract-generation':
+        return 'Vertrag wurde erfolgreich generiert und gespeichert.';
       default:
         return fileName
           ? `Analyse für "${fileName}" wurde erfolgreich abgeschlossen.`
@@ -116,6 +118,8 @@ export function useGlobalJobMonitor() {
         return fileName
           ? `Schweizer Obligationenrecht-Analyse für "${fileName}" ist fehlgeschlagen.`
           : 'Schweizer Obligationenrecht-Analyse ist fehlgeschlagen.';
+      case 'contract-generation':
+        return 'Vertragsgenerierung ist fehlgeschlagen.';
       default:
         return fileName
           ? `Analyse für "${fileName}" ist fehlgeschlagen.`
@@ -168,7 +172,7 @@ export function useGlobalJobMonitor() {
 
             // Show success notification
             toast({
-              title: "Analyse abgeschlossen",
+              title: jobInfo.type === 'contract-generation' ? "Vertrag generiert" : "Analyse abgeschlossen",
               description: getJobCompletionMessage(jobInfo.type, jobInfo.fileName),
               duration: 8000,
             });
@@ -196,7 +200,7 @@ export function useGlobalJobMonitor() {
             // Show error notification
             toast({
               variant: "destructive",
-              title: "Analyse fehlgeschlagen",
+              title: jobInfo.type === 'contract-generation' ? "Vertragsgenerierung fehlgeschlagen" : "Analyse fehlgeschlagen",
               description: job.error || getJobFailureMessage(jobInfo.type, jobInfo.fileName),
               duration: 10000,
             });
@@ -316,19 +320,37 @@ export function useGlobalJobMonitor() {
           }
         }
 
+        // Preserve manually added jobs that might not be in API response yet
+        // (jobs added via startJobMonitoring that are too new to appear in API)
+        const preservedJobs = new Map<string, ActiveJob>();
+        activeJobs.forEach((job, jobId) => {
+          // Preserve jobs that are very recent (less than 30 seconds old)
+          // and are being individually monitored
+          const isRecentJob = (Date.now() - job.startTime) < 30000;
+          const isBeingMonitored = jobMonitoringIntervals.current.has(jobId);
+
+          if (isRecentJob && isBeingMonitored && !newActiveJobs.has(jobId)) {
+            preservedJobs.set(jobId, job);
+          }
+        });
+
+        // Merge API jobs with preserved jobs
+        const finalActiveJobs = new Map([...newActiveJobs, ...preservedJobs]);
+
         // Only update state if there are actual changes
         const currentJobIds = new Set(activeJobs.keys());
-        const newJobIds = new Set(newActiveJobs.keys());
-        const hasChanges = hasNewJobs || 
-          currentJobIds.size !== newJobIds.size || 
-          Array.from(currentJobIds).some(id => !newJobIds.has(id));
+        const finalJobIds = new Set(finalActiveJobs.keys());
+        const hasChanges = hasNewJobs ||
+          currentJobIds.size !== finalJobIds.size ||
+          Array.from(currentJobIds).some(id => !finalJobIds.has(id)) ||
+          Array.from(finalJobIds).some(id => !currentJobIds.has(id));
 
         if (hasChanges) {
-          setActiveJobs(newActiveJobs);
+          setActiveJobs(finalActiveJobs);
 
-          // Clean up monitoring for jobs that are no longer active
+          // Clean up monitoring for jobs that are no longer active and not preserved
           currentJobIds.forEach(jobId => {
-            if (!newJobIds.has(jobId)) {
+            if (!finalJobIds.has(jobId)) {
               const interval = jobMonitoringIntervals.current.get(jobId);
               if (interval) {
                 clearTimeout(interval);

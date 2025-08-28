@@ -633,86 +633,6 @@ export function useContractGeneration() {
   const [progressMessage, setProgressMessage] = useState('');
   const isAuthenticated = useAuthStore(state => state.isAuthenticated);
 
-  const generateContract = useCallback(async (
-    request: ContractGenerationRequest
-  ): Promise<{ downloadUrl: string; documentId: string; contractType: string; status: string } | null> => {
-    if (!isAuthenticated) {
-      setError('Not authenticated');
-      return null;
-    }
-
-    setLoading(true);
-    setError(null);
-    setProgress(0);
-    setProgressMessage('Starte Vertragsgenerierung...');
-
-    try {
-      // Create job for contract generation
-      const jobResponse = await apiClient.post('/contracts/generate-async', request);
-
-      if (!jobResponse.success || !jobResponse.data) {
-        throw new Error(jobResponse.error || 'Failed to create contract generation job');
-      }
-
-      const { jobId } = jobResponse.data;
-      setProgressMessage('Auftrag erstellt, verarbeite...');
-
-      // Poll for job status
-      const pollInterval = 2000; // Poll every 2 seconds
-      const maxPollingTime = 300000; // Max 5 minutes
-      const startTime = Date.now();
-
-      return new Promise((resolve, reject) => {
-        const pollJobStatus = async () => {
-          try {
-            if (Date.now() - startTime > maxPollingTime) {
-              reject(new Error('Contract generation timed out'));
-              return;
-            }
-
-            const statusResponse = await apiClient.get(`/contracts/jobs/${jobId}`);
-
-            if (!statusResponse.success || !statusResponse.data) {
-              reject(new Error(statusResponse.error || 'Failed to get job status'));
-              return;
-            }
-
-            const jobData = statusResponse.data;
-            setProgress(jobData.progress || 0);
-            setProgressMessage(jobData.progressMessage || 'Verarbeite...');
-
-            if (jobData.status === 'completed') {
-              setProgress(100);
-              setProgressMessage('Vertragsgenerierung abgeschlossen!');
-              resolve({
-                downloadUrl: jobData.result.downloadUrl,
-                documentId: jobData.result.documentId,
-                contractType: jobData.result.contractType,
-                status: 'completed'
-              });
-              setLoading(false);
-            } else if (jobData.status === 'failed') {
-              reject(new Error(jobData.error || 'Contract generation failed'));
-            } else {
-              // Job is still processing, continue polling
-              setTimeout(pollJobStatus, pollInterval);
-            }
-          } catch (err) {
-            reject(err);
-          }
-        };
-
-        // Start polling
-        pollJobStatus();
-      });
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      setError(errorMessage);
-      setLoading(false);
-      return null;
-    }
-  }, [isAuthenticated]);
-
   const downloadContractPDF = useCallback(async (generationId: string): Promise<boolean> => {
     if (!isAuthenticated) {
       setError('Not authenticated');
@@ -779,11 +699,35 @@ export function useContractGeneration() {
     }
   }, [isAuthenticated]);
 
+  const createContractGenerationJob = useCallback(async (request: {
+    contractType: string;
+    parameters: Record<string, any>;
+  }): Promise<{ jobId: string } | null> => {
+    if (!isAuthenticated) {
+      setError('Authentication required');
+      return null;
+    }
+
+    try {
+      const jobResponse = await apiClient.post('/contracts/generate-async', request);
+
+      if (!jobResponse.success || !jobResponse.data) {
+        throw new Error(jobResponse.error || 'Failed to create contract generation job');
+      }
+
+      return { jobId: jobResponse.data.jobId };
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      setError(errorMessage);
+      return null;
+    }
+  }, [isAuthenticated]);
+
   return {
-    generateContract,
     downloadContractPDF,
     getGeneratedContracts,
     deleteGeneratedContract,
+    createContractGenerationJob,
     loading,
     error,
     progress,

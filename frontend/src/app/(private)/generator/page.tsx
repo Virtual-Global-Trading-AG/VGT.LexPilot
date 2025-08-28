@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/lib/hooks/use-toast';
 import { useContractGeneration } from '@/lib/hooks/useApi';
+import { useGlobalJobMonitor } from '@/lib/hooks/useGlobalJobMonitor';
 import {
   FileText,
   Briefcase,
@@ -56,14 +57,11 @@ const contractTemplates = [
 export default function GeneratorPage() {
   const { toast } = useToast();
   const {
-    generateContract: generateContractAPI,
-    downloadContractPDF: downloadContractPDFAPI,
-    loading: isGenerating,
-    error: generationError,
-    progress: generationProgress,
-    progressMessage: generationMessage,
+    createContractGenerationJob,
     clearError
   } = useContractGeneration();
+
+  const { startJobMonitoring } = useGlobalJobMonitor();
 
   // State for template selection
   const [selectedTemplate, setSelectedTemplate] = useState('employment');
@@ -99,8 +97,6 @@ export default function GeneratorPage() {
     dataProtection: true
   });
 
-  // State for contract generation
-  const [generatedContract, setGeneratedContract] = useState<any>(null);
 
   // Handle form field changes
   const handleInputChange = (field: string, value: string) => {
@@ -108,6 +104,39 @@ export default function GeneratorPage() {
       ...prev,
       [field]: value
     }));
+  };
+
+  // Reset form data to initial values
+  const resetFormData = () => {
+    setFormData({
+      // NDA fields
+      disclosingParty: '',
+      receivingParty: '',
+      purpose: '',
+      duration: 5,
+      mutualNDA: false,
+      // Employment fields
+      employeeName: '',
+      employerName: '',
+      employerAddress: '',
+      employerPhone: '',
+      employerWebsite: '',
+      employeeAddress: '',
+      position: '',
+      salary: '',
+      startDate: '',
+      workingHours: 100,
+      probationPeriod: 3,
+      vacationDays: 25,
+      // Terms fields
+      companyName: '',
+      companyAddress: '',
+      businessType: 'Dienstleistung',
+      paymentTerms: '30 Tage',
+      warrantyPeriod: 12,
+      jurisdiction: 'Zürich',
+      dataProtection: true
+    });
   };
 
   // Handle template selection
@@ -228,17 +257,25 @@ export default function GeneratorPage() {
     try {
       const parameters = mapFormDataToBackendParams();
 
-      const result = await generateContractAPI({
+      // Create the contract generation job via apiClient
+      const jobResult = await createContractGenerationJob({
         contractType: selectedTemplate,
         parameters
       });
 
-      if (result) {
-        setGeneratedContract(result);
+      if (jobResult?.jobId) {
+        // Start monitoring the job with the global job monitor
+        startJobMonitoring(jobResult.jobId, 'contract-generation');
+
+        // Clear the form immediately after successful job creation
+        resetFormData();
+
         toast({
-          title: 'Vertrag generiert',
-          description: 'Der Vertrag wurde erfolgreich erstellt und gespeichert.'
+          title: 'Vertragsgenerierung gestartet',
+          description: 'Die Generierung wurde gestartet. Sie werden benachrichtigt, wenn der Vertrag fertig ist.'
         });
+      } else {
+        throw new Error('Failed to create contract generation job');
       }
     } catch (error) {
       console.error('Contract generation error:', error);
@@ -641,49 +678,6 @@ export default function GeneratorPage() {
                   </div>
                 )}
 
-                {/* Generation Progress */}
-                {isGenerating && (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium">Fortschritt</span>
-                      <span className="text-sm text-muted-foreground">{generationProgress}%</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div 
-                        className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                        style={{ width: `${generationProgress}%` }}
-                      />
-                    </div>
-                    <p className="text-sm text-muted-foreground">{generationMessage}</p>
-                  </div>
-                )}
-
-                {/* Generated Contract Preview */}
-                {generatedContract && (
-                  <div className="space-y-3">
-                    <h3 className="text-lg font-semibold">Vertrag erfolgreich generiert</h3>
-                    <div className="border rounded-lg p-4 bg-green-50">
-                      <p className="text-sm text-green-800">
-                        Ihr {generatedContract.contractType} wurde erfolgreich erstellt und gespeichert. 
-                        Sie können das PDF öffnen
-                      </p>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <a
-                        href={generatedContract.downloadUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex"
-                      >
-                        <Button variant="outline">
-                          <Download className="h-4 w-4 mr-2"/>
-                          PDF öffnen
-                        </Button>
-                      </a>
-                    </div>
-
-                  </div>
-                )}
 
                 {/* Action Buttons */}
                 <div className="flex space-x-4 pt-4">
@@ -691,10 +685,9 @@ export default function GeneratorPage() {
                     className="flex-1" 
                     size="lg"
                     onClick={generateContract}
-                    disabled={isGenerating}
                   >
                     <Zap className="mr-2 h-4 w-4" />
-                    {isGenerating ? 'Generiert...' : 'Vertrag generieren'}
+                    Vertrag generieren
                   </Button>
                 </div>
               </CardContent>
