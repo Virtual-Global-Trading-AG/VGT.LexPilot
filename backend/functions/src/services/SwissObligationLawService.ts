@@ -689,7 +689,8 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
           overallCompliance: data.overallCompliance,
           createdAt: new Date(data.createdAt),
           completedAt: data.completedAt ? new Date(data.completedAt) : undefined,
-          lawyerStatus: data.lawyerStatus || 'UNCHECKED'
+          lawyerStatus: data.lawyerStatus || 'UNCHECKED',
+          lawyerComment: data.lawyerComment
         });
       }
 
@@ -794,7 +795,8 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
           overallCompliance: data.overallCompliance,
           createdAt: new Date(data.createdAt),
           completedAt: data.completedAt ? new Date(data.completedAt) : undefined,
-          lawyerStatus: data.lawyerStatus || 'UNCHECKED'
+          lawyerStatus: data.lawyerStatus || 'UNCHECKED',
+          lawyerComment: data.lawyerComment
         });
       }
 

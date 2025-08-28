@@ -298,6 +298,36 @@ function ContractsPageContent() {
     return runningJob ? 'running' : 'idle';
   };
 
+  // Helper function to translate lawyer status
+  const translateLawyerStatus = (status: string) => {
+    switch (status) {
+      case 'CHECK_PENDING':
+        return 'In Bearbeitung';
+      case 'APPROVED':
+        return 'Genehmigt';
+      case 'DECLINE':
+        return 'Abgelehnt';
+      default:
+        return '';
+    }
+  };
+
+  // State for lawyer comment modal
+  const [lawyerCommentModalOpen, setLawyerCommentModalOpen] = useState(false);
+  const [selectedLawyerComment, setSelectedLawyerComment] = useState<string>('');
+
+  // Handler for opening lawyer comment modal
+  const handleOpenLawyerCommentModal = (comment: string) => {
+    setSelectedLawyerComment(comment);
+    setLawyerCommentModalOpen(true);
+  };
+
+  // Handler for closing lawyer comment modal
+  const handleCloseLawyerCommentModal = () => {
+    setLawyerCommentModalOpen(false);
+    setSelectedLawyerComment('');
+  };
+
 
   // Group documents by category
   const groupedDocuments = documents.reduce((groups: Record<string, any[]>, document) => {
@@ -659,6 +689,9 @@ function ContractsPageContent() {
           title: 'Anwaltsprüfung gestartet',
           description: `Die Analyse für "${fileName}" wird durch einen Anwalt erledigt.`
         });
+
+        // Reload the contract table to reflect the updated lawyer status
+        await loadSingleDocumentAnalysis(documentId);
       } else {
         toast({
           variant: 'destructive',
@@ -863,6 +896,7 @@ function ContractsPageContent() {
                                 <TableHead>Titel</TableHead>
                                 <TableHead>Risiko</TableHead>
                                 <TableHead>Hochgeladen</TableHead>
+                                <TableHead>Status Anwalt</TableHead>
                                 <TableHead>Aktionen</TableHead>
                               </TableRow>
                             </TableHeader>
@@ -903,6 +937,39 @@ function ContractsPageContent() {
                                       <div className="text-sm">
                                         {document.documentMetadata.uploadedAt ? new Date(document.documentMetadata.uploadedAt).toLocaleDateString('de-DE') : 'Unbekannt'}
                                       </div>
+                                    </TableCell>
+                                    <TableCell>
+                                      {documentAnalyses[document.documentId]?.length > 0 && documentAnalyses[document.documentId][0].lawyerStatus && documentAnalyses[document.documentId][0].lawyerStatus !== 'UNCHECKED' ? (
+                                        <div className="flex items-center space-x-2">
+                                          <Badge 
+                                            variant={
+                                              documentAnalyses[document.documentId][0].lawyerStatus === 'APPROVED' ? 'default' :
+                                              documentAnalyses[document.documentId][0].lawyerStatus === 'DECLINE' ? 'destructive' :
+                                              'secondary'
+                                            } 
+                                            className="text-xs"
+                                          >
+                                            {translateLawyerStatus(documentAnalyses[document.documentId][0].lawyerStatus)}
+                                          </Badge>
+                                          {documentAnalyses[document.documentId][0].lawyerStatus === 'DECLINE' && documentAnalyses[document.documentId][0].lawyerComment && (
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              className="h-6 w-6 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleOpenLawyerCommentModal(documentAnalyses[document.documentId][0].lawyerComment || '');
+                                              }}
+                                              title="Kommentar anzeigen"
+                                            >
+                                              <FileText className="h-3 w-3"/>
+                                              <span className="sr-only">Kommentar anzeigen</span>
+                                            </Button>
+                                          )}
+                                        </div>
+                                      ) : (
+                                        <span className="text-sm text-muted-foreground">-</span>
+                                      )}
                                     </TableCell>
                                     <TableCell>
                                       <div className="flex items-center space-x-2">
@@ -958,8 +1025,9 @@ function ContractsPageContent() {
                                             }
                                           </span>
                                         </Button>
-                                        {/* Only show lawyer review button if document has analysis */}
-                                        {documentAnalyses[document.documentId]?.length > 0 && (
+                                        {/* Only show lawyer review button if document has analysis and lawyerStatus is UNCHECKED */}
+                                        {documentAnalyses[document.documentId]?.length > 0 && 
+                                         documentAnalyses[document.documentId][0].lawyerStatus === 'UNCHECKED' && (
                                           <Button
                                             variant="ghost"
                                             size="sm"
@@ -1352,18 +1420,6 @@ function ContractsPageContent() {
 
               {/* Content */}
               <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                {/* Analysis Overview */}
-                <div className="grid grid-cols-1 gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">Analyse-ID</Label>
-                    <p className="text-sm font-mono bg-muted p-2 rounded">{selectedAnalysis.analysisId}</p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">Dokument-ID</Label>
-                    <p className="text-sm font-mono bg-muted p-2 rounded">{selectedAnalysis.documentId}</p>
-                  </div>
-                </div>
-
                 {/* Document Context Details */}
                 {selectedAnalysis.documentContext && (
                   <div className="space-y-3">
@@ -1651,6 +1707,47 @@ function ContractsPageContent() {
                   >
                     {submittingDecision ? 'Wird gespeichert...' : 
                      lawyerDecision === 'APPROVED' ? 'Genehmigen' : 'Ablehnen'}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Lawyer Comment Modal */}
+      {lawyerCommentModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold">Anwaltskommentar</h3>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleCloseLawyerCommentModal}
+                  className="h-8 w-8 p-0"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <Label className="text-sm font-medium">Grund der Ablehnung:</Label>
+                  <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-md">
+                    <p className="text-sm text-red-800 whitespace-pre-wrap">
+                      {selectedLawyerComment}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-4">
+                  <Button
+                    variant="outline"
+                    onClick={handleCloseLawyerCommentModal}
+                  >
+                    Schließen
                   </Button>
                 </div>
               </div>
