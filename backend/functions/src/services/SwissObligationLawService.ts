@@ -154,6 +154,7 @@ export class SwissObligationLawService {
 
       const response = await openai.responses.create({
         model: "gpt-5-mini-2025-08-07",
+        service_tier: 'priority',
         input: [
           {
             role: "user",
