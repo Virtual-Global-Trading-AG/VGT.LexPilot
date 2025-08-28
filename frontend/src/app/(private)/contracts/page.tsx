@@ -744,7 +744,7 @@ function ContractsPageContent() {
         <Tabs defaultValue="analyzed" className="w-full">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="analyzed">
-              {userProfile?.role === 'lawyer' ? 'Geteilte Verträge' : 'Analysierte Verträge'}
+              {userProfile?.role === 'lawyer' ? 'Zu prüfende Dokumente' : 'Analysierte Verträge'}
             </TabsTrigger>
             <TabsTrigger value="all" onClick={() => loadAllUserDocuments('generated')}>Generierte Dokumente</TabsTrigger>
           </TabsList>
@@ -761,7 +761,7 @@ function ContractsPageContent() {
             <Card>
               <CardHeader>
                 <CardTitle>
-                  {userProfile?.role === 'lawyer' ? 'Geteilte Verträge' : 'Analysierte Verträge'}
+                  {userProfile?.role === 'lawyer' ? 'Zu prüfende Dokumente' : 'Analysierte Verträge'}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -769,11 +769,11 @@ function ContractsPageContent() {
                   // Lawyer view - show shared analyses
                   sharedAnalysesLoading ? (
                     <div className="flex items-center justify-center py-8">
-                      <div className="text-sm text-muted-foreground">Lade geteilte Verträge...</div>
+                      <div className="text-sm text-muted-foreground">Lade Dokumente...</div>
                     </div>
                   ) : sharedAnalyses.length === 0 ? (
                     <div className="flex items-center justify-center py-8">
-                      <div className="text-sm text-muted-foreground">Keine geteilten Verträge gefunden</div>
+                      <div className="text-sm text-muted-foreground">Keine zu prüfenden Dokumente gefunden</div>
                     </div>
                   ) : (
                     <div className="space-y-6">
@@ -795,12 +795,9 @@ function ContractsPageContent() {
                             >
                               <TableCell>
                                 <div className="space-y-1">
-                                  <div className="font-medium">
-                                    {analysis.documentContext?.documentType || 'Unbekannter Dokumenttyp'}
-                                  </div>
+                                  <div className="font-medium">{analysis.document.documentMetadata.fileName || analysis.document.documentMetadata.originalName || 'Unbekannt'}</div>
                                   <div className="text-sm text-muted-foreground">
-                                    {analysis.documentContext?.businessDomain || 'Unbekannter Bereich'} • 
-                                    Obligationenanalyse: {Math.round((analysis.overallCompliance?.complianceScore || 0) * 100)}% konform
+                                    {analysis.document.documentMetadata.uploadedAt ? new Date(analysis.document.documentMetadata.uploadedAt).toLocaleDateString('de-DE') : 'Unbekannt'} • {analysis.document.documentMetadata.size ? `${(analysis.document.documentMetadata.size / 1024 / 1024).toFixed(1)} MB` : 'Unbekannt'}
                                   </div>
                                 </div>
                               </TableCell>

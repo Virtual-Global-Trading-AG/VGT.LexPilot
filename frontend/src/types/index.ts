@@ -1,4 +1,4 @@
-// TypeScript Definitions für LexPilot AI
+// TypeScript Definitions für LexForm AI
 
 export interface User {
   id: string;

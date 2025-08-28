@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "LexPilot AI - Intelligente Rechtsanalyse",
+  title: "LexForm AI - Intelligente Rechtsanalyse",
   description: "KI-gestützte Rechtsanalyse für Schweizer Recht",
 };
 
