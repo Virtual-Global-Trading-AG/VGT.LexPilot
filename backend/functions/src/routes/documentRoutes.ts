@@ -150,6 +150,18 @@ router.get('/stats',
   documentController.getStorageStats.bind(documentController)
 );
 
+// Dashboard Routes
+router.get('/dashboard/stats',
+  documentController.getDashboardStats.bind(documentController)
+);
+
+router.get('/dashboard/activities',
+  documentController.getRecentActivities.bind(documentController)
+);
+
+router.get('/dashboard/progress',
+  documentController.getAnalysisProgress.bind(documentController)
+);
 
 router.delete('/:documentId',
   documentController.deleteDocument.bind(documentController)

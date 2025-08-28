@@ -709,6 +709,118 @@ export function useDocuments() {
   };
 }
 
+// Dashboard hooks
+export function useDashboard() {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const isAuthenticated = useAuthStore(state => state.isAuthenticated);
+
+  const getDashboardStats = useCallback(async (): Promise<{
+    success: boolean;
+    data?: any;
+    error?: string;
+  }> => {
+    if (!isAuthenticated) {
+      setError('Authentication required');
+      return { success: false, error: 'Authentication required' };
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await apiClient.get('/documents/dashboard/stats');
+
+      if (response.success && response.data) {
+        return { success: true, data: response.data };
+      } else {
+        const errorMsg = response.error || 'Failed to fetch dashboard statistics';
+        setError(errorMsg);
+        return { success: false, error: errorMsg };
+      }
+    } catch (err) {
+      const errorMsg = 'Network error while fetching dashboard statistics';
+      setError(errorMsg);
+      return { success: false, error: errorMsg };
+    } finally {
+      setLoading(false);
+    }
+  }, [isAuthenticated]);
+
+  const getRecentActivities = useCallback(async (limit: number = 10): Promise<{
+    success: boolean;
+    data?: any;
+    error?: string;
+  }> => {
+    if (!isAuthenticated) {
+      setError('Authentication required');
+      return { success: false, error: 'Authentication required' };
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await apiClient.get(`/documents/dashboard/activities?limit=${limit}`);
+
+      if (response.success && response.data) {
+        return { success: true, data: response.data };
+      } else {
+        const errorMsg = response.error || 'Failed to fetch recent activities';
+        setError(errorMsg);
+        return { success: false, error: errorMsg };
+      }
+    } catch (err) {
+      const errorMsg = 'Network error while fetching recent activities';
+      setError(errorMsg);
+      return { success: false, error: errorMsg };
+    } finally {
+      setLoading(false);
+    }
+  }, [isAuthenticated]);
+
+  const getAnalysisProgress = useCallback(async (): Promise<{
+    success: boolean;
+    data?: any;
+    error?: string;
+  }> => {
+    if (!isAuthenticated) {
+      setError('Authentication required');
+      return { success: false, error: 'Authentication required' };
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await apiClient.get('/documents/dashboard/progress');
+
+      if (response.success && response.data) {
+        return { success: true, data: response.data };
+      } else {
+        const errorMsg = response.error || 'Failed to fetch analysis progress';
+        setError(errorMsg);
+        return { success: false, error: errorMsg };
+      }
+    } catch (err) {
+      const errorMsg = 'Network error while fetching analysis progress';
+      setError(errorMsg);
+      return { success: false, error: errorMsg };
+    } finally {
+      setLoading(false);
+    }
+  }, [isAuthenticated]);
+
+  return {
+    getDashboardStats,
+    getRecentActivities,
+    getAnalysisProgress,
+    loading,
+    error,
+    clearError: () => setError(null)
+  };
+}
+
 // Contract Generation interfaces
 export interface ContractGenerationRequest {
   contractType: string;

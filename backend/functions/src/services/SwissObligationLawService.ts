@@ -607,18 +607,25 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
   /**
    * List user's analysis results
    */
-  public async listUserAnalyses(userId: string, limit: number = 10): Promise<SwissObligationAnalysisResult[]> {
+  public async listUserAnalyses(userId: string, limit?: number): Promise<SwissObligationAnalysisResult[]> {
     try {
       this.logger.info('Listing user Swiss obligation analyses', { userId, limit });
 
       const db = this.firestoreService['db'] || require('firebase-admin').firestore();
       const analysesRef = db.collection('swissObligationAnalyses');
 
-      const querySnapshot = await analysesRef
-        .where('userId', '==', userId)
-        .orderBy('createdAt', 'desc')
-        .limit(limit)
-        .get();
+      let query = analysesRef
+      .where('userId', '==', userId)
+      .orderBy('createdAt', 'desc');
+
+      if (limit) {
+        query = query.limit(limit);
+      }
+
+      const querySnapshot = await query.get();
+
+
+      this.logger.info('lclclc', { size: querySnapshot.size })
 
       const analyses: SwissObligationAnalysisResult[] = [];
 
@@ -804,8 +811,6 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
         sharedUserId: userId,
         count: analyses.length
       });
-
-      this.logger.info('lclclc', { analyses })
 
       return analyses;
     } catch (error) {

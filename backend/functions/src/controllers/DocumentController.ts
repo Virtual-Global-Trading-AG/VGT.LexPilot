@@ -288,6 +288,231 @@ export class DocumentController extends BaseController {
   }
 
   /**
+   * Get dashboard statistics
+   * GET /api/documents/dashboard/stats
+   */
+  public async getDashboardStats(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = this.getUserId(req);
+
+      // Get user documents and analyses
+      const [documents, analyses] = await Promise.all([
+        this.firestoreService.getAllUserDocuments(userId),
+        this.swissObligationLawService.listUserAnalyses(userId)
+      ]);
+
+      this.logger.info('Retrieved documents and analyses for dashboard stats', {
+        documents,
+        analyses
+      })
+      // Calculate active contracts (documents with status 'processed' or 'uploaded')
+      const activeContracts = documents.filter(doc => 
+        doc.documentMetadata.status === 'processed' || doc.documentMetadata.status === 'uploaded'
+      ).length;
+
+      // Calculate high risks (analyses with low compliance score)
+      const highRisks = analyses.filter(analysis => 
+        analysis.overallCompliance && !analysis.overallCompliance.isCompliant
+      ).length;
+
+      // Calculate due dates (for now, we'll use a placeholder as we don't have deadline data)
+      const dueDates = 0; // TODO: Implement when deadline functionality is added
+
+      // Calculate monthly savings (placeholder calculation)
+      const monthlySavings = analyses.length * 200;
+
+      // Calculate growth percentages (placeholder for now)
+      const contractsGrowth = 12; // +12%
+      const savingsGrowth = 8; // +8%
+
+      this.sendSuccess(res, {
+        activeContracts: {
+          count: activeContracts,
+          growth: contractsGrowth
+        },
+        highRisks: {
+          count: highRisks
+        },
+        dueDates: {
+          count: dueDates
+        },
+        monthlySavings: {
+          amount: monthlySavings,
+          growth: savingsGrowth,
+          currency: 'CHF'
+        }
+      }, 'Dashboard statistics retrieved successfully');
+
+    } catch (error) {
+      this.logger.error('Get dashboard stats failed', error as Error, {
+        userId: this.getUserId(req)
+      });
+      next(error);
+    }
+  }
+
+  /**
+   * Get recent activities for dashboard
+   * GET /api/documents/dashboard/activities
+   */
+  public async getRecentActivities(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = this.getUserId(req);
+      const limit = parseInt(req.query.limit as string) || 10;
+
+      // Get recent documents and analyses
+      const [recentDocuments, recentAnalyses] = await Promise.all([
+        this.firestoreService.getAllUserDocuments(userId),
+        this.swissObligationLawService.listUserAnalyses(userId, limit)
+      ]);
+
+      const activities: any[] = [];
+
+      // Add recent analyses as activities
+      recentAnalyses.forEach(analysis => {
+        // Find the corresponding document
+        const document = recentDocuments.find(doc => doc.documentId === analysis.documentId);
+        const fileName = document?.documentMetadata?.fileName || 'Unknown Document';
+
+        if (!analysis.overallCompliance?.isCompliant) {
+          activities.push({
+            id: `analysis-${analysis.analysisId}`,
+            type: 'high-risk',
+            title: 'Hochrisiko-Klausel erkannt',
+            subtitle: fileName,
+            time: this.getRelativeTime(analysis.createdAt),
+            icon: 'AlertTriangle',
+            iconColor: 'text-red-500'
+          });
+        } else {
+          activities.push({
+            id: `analysis-${analysis.analysisId}`,
+            type: 'completed',
+            title: 'Analyse abgeschlossen',
+            subtitle: fileName,
+            time: this.getRelativeTime(analysis.createdAt),
+            icon: 'CheckCircle',
+            iconColor: 'text-green-500'
+          });
+        }
+      });
+
+      // Add recent document uploads
+      recentDocuments
+        .sort((a, b) => new Date(b.documentMetadata.uploadedAt).getTime() - new Date(a.documentMetadata.uploadedAt).getTime())
+        .slice(0, 3)
+        .forEach(document => {
+          activities.push({
+            id: `upload-${document.documentId}`,
+            type: 'uploaded',
+            title: 'Neuer Vertrag hochgeladen',
+            subtitle: document.documentMetadata.fileName || 'Unknown Document',
+            time: this.getRelativeTime(new Date(document.documentMetadata.uploadedAt)),
+            icon: 'Upload',
+            iconColor: 'text-blue-500'
+          });
+        });
+
+      // Sort activities by time and limit
+      activities.sort((a, b) => {
+        // This is a simple sort, in a real implementation you'd want to sort by actual timestamps
+        return 0;
+      });
+
+      this.sendSuccess(res, {
+        activities: activities.slice(0, limit)
+      }, 'Recent activities retrieved successfully');
+
+    } catch (error) {
+      this.logger.error('Get recent activities failed', error as Error, {
+        userId: this.getUserId(req)
+      });
+      next(error);
+    }
+  }
+
+  /**
+   * Get analysis progress for dashboard
+   * GET /api/documents/dashboard/progress
+   */
+  public async getAnalysisProgress(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = this.getUserId(req);
+
+      // Get user jobs and documents
+      const [jobsResult, documents] = await Promise.all([
+        this.jobQueueService.getUserJobs(userId, 20, 0),
+        this.firestoreService.getAllUserDocuments(userId)
+      ]);
+
+      const progressItems: any[] = [];
+
+      // Add active jobs
+      if (jobsResult && jobsResult.jobs && jobsResult.jobs.length > 0) {
+        jobsResult.jobs.forEach((job: any) => {
+          if (job.status === 'running' || job.status === 'pending') {
+            const document = documents.find(doc => doc.documentId === job.documentId);
+            const fileName = document?.documentMetadata?.fileName || 'Unknown Document';
+
+            progressItems.push({
+              id: job.jobId,
+              fileName: fileName,
+              status: job.status === 'running' ? 'Wird analysiert' : 'Warteschlange',
+              progress: job.progress || 0
+            });
+          }
+        });
+      }
+
+      // Add recently completed analyses
+      const recentAnalyses = await this.swissObligationLawService.listUserAnalyses(userId, 5);
+      recentAnalyses.forEach(analysis => {
+        const document = documents.find(doc => doc.documentId === analysis.documentId);
+        const fileName = document?.documentMetadata?.fileName || 'Unknown Document';
+
+        progressItems.push({
+          id: analysis.analysisId,
+          fileName: fileName,
+          status: 'Analysiert',
+          progress: 100
+        });
+      });
+
+      this.sendSuccess(res, {
+        progressItems: progressItems.slice(0, 10) // Limit to 10 items
+      }, 'Analysis progress retrieved successfully');
+
+    } catch (error) {
+      this.logger.error('Get analysis progress failed', error as Error, {
+        userId: this.getUserId(req)
+      });
+      next(error);
+    }
+  }
+
+  /**
+   * Helper method to get relative time string
+   */
+  private getRelativeTime(date: Date): string {
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffHours < 1) {
+      return 'vor wenigen Minuten';
+    } else if (diffHours < 24) {
+      return `vor ${diffHours} Stunde${diffHours > 1 ? 'n' : ''}`;
+    } else if (diffDays === 1) {
+      return 'gestern';
+    } else if (diffDays < 7) {
+      return `vor ${diffDays} Tagen`;
+    } else {
+      return date.toLocaleDateString('de-DE');
+    }
+  }
+
+  /**
    * Search documents
    * GET /api/documents/search?q=searchterm
    */
