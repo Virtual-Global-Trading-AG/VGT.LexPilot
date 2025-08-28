@@ -1719,6 +1719,69 @@ STIL: Professionell, präzise, praxisorientiert für beide Jurisdiktionen`;
     }
   }
 
+  /**
+   * Submit lawyer analysis result
+   * POST /api/documents/swiss-obligation-analyses/:analysisId/lawyer-result
+   */
+  public async submitLawyerAnalysisResult(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = this.getUserId(req);
+      const { analysisId } = req.params;
+      const { decision, comment } = req.body;
+
+      if (!analysisId) {
+        this.sendError(res, 400, 'Missing required parameter', 'analysisId is required');
+        return;
+      }
+
+      if (!decision || !['APPROVED', 'DECLINE'].includes(decision)) {
+        this.sendError(res, 400, 'Invalid decision', 'Decision must be either APPROVED or DECLINE');
+        return;
+      }
+
+      if (decision === 'DECLINE' && !comment) {
+        this.sendError(res, 400, 'Comment required', 'Comment is required when declining an analysis');
+        return;
+      }
+
+      this.logger.info('Lawyer analysis result submission requested', {
+        userId,
+        analysisId,
+        decision,
+        hasComment: !!comment
+      });
+
+      // Submit the lawyer analysis result
+      await this.swissObligationLawService.submitLawyerAnalysisResult(analysisId, decision, comment);
+
+      this.logger.info('Lawyer analysis result submitted successfully', {
+        userId,
+        analysisId,
+        decision
+      });
+
+      this.sendSuccess(res, {
+        analysisId,
+        decision,
+        message: decision === 'APPROVED' ? 'Analysis approved successfully' : 'Analysis declined successfully'
+      }, 'Lawyer analysis result submitted successfully');
+
+    } catch (error) {
+      this.logger.error('Failed to submit lawyer analysis result', error as Error, {
+        userId: this.getUserId(req),
+        analysisId: req.params.analysisId
+      });
+
+      if (error instanceof Error) {
+        this.sendError(res, 500, 'Failed to submit lawyer analysis result', error.message);
+      } else {
+        this.sendError(res, 500, 'Unexpected error during lawyer analysis result submission');
+      }
+
+      next(error);
+    }
+  }
+
   // ==========================================
   // PRIVATE HELPER METHODS
   // ==========================================

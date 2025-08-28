@@ -80,7 +80,8 @@ export interface SwissObligationAnalysisResult {
   };
   createdAt: Date;
   completedAt?: Date;
-  lawyer_status?: 'UNCHECKED' | 'CHECK_PENDING' | 'APPROVED' | 'DECLINE';
+  lawyerStatus?: 'UNCHECKED' | 'CHECK_PENDING' | 'APPROVED' | 'DECLINE';
+  lawyerComment?: string;
 }
 
 export class SwissObligationLawService {
@@ -494,7 +495,7 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
         overallCompliance: result.overallCompliance,
         createdAt: result.createdAt.toISOString(),
         completedAt: result.completedAt?.toISOString(),
-        lawyer_status: 'UNCHECKED' as const
+        lawyerStatus: 'UNCHECKED' as const
       };
 
       // Prepare batch operations
@@ -561,7 +562,7 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
           sections: fallbackSections,
           createdAt: new Date(mainResult.createdAt),
           completedAt: mainResult.completedAt ? new Date(mainResult.completedAt) : undefined,
-          lawyer_status: mainResult.lawyer_status || 'UNCHECKED'
+          lawyerStatus: mainResult.lawyerStatus || 'UNCHECKED'
         } as SwissObligationAnalysisResult;
       }
 
@@ -592,7 +593,7 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
         sections: fullSections,
         createdAt: new Date(mainResult.createdAt),
         completedAt: mainResult.completedAt ? new Date(mainResult.completedAt) : undefined,
-        lawyer_status: mainResult.lawyer_status || 'UNCHECKED'
+        lawyerStatus: mainResult.lawyerStatus || 'UNCHECKED'
       } as SwissObligationAnalysisResult;
     } catch (error) {
       this.logger.error('Error getting Swiss obligation analysis result', error as Error, {
@@ -688,7 +689,7 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
           overallCompliance: data.overallCompliance,
           createdAt: new Date(data.createdAt),
           completedAt: data.completedAt ? new Date(data.completedAt) : undefined,
-          lawyer_status: data.lawyer_status || 'UNCHECKED'
+          lawyerStatus: data.lawyerStatus || 'UNCHECKED'
         });
       }
 
@@ -793,7 +794,7 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
           overallCompliance: data.overallCompliance,
           createdAt: new Date(data.createdAt),
           completedAt: data.completedAt ? new Date(data.completedAt) : undefined,
-          lawyer_status: data.lawyer_status || 'UNCHECKED'
+          lawyerStatus: data.lawyerStatus || 'UNCHECKED'
         });
       }
 
@@ -953,7 +954,7 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
           overallCompliance: data.overallCompliance,
           createdAt: new Date(data.createdAt),
           completedAt: data.completedAt ? new Date(data.completedAt) : undefined,
-          lawyer_status: data.lawyer_status || 'UNCHECKED'
+          lawyerStatus: data.lawyerStatus || 'UNCHECKED'
         });
       }
 
@@ -1000,6 +1001,50 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
       this.logger.error('Error updating analysis status', error as Error, {
         analysisId,
         lawyerStatus
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Submit lawyer analysis result (approve or decline)
+   */
+  public async submitLawyerAnalysisResult(
+    analysisId: string,
+    decision: 'APPROVED' | 'DECLINE',
+    comment?: string
+  ): Promise<void> {
+    try {
+      this.logger.info('Submitting lawyer analysis result', { analysisId, decision, hasComment: !!comment });
+
+      const admin = require('firebase-admin');
+      const db = admin.firestore();
+
+      const analysisRef = db.collection('swissObligationAnalyses').doc(analysisId);
+
+      const updateData: any = {
+        lawyerStatus: decision,
+        sharedUserId: null,
+        updatedAt: new Date()
+      };
+
+      // Add comment only if decision is DECLINE and comment is provided
+      if (decision === 'DECLINE' && comment) {
+        updateData.lawyerComment = comment;
+      }
+
+      await analysisRef.update(updateData);
+
+      this.logger.info('Lawyer analysis result submitted successfully', {
+        analysisId, 
+        decision, 
+        hasComment: !!comment 
+      });
+    } catch (error) {
+      this.logger.error('Error submitting lawyer analysis result', error as Error, {
+        analysisId,
+        decision,
+        hasComment: !!comment
       });
       throw error;
     }

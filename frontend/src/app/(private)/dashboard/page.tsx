@@ -66,7 +66,6 @@ export default function DashboardPage() {
               <Upload className="mr-2 h-4 w-4" />
               Vertrag hochladen
             </Button>
-            <IndexLawButton />
           </div>
         </div>
 

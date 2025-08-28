@@ -114,6 +114,24 @@ const searchSchema = Joi.object({
   limit: Joi.number().min(1).max(100).default(10).optional()
 });
 
+const lawyerAnalysisResultSchema = Joi.object({
+  decision: Joi.string().valid('APPROVED', 'DECLINE').required().messages({
+    'any.only': 'Decision must be either APPROVED or DECLINE',
+    'any.required': 'Decision is required'
+  }),
+  comment: Joi.when('decision', {
+    is: 'DECLINE',
+    then: Joi.string().min(1).max(2000).required().messages({
+      'string.min': 'Comment cannot be empty when declining',
+      'string.max': 'Comment cannot exceed 2000 characters',
+      'any.required': 'Comment is required when declining an analysis'
+    }),
+    otherwise: Joi.string().max(2000).optional().messages({
+      'string.max': 'Comment cannot exceed 2000 characters'
+    })
+  })
+});
+
 router.post('/upload-direct',
   ValidationMiddleware.validate({ body: uploadDocumentDirectSchema }),
   documentController.uploadDocumentDirect.bind(documentController)
@@ -189,6 +207,12 @@ router.get('/:documentId/swiss-obligation-analyses',
 // Start Lawyer Review for Swiss Obligation Analysis
 router.post('/:documentId/start-lawyer-review',
   documentController.startLawyerReview.bind(documentController)
+);
+
+// Submit Lawyer Analysis Result
+router.post('/swiss-obligation-analyses/:analysisId/lawyer-result',
+  ValidationMiddleware.validate({ body: lawyerAnalysisResultSchema }),
+  documentController.submitLawyerAnalysisResult.bind(documentController)
 );
 
 // Job Management Routes

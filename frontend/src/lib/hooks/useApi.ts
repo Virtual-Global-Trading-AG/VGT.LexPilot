@@ -657,6 +657,38 @@ export function useDocuments() {
     }
   }, [isAuthenticated]);
 
+  const submitLawyerAnalysisResult = useCallback(async (analysisId: string, decision: 'APPROVED' | 'DECLINE', comment?: string): Promise<{
+    success: boolean;
+    data?: any;
+    error?: string;
+  }> => {
+    if (!isAuthenticated) {
+      setError('Authentication required');
+      return { success: false, error: 'Authentication required' };
+    }
+
+    setError(null);
+
+    try {
+      const response = await apiClient.post(`/documents/swiss-obligation-analyses/${analysisId}/lawyer-result`, {
+        decision,
+        comment
+      });
+
+      if (response.success && response.data) {
+        return { success: true, data: response.data };
+      } else {
+        const errorMsg = response.error || 'Failed to submit lawyer analysis result';
+        setError(errorMsg);
+        return { success: false, error: errorMsg };
+      }
+    } catch (err) {
+      const errorMsg = 'Network error while submitting lawyer analysis result';
+      setError(errorMsg);
+      return { success: false, error: errorMsg };
+    }
+  }, [isAuthenticated]);
+
   return {
     getDocuments,
     deleteDocument,
@@ -667,6 +699,7 @@ export function useDocuments() {
     getSwissObligationAnalysesByDocumentId,
     getSharedSwissObligationAnalyses,
     startLawyerReview,
+    submitLawyerAnalysisResult,
     getAllUserDocuments,
     documents,
     pagination,

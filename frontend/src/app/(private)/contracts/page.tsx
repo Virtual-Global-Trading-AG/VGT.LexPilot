@@ -105,6 +105,7 @@ function ContractsPageContent() {
     getSwissObligationAnalysesByDocumentId,
     getSharedSwissObligationAnalyses,
     startLawyerReview,
+    submitLawyerAnalysisResult,
     getAllUserDocuments,
     documents,
     pagination,
@@ -162,6 +163,13 @@ function ContractsPageContent() {
   const [sharedAnalyses, setSharedAnalyses] = useState<SwissObligationAnalysisResult[]>([]);
   const [sharedAnalysesLoading, setSharedAnalysesLoading] = useState(false);
 
+  // Lawyer decision modal state
+  const [lawyerDecisionModalOpen, setLawyerDecisionModalOpen] = useState(false);
+  const [selectedAnalysisForDecision, setSelectedAnalysisForDecision] = useState<SwissObligationAnalysisResult | null>(null);
+  const [lawyerDecision, setLawyerDecision] = useState<'APPROVED' | 'DECLINE' | null>(null);
+  const [lawyerComment, setLawyerComment] = useState('');
+  const [submittingDecision, setSubmittingDecision] = useState(false);
+
   const { toast } = useToast();
   const { startJobMonitoring, activeJobs } = useJobMonitor();
   const { userProfile } = useAuthStore();
@@ -204,6 +212,81 @@ function ContractsPageContent() {
       job.type === 'swiss-obligation-analysis' && 
       job.documentId === documentId
     );
+  };
+
+  // Handler for opening lawyer decision modal
+  const handleOpenLawyerDecisionModal = (analysis: SwissObligationAnalysisResult) => {
+    setSelectedAnalysisForDecision(analysis);
+    setLawyerDecision(null);
+    setLawyerComment('');
+    setLawyerDecisionModalOpen(true);
+  };
+
+  // Handler for closing lawyer decision modal
+  const handleCloseLawyerDecisionModal = () => {
+    setLawyerDecisionModalOpen(false);
+    setSelectedAnalysisForDecision(null);
+    setLawyerDecision(null);
+    setLawyerComment('');
+  };
+
+  // Handler for submitting lawyer decision
+  const handleSubmitLawyerDecision = async () => {
+    if (!selectedAnalysisForDecision || !lawyerDecision) {
+      toast({
+        variant: 'destructive',
+        title: 'Fehler',
+        description: 'Bitte wählen Sie eine Entscheidung aus.'
+      });
+      return;
+    }
+
+    if (lawyerDecision === 'DECLINE' && !lawyerComment.trim()) {
+      toast({
+        variant: 'destructive',
+        title: 'Kommentar erforderlich',
+        description: 'Bei einer Ablehnung ist ein Kommentar erforderlich.'
+      });
+      return;
+    }
+
+    setSubmittingDecision(true);
+
+    try {
+      const result = await submitLawyerAnalysisResult(
+        selectedAnalysisForDecision.analysisId,
+        lawyerDecision,
+        lawyerDecision === 'DECLINE' ? lawyerComment : undefined
+      );
+
+      if (result.success) {
+        toast({
+          variant: 'success',
+          title: 'Entscheidung gespeichert',
+          description: lawyerDecision === 'APPROVED' 
+            ? 'Die Analyse wurde erfolgreich genehmigt.' 
+            : 'Die Analyse wurde erfolgreich abgelehnt.'
+        });
+
+        // Close modal and reload shared analyses
+        handleCloseLawyerDecisionModal();
+        loadSharedAnalyses();
+      } else {
+        toast({
+          variant: 'destructive',
+          title: 'Fehler beim Speichern',
+          description: result.error || 'Unerwarteter Fehler beim Speichern der Entscheidung.'
+        });
+      }
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Netzwerkfehler',
+        description: 'Fehler beim Speichern der Entscheidung. Bitte versuchen Sie es erneut.'
+      });
+    } finally {
+      setSubmittingDecision(false);
+    }
   };
 
   // Helper function to get analysis status for a document
@@ -712,6 +795,19 @@ function ContractsPageContent() {
                                       <ExternalLink className="h-4 w-4" />
                                     </a>
                                   )}
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleOpenLawyerDecisionModal(analysis);
+                                    }}
+                                    title="Analyse bewerten"
+                                  >
+                                    <UserCheck className="h-4 w-4"/>
+                                    <span className="sr-only">Analyse bewerten</span>
+                                  </Button>
                                 </div>
                               </TableCell>
                             </TableRow>
@@ -1465,6 +1561,103 @@ function ContractsPageContent() {
         </div>
       )}
 
+      {/* Lawyer Decision Modal */}
+      {lawyerDecisionModalOpen && selectedAnalysisForDecision && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold">Analyse bewerten</h3>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleCloseLawyerDecisionModal}
+                  className="h-8 w-8 p-0"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <Label className="text-sm font-medium">Dokument:</Label>
+                  <p className="text-sm text-muted-foreground">
+                    {selectedAnalysisForDecision.documentContext?.documentType || 'Unbekannter Dokumenttyp'}
+                  </p>
+                </div>
+
+                <div>
+                  <Label className="text-sm font-medium">Entscheidung:</Label>
+                  <div className="mt-2 space-y-2">
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="radio"
+                        id="approve"
+                        name="decision"
+                        value="APPROVED"
+                        checked={lawyerDecision === 'APPROVED'}
+                        onChange={(e) => setLawyerDecision(e.target.value as 'APPROVED')}
+                        className="h-4 w-4 text-green-600"
+                      />
+                      <Label htmlFor="approve" className="text-sm text-green-600 font-medium">
+                        Genehmigen
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="radio"
+                        id="decline"
+                        name="decision"
+                        value="DECLINE"
+                        checked={lawyerDecision === 'DECLINE'}
+                        onChange={(e) => setLawyerDecision(e.target.value as 'DECLINE')}
+                        className="h-4 w-4 text-red-600"
+                      />
+                      <Label htmlFor="decline" className="text-sm text-red-600 font-medium">
+                        Ablehnen
+                      </Label>
+                    </div>
+                  </div>
+                </div>
+
+                {lawyerDecision === 'DECLINE' && (
+                  <div>
+                    <Label htmlFor="comment" className="text-sm font-medium">
+                      Kommentar (erforderlich):
+                    </Label>
+                    <Textarea
+                      id="comment"
+                      value={lawyerComment}
+                      onChange={(e) => setLawyerComment(e.target.value)}
+                      placeholder="Bitte geben Sie einen Grund für die Ablehnung an..."
+                      className="mt-1"
+                      rows={3}
+                    />
+                  </div>
+                )}
+
+                <div className="flex justify-end space-x-2 pt-4">
+                  <Button
+                    variant="outline"
+                    onClick={handleCloseLawyerDecisionModal}
+                    disabled={submittingDecision}
+                  >
+                    Abbrechen
+                  </Button>
+                  <Button
+                    onClick={handleSubmitLawyerDecision}
+                    disabled={submittingDecision || !lawyerDecision}
+                    className={lawyerDecision === 'APPROVED' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}
+                  >
+                    {submittingDecision ? 'Wird gespeichert...' : 
+                     lawyerDecision === 'APPROVED' ? 'Genehmigen' : 'Ablehnen'}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
     </>
   );
