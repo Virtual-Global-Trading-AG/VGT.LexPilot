@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, } from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/lib/hooks/use-toast';
 import { useDocuments, useDocumentUpload } from '@/lib/hooks/useApi';
@@ -16,6 +17,8 @@ import { useJobMonitor } from '@/lib/contexts/JobMonitorContext';
 import { SwissObligationAnalysisResult, SwissObligationSectionResult } from '@/types';
 import { AlertCircle, CheckCircle, ChevronDown, ChevronRight, Clock, Download, FileSearch, FileText, Filter, Plus, Scale, Search, Trash2, Upload, X, } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
+import { ExternalLink } from "lucide-react";
+
 
 
 const getRiskBadge = (risk: string) => {
@@ -99,6 +102,7 @@ function ContractsPageContent() {
     getJobStatus,
     getUserJobs,
     getSwissObligationAnalysesByDocumentId,
+    getAllUserDocuments,
     documents,
     pagination,
     loading: documentsLoading,
@@ -109,6 +113,23 @@ function ContractsPageContent() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [documentToDelete, setDocumentToDelete] = useState<{ id: string, name: string } | null>(null);
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
+  const [allUserDocuments, setAllUserDocuments] = useState<any[]>([]);
+  const [allDocumentsLoading, setAllDocumentsLoading] = useState(false);
+
+  // Function to load all user documents
+  const loadAllUserDocuments = async (tag?: string) => {
+    setAllDocumentsLoading(true);
+    try {
+      const result = await getAllUserDocuments(tag);
+      if (result.success && result.data) {
+        setAllUserDocuments(result.data.documents);
+      }
+    } catch (error) {
+      console.error('Error loading all user documents:', error);
+    } finally {
+      setAllDocumentsLoading(false);
+    }
+  };
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<'contract' | 'nda' | 'terms_conditions' | 'other'>('contract');
   const [extractedText, setExtractedText] = useState<string>('');
@@ -530,10 +551,6 @@ function ContractsPageContent() {
               Verwalten und analysieren Sie Ihre Rechtsdokumente
             </p>
           </div>
-          <Button onClick={handleButtonClick} disabled={uploading}>
-            <Upload className="mr-2 h-4 w-4"/>
-            {uploading ? 'Wird hochgeladen...' : 'Vertrag hochladen'}
-          </Button>
         </div>
 
         {/* Filters and Search */}
@@ -554,178 +571,277 @@ function ContractsPageContent() {
             </Button>
           </div>
         )}
-        {/* Contracts Table */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Analysierte Verträge</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {documentsLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <div className="text-sm text-muted-foreground">Lade Dokumente...</div>
-              </div>
-            ) : documentsError ? (
-              <div className="flex items-center justify-center py-8">
-                <div className="text-sm text-red-600">
-                  Fehler beim Laden der Dokumente: {documentsError}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="ml-2"
-                    onClick={() => {
-                      clearDocumentsError();
-                      getDocuments({
-                        page: 1,
-                        limit: 10,
-                        sortBy: 'uploadedAt',
-                        sortOrder: 'desc'
-                      });
-                    }}
-                  >
-                    Erneut versuchen
-                  </Button>
-                </div>
-              </div>
-            ) : documents.length === 0 ? (
-              <div className="flex items-center justify-center py-8">
-                <div className="text-sm text-muted-foreground">Keine Dokumente gefunden</div>
-              </div>
-            ) : (
-              <div className="space-y-6">
-                {Object.entries(groupedDocuments).map(([category, categoryDocuments]) => (
-                  <div key={category} className="space-y-3">
-                    <div className="flex items-center space-x-2">
-                      <h3 className="text-lg font-semibold">{getCategoryDisplayName(category)}</h3>
-                      {getCategoryBadge(category)}
-                      <span className="text-sm text-muted-foreground">({categoryDocuments.length})</span>
+        {/* Contracts Tabs */}
+        <Tabs defaultValue="analyzed" className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="analyzed">Analysierte Verträge</TabsTrigger>
+            <TabsTrigger value="all" onClick={() => loadAllUserDocuments('generated')}>Generierte Dokumente</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="analyzed">
+            <div className="flex flex-row-reverse mt-4 mb-4">
+              <Button onClick={handleButtonClick} disabled={uploading}>
+                <Upload className="mr-2 h-4 w-4"/>
+                {uploading ? 'Wird hochgeladen...' : 'Vertrag hochladen'}
+              </Button>
+            </div>
+            <Card>
+              <CardHeader>
+                <CardTitle>Analysierte Verträge</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {documentsLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="text-sm text-muted-foreground">Lade Dokumente...</div>
+                  </div>
+                ) : documentsError ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="text-sm text-red-600">
+                      Fehler beim Laden der Dokumente: {documentsError}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="ml-2"
+                        onClick={() => {
+                          clearDocumentsError();
+                          getDocuments({
+                            page: 1,
+                            limit: 10,
+                            sortBy: 'uploadedAt',
+                            sortOrder: 'desc'
+                          });
+                        }}
+                      >
+                        Erneut versuchen
+                      </Button>
+                    </div>
+                  </div>
+                ) : documents.length === 0 ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="text-sm text-muted-foreground">Keine Dokumente gefunden</div>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {Object.entries(groupedDocuments).map(([category, categoryDocuments]) => (
+                      <div key={category} className="space-y-3">
+                        <div className="flex items-center space-x-2">
+                          <h3 className="text-lg font-semibold">{getCategoryDisplayName(category)}</h3>
+                          {getCategoryBadge(category)}
+                          <span className="text-sm text-muted-foreground">({categoryDocuments.length})</span>
+                        </div>
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Titel</TableHead>
+                              <TableHead>Risiko</TableHead>
+                              <TableHead>Hochgeladen</TableHead>
+                              <TableHead>Aktionen</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {categoryDocuments.map((document) => (
+                              <React.Fragment key={document.documentId}>
+                                <TableRow 
+                                  className={`border-b ${documentAnalyses[document.documentId] && !isDocumentAnalysisRunning(document.documentId) ? 'cursor-pointer hover:bg-gray-50' : ''}`}
+                                  onClick={() => documentAnalyses[document.documentId] && !isDocumentAnalysisRunning(document.documentId) && handleAnalysisRowClick(documentAnalyses[document.documentId][0])}
+                                >
+                                  <TableCell>
+                                    <div className="space-y-1">
+                                      <div className="font-medium">{document.documentMetadata.fileName || document.documentMetadata.originalName || 'Unbekannt'}</div>
+                                      <div className="text-sm text-muted-foreground">
+                                        {document.documentMetadata.uploadedAt ? new Date(document.documentMetadata.uploadedAt).toLocaleDateString('de-DE') : 'Unbekannt'} • {document.documentMetadata.size ? `${(document.documentMetadata.size / 1024 / 1024).toFixed(1)} MB` : 'Unbekannt'}
+                                        {isDocumentAnalysisRunning(document.documentId) ? (
+                                          <span className="ml-2">
+                                            • <span className="text-blue-600 flex items-center"><Clock className="h-3 w-3 mr-1 animate-spin"/>Analyse läuft</span>
+                                          </span>
+                                        ) : documentAnalyses[document.documentId] && (
+                                          <span className="ml-2">
+                                            • <span className="text-blue-600">Obligationenanalyse: {Math.round((documentAnalyses[document.documentId][0].overallCompliance?.complianceScore || 0) * 100)}% konform</span>
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell>
+                                    {!isDocumentAnalysisRunning(document.documentId) && documentAnalyses[document.documentId] ? (
+                                      <Badge variant={documentAnalyses[document.documentId][0].overallCompliance?.isCompliant ? 'default' : 'destructive'} className="text-xs">
+                                        {documentAnalyses[document.documentId][0].overallCompliance?.isCompliant ? 'Konform' : 'Nicht konform'}
+                                      </Badge>
+                                    ) : (
+                                      <span className="text-sm text-muted-foreground">-</span>
+                                    )}
+                                  </TableCell>
+                                  <TableCell>
+                                    <div className="text-sm">
+                                      {document.documentMetadata.uploadedAt ? new Date(document.documentMetadata.uploadedAt).toLocaleDateString('de-DE') : 'Unbekannt'}
+                                    </div>
+                                  </TableCell>
+                                  <TableCell>
+                                    <div className="flex items-center space-x-2">
+                                      {document.downloadUrl && (
+                                        <a
+                                          href={document.downloadUrl}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="inline-flex items-center justify-center w-8 h-8 rounded-md hover:bg-muted transition-colors"
+                                          title="PDF öffnen"
+                                        >
+                                          <ExternalLink className="h-4 w-4" />
+                                        </a>
+                                      )}
+                                      {/* Just for debugging */}
+                                      {false && (
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleExtractText(document.documentId, document.documentMetadata.fileName || 'Unbekannt');
+                                          }}
+                                          disabled={extractingText}
+                                        >
+                                          <FileSearch className="h-4 w-4"/>
+                                          <span className="sr-only">Text extrahieren</span>
+                                        </Button>
+                                      )}
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleSwissObligationAnalysis(document.documentId, document.documentMetadata.fileName || 'Unbekannt');
+                                        }}
+                                        disabled={swissAnalysisLoading === document.documentId || isDocumentAnalysisRunning(document.documentId)}
+                                        title={
+                                          isDocumentAnalysisRunning(document.documentId)
+                                            ? 'Obligationenanalyse läuft bereits - bitte warten Sie bis zum Abschluss'
+                                            : documentAnalyses[document.documentId]?.length > 0
+                                            ? 'Obligationenanalyse erneut ausführen (überschreibt bestehende Analyse)'
+                                            : 'Schweizer Obligationenrecht-Analyse starten'
+                                        }
+                                      >
+                                        <Scale className="h-4 w-4"/>
+                                        <span className="sr-only">
+                                          {documentAnalyses[document.documentId]?.length > 0
+                                            ? 'Analyse erneut ausführen'
+                                            : 'Schweizer Obligationenrecht-Analyse'
+                                          }
+                                        </span>
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleDeleteDocument(document.documentId, document.documentMetadata.fileName || 'Unbekannt');
+                                        }}
+                                      >
+                                        <Trash2 className="h-4 w-4"/>
+                                        <span className="sr-only">Löschen</span>
+                                      </Button>
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                              </React.Fragment>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="all">
+            <Card>
+              <CardHeader>
+                <CardTitle>Dokumente</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {allDocumentsLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="text-sm text-muted-foreground">Lade alle Dokumente...</div>
+                  </div>
+                ) : allUserDocuments.length === 0 ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="text-sm text-muted-foreground">Keine Dokumente gefunden</div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="text-sm text-muted-foreground">
+                      {allUserDocuments.length} Dokument{allUserDocuments.length !== 1 ? 'e' : ''} gefunden
                     </div>
                     <Table>
                       <TableHeader>
                         <TableRow>
                           <TableHead>Titel</TableHead>
-                          <TableHead>Risiko</TableHead>
+                          <TableHead>Kategorie</TableHead>
                           <TableHead>Hochgeladen</TableHead>
-                          <TableHead>Aktionen</TableHead>
+                          <TableHead className="w-24">Aktionen</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {categoryDocuments.map((document) => (
-                          <React.Fragment key={document.documentId}>
-                            <TableRow 
-                              className={`border-b ${documentAnalyses[document.documentId] && !isDocumentAnalysisRunning(document.documentId) ? 'cursor-pointer hover:bg-gray-50' : ''}`}
-                              onClick={() => documentAnalyses[document.documentId] && !isDocumentAnalysisRunning(document.documentId) && handleAnalysisRowClick(documentAnalyses[document.documentId][0])}
-                            >
-                              <TableCell>
-                                <div className="space-y-1">
-                                  <div className="font-medium">{document.documentMetadata.fileName || document.documentMetadata.originalName || 'Unbekannt'}</div>
-                                  <div className="text-sm text-muted-foreground">
-                                    {document.documentMetadata.uploadedAt ? new Date(document.documentMetadata.uploadedAt).toLocaleDateString('de-DE') : 'Unbekannt'} • {document.documentMetadata.size ? `${(document.documentMetadata.size / 1024 / 1024).toFixed(1)} MB` : 'Unbekannt'}
-                                    {isDocumentAnalysisRunning(document.documentId) ? (
-                                      <span className="ml-2">
-                                        • <span className="text-blue-600 flex items-center"><Clock className="h-3 w-3 mr-1 animate-spin"/>Analyse läuft</span>
-                                      </span>
-                                    ) : documentAnalyses[document.documentId] && (
-                                      <span className="ml-2">
-                                        • <span className="text-blue-600">Obligationenanalyse: {Math.round((documentAnalyses[document.documentId][0].overallCompliance?.complianceScore || 0) * 100)}% konform</span>
-                                      </span>
-                                    )}
-                                  </div>
+                        {allUserDocuments.map((document) => (
+                          <TableRow key={document.documentId}>
+                            <TableCell>
+                              <div className="space-y-1">
+                                <div className="font-medium">{document.documentMetadata.fileName || 'Unbekannt'}</div>
+                                <div className="text-sm text-muted-foreground">
+                                  {document.documentMetadata.size ? `${(document.documentMetadata.size / 1024 / 1024).toFixed(1)} MB` : 'Unbekannt'}
                                 </div>
-                              </TableCell>
-                              <TableCell>
-                                {!isDocumentAnalysisRunning(document.documentId) && documentAnalyses[document.documentId] ? (
-                                  <Badge variant={documentAnalyses[document.documentId][0].overallCompliance?.isCompliant ? 'default' : 'destructive'} className="text-xs">
-                                    {documentAnalyses[document.documentId][0].overallCompliance?.isCompliant ? 'Konform' : 'Nicht konform'}
-                                  </Badge>
-                                ) : (
-                                  <span className="text-sm text-muted-foreground">-</span>
-                                )}
-                              </TableCell>
-                              <TableCell>
-                                <div className="text-sm">
-                                  {document.documentMetadata.uploadedAt ? new Date(document.documentMetadata.uploadedAt).toLocaleDateString('de-DE') : 'Unbekannt'}
-                                </div>
-                              </TableCell>
-                              <TableCell>
-                                <div className="flex items-center space-x-2">
-                                  <Button 
-                                    variant="ghost" 
-                                    size="sm" 
-                                    className="h-8 w-8 p-0"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      // TODO: Implement download functionality
-                                    }}
-                                  >
-                                    <Download className="h-4 w-4"/>
-                                    <span className="sr-only">Herunterladen</span>
-                                  </Button>
-                                  {/* Just for debugging */}
-                                  {false && (
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleExtractText(document.documentId, document.documentMetadata.fileName || 'Unbekannt');
-                                      }}
-                                      disabled={extractingText}
-                                    >
-                                      <FileSearch className="h-4 w-4"/>
-                                      <span className="sr-only">Text extrahieren</span>
-                                    </Button>
-                                  )}
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleSwissObligationAnalysis(document.documentId, document.documentMetadata.fileName || 'Unbekannt');
-                                    }}
-                                    disabled={swissAnalysisLoading === document.documentId || isDocumentAnalysisRunning(document.documentId)}
-                                    title={
-                                      isDocumentAnalysisRunning(document.documentId)
-                                        ? 'Obligationenanalyse läuft bereits - bitte warten Sie bis zum Abschluss'
-                                        : documentAnalyses[document.documentId]?.length > 0
-                                        ? 'Obligationenanalyse erneut ausführen (überschreibt bestehende Analyse)'
-                                        : 'Schweizer Obligationenrecht-Analyse starten'
-                                    }
-                                  >
-                                    <Scale className="h-4 w-4"/>
-                                    <span className="sr-only">
-                                      {documentAnalyses[document.documentId]?.length > 0
-                                        ? 'Analyse erneut ausführen'
-                                        : 'Schweizer Obligationenrecht-Analyse'
-                                      }
-                                    </span>
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleDeleteDocument(document.documentId, document.documentMetadata.fileName || 'Unbekannt');
-                                    }}
-                                  >
-                                    <Trash2 className="h-4 w-4"/>
-                                    <span className="sr-only">Löschen</span>
-                                  </Button>
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                          </React.Fragment>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {getCategoryBadge(document.documentMetadata.category || 'other')}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex gap-1">
+                                <p className="text-sm"></p>
+                              </div>
+                              <div className="text-sm cursor-default"
+                                   title={document.documentMetadata.uploadedAt
+                                     ? new Date(document.documentMetadata.uploadedAt).toLocaleString('de-DE', {
+                                     year: 'numeric',
+                                     month: '2-digit',
+                                     day: '2-digit',
+                                     hour: '2-digit',
+                                     minute: '2-digit',
+                                     hour12: false
+                                   }).replace(',', '') + 'h'
+                                     : 'Unbekannt'
+                                   }
+                              >
+                                {document.documentMetadata.uploadedAt ? new Date(document.documentMetadata.uploadedAt).toLocaleDateString('de-DE') : 'Unbekannt'}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {document.downloadUrl && (
+                                <a
+                                  href={document.downloadUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center justify-center w-8 h-8 rounded-md hover:bg-muted transition-colors"
+                                  title="PDF öffnen"
+                                >
+                                  <ExternalLink className="h-4 w-4" />
+                                </a>
+                              )}
+                            </TableCell>
+                          </TableRow>
                         ))}
                       </TableBody>
                     </Table>
                   </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
 
         {/* Extracted Text Display */}
         {extractedText && extractedDocumentInfo && (

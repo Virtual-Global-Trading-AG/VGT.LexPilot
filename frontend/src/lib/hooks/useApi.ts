@@ -551,6 +551,51 @@ export function useDocuments() {
     }
   }, [isAuthenticated]);
 
+  const getAllUserDocuments = useCallback(async (tag?: string): Promise<{
+    success: boolean;
+    data?: {
+      documents: any[];
+      count: number;
+    };
+    error?: string;
+  }> => {
+    if (!isAuthenticated) {
+      setError('Authentication required');
+      return { success: false, error: 'Authentication required' };
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const queryParams = new URLSearchParams();
+      if (tag) queryParams.append('tag', tag);
+
+      const endpoint = `/contracts/documents${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+      const response = await apiClient.get(endpoint);
+
+      if (response.success && response.data) {
+        return { 
+          success: true, 
+          data: {
+            documents: response.data.documents || [],
+            count: response.data.count || 0
+          }
+        };
+      } else {
+        const errorMsg = response.error || 'Failed to fetch all user documents';
+        setError(errorMsg);
+        return { success: false, error: errorMsg };
+      }
+    } catch (err) {
+      const errorMsg = 'Network error while fetching all user documents';
+      setError(errorMsg);
+      return { success: false, error: errorMsg };
+    } finally {
+      setLoading(false);
+    }
+  }, [isAuthenticated]);
+
   return {
     getDocuments,
     deleteDocument,
@@ -559,6 +604,7 @@ export function useDocuments() {
     getJobStatus,
     getUserJobs,
     getSwissObligationAnalysesByDocumentId,
+    getAllUserDocuments,
     documents,
     pagination,
     loading,

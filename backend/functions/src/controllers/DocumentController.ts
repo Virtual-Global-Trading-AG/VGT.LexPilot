@@ -78,6 +78,7 @@ export class DocumentController extends BaseController {
 
       // Generate document ID and upload directly
       const documentId = this.generateDocumentId();
+
       const uploadResult = await this.storageService.uploadDocumentDirect(
         documentId,
         fileName,
@@ -87,7 +88,7 @@ export class DocumentController extends BaseController {
       );
 
       // Create document record
-      await this.firestoreService.createDocument(userId, documentId, {
+      await this.firestoreService.createDocument(userId, documentId, uploadResult.downloadUrl, {
         fileName,
         contentType,
         size,

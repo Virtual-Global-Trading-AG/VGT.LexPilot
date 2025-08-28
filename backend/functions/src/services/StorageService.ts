@@ -5,20 +5,6 @@ import { Logger } from '../utils/logger';
 import { config } from '../config/environment';
 import { AnonymizedKeyword } from '../models';
 
-export interface DocumentMetadata {
-  fileName: string;
-  contentType: string;
-  size: number;
-  uploadedAt: string;
-  processedAt?: string;
-  status: 'uploading' | 'uploaded' | 'processing' | 'processed' | 'error';
-  category?: 'contract' | 'nda' | 'terms_conditions' | 'other';
-  anonymizedKeywords: AnonymizedKeyword[];
-  description?: string;
-  tags?: string[];
-  analyses?: string[];
-}
-
 export interface StorageQuotaInfo {
   used: number;
   limit: number;
@@ -153,7 +139,7 @@ export class StorageService {
     contentType: string,
     base64Content: string,
     userId: string
-  ): Promise<{ success: boolean; filePath: string; size: number }> {
+  ): Promise<{ success: boolean; filePath: string; downloadUrl: string; size: number }> {
     try {
       const filePath = this.getDocumentPath(userId, documentId, fileName);
 
@@ -183,10 +169,10 @@ export class StorageService {
         }
       });
 
-      const url = await getDownloadURL(this.bucket.file(filePath));
+      const downloadUrl = await getDownloadURL(this.bucket.file(filePath));
 
       this.logger.info('Document uploaded directly', {
-        url,
+        downloadUrl,
         documentId,
         userId,
         fileName,
@@ -194,7 +180,7 @@ export class StorageService {
         contentType
       });
 
-      return { success: true, filePath, size };
+      return { success: true, filePath, downloadUrl, size };
     } catch (error) {
       this.logger.error('Failed to upload document directly', error as Error, {
         documentId,

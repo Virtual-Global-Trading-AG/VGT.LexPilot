@@ -268,6 +268,7 @@ export class ContractGenerationService {
 
       const response = await this.openai.responses.create({
         model: 'gpt-5-mini-2025-08-07',
+        service_tier: 'priority',
         input: prompt,
         tools: [
           {
@@ -289,13 +290,13 @@ export class ContractGenerationService {
       const pdfBuffer = await this.generatePDF(markdownContent, request.parameters, asWord);
 
       // Create filename for the PDF
-      const fileName = `${contractType.name.replace(/[^a-zA-Z0-9]/g, '_')}_${documentId}.${asWord ? 'docx' : 'pdf'}`;
+      const fileName = `${contractType.name.replace(/[^a-zA-Z0-9]/g, '_')}_${request.parameters['employerName'].replace(/[^a-zA-Z0-9]/g, '_')}.${asWord ? 'docx' : 'pdf'}`;
 
       // Save PDF to Firebase Storage at /users/userId/documents/generated/documentId
       const base64Content = pdfBuffer.toString('base64');
 
       // Upload to storage using the generated document ID
-      await this.storageService.uploadDocumentDirect(
+      const uploadResult = await this.storageService.uploadDocumentDirect(
         `generated/${documentId}`,
         fileName,
         asWord ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : 'application/pdf',
@@ -303,15 +304,8 @@ export class ContractGenerationService {
         request.userId
       );
 
-      // Get download URL
-      const downloadUrl = await this.storageService.getDocumentDownloadUrl(
-        request.userId,
-        `generated/${documentId}`,
-        fileName
-      );
-
       // Add document to user's Firestore collection
-      await this.firestoreService.createDocument(request.userId, documentId, {
+      await this.firestoreService.createDocument(request.userId, documentId, uploadResult.downloadUrl, {
         fileName,
         size: pdfBuffer.length,
         contentType: asWord ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : 'application/pdf',
@@ -326,10 +320,10 @@ export class ContractGenerationService {
         documentId,
         contractType: request.contractType,
         userId: request.userId,
-        downloadUrl
+        downloadUrl: uploadResult.downloadUrl
       });
 
-      return { downloadUrl, documentId };
+      return { downloadUrl: uploadResult.downloadUrl, documentId };
 
     } catch (error) {
       this.logger.error('Error during contract generation', error as Error, {

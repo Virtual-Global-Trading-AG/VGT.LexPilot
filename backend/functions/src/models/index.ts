@@ -9,6 +9,7 @@ export interface BaseEntity {
 
 export interface UserDocument {
   documentId: string;
+  downloadUrl: string;
   documentMetadata: DocumentMetadata;
   addedAt: string; // ISO timestamp when document was added to user
 }
@@ -163,6 +164,7 @@ export interface AnonymizedKeyword {
 
 export interface DocumentMetadata {
   fileName: string;
+  downloadUrl: string;
   contentType: string;
   size: number;
   uploadedAt: string;

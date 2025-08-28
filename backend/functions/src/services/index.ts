@@ -10,7 +10,6 @@ export { FirebaseInitializer, ensureFirebaseInitialized } from './FirebaseInitia
 
 // Re-export types for convenience
 export type {
-  DocumentMetadata,
   StorageQuotaInfo
 } from './StorageService';
 

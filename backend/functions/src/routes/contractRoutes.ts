@@ -13,6 +13,9 @@ router.use(authMiddleware);
 // Contract Types
 router.get('/types', contractGenerationController.getContractTypes.bind(contractGenerationController));
 
+// Get all user documents with optional tag filtering
+router.get('/documents', contractGenerationController.getAllUserDocuments.bind(contractGenerationController));
+
 // Contract Generation (synchronous)
 router.post('/generate', 
   ValidationMiddleware.validate({

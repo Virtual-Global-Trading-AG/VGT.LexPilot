@@ -1,4 +1,5 @@
 import { FirestoreService } from '@services/FirestoreService';
+import { StorageService } from '@services/StorageService';
 import { Request, Response, NextFunction } from 'express';
 import { Logger } from '../utils/logger';
 import { BaseController } from './BaseController';
@@ -9,12 +10,14 @@ export class ContractGenerationController extends BaseController {
   private contractGenerationService: ContractGenerationService;
   private jobQueueService: JobQueueService;
   private fireStoreService: FirestoreService;
+  private storageService: StorageService;
 
   constructor() {
     super();
     this.contractGenerationService = new ContractGenerationService();
     this.fireStoreService = new FirestoreService();
     this.jobQueueService = new JobQueueService(this.fireStoreService);
+    this.storageService = new StorageService();
   }
 
   /**
@@ -161,6 +164,43 @@ export class ContractGenerationController extends BaseController {
 
     } catch (error) {
       this.logger.error('Error getting contract generation job status', error as Error);
+      next(error);
+    }
+  }
+
+  /**
+   * Get all user documents with optional tag filtering
+   */
+  async getAllUserDocuments(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = (req as any).user?.uid;
+      if (!userId) {
+        return this.sendError(res, 401, 'User not authenticated');
+      }
+
+      const { tag } = req.query;
+
+      this.logger.info('Getting all user documents', {
+        userId,
+        tag
+      });
+
+      const filteredDocuments = await this.fireStoreService.getAllUserDocuments(
+        userId, 
+        tag as string | undefined
+      );
+
+      this.logger.info('Getting all user documents', {
+        documentsSize: filteredDocuments.length,
+      });
+
+      this.sendSuccess(res, {
+        documents: filteredDocuments,
+        count: filteredDocuments.length
+      });
+
+    } catch (error) {
+      this.logger.error('Error getting all user documents', error as Error);
       next(error);
     }
   }

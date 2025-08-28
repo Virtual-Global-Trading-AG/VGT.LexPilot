@@ -1,8 +1,8 @@
-import { UserDocument } from '@models/index';
+import { DocumentMetadata, UserDocument } from '@models/index';
 import { UserRepository } from '@repositories/UserRepository';
 import * as admin from 'firebase-admin';
 import { Logger } from '../utils/logger';
-import { DocumentMetadata, StorageService } from './StorageService';
+import { StorageService } from './StorageService';
 
 export interface PaginationOptions {
   page: number;
@@ -19,6 +19,7 @@ export interface DocumentFilters {
   category?: string;
   startDate?: string;
   endDate?: string;
+  tags?: string[];
 }
 
 export interface PaginatedResult<T> {
@@ -44,7 +45,12 @@ export class FirestoreService {
   /**
    * Create a new document record
    */
-  async createDocument(userId: string, documentId: string, metadata: Partial<DocumentMetadata>): Promise<void> {
+  async createDocument(
+    userId: string,
+    documentId: string,
+    downloadUrl: string,
+    metadata: Partial<DocumentMetadata>
+  ): Promise<void> {
     try {
 
       const user = await this.userRepo.findByUid(userId);
@@ -54,6 +60,7 @@ export class FirestoreService {
 
       const documentData: DocumentMetadata = {
         fileName: metadata.fileName || '',
+        downloadUrl: downloadUrl,
         size: metadata.size || 0,
         contentType: metadata.contentType || '',
         uploadedAt: metadata.uploadedAt || new Date().toISOString(),
@@ -68,6 +75,7 @@ export class FirestoreService {
       // Create UserDocument object with metadata
       const userDocument: UserDocument = {
         documentId,
+        downloadUrl,
         documentMetadata: documentData,
         addedAt: new Date().toISOString()
       };
@@ -170,6 +178,12 @@ export class FirestoreService {
         );
       }
 
+      if (filters.tags && filters.tags.length > 0) {
+        filteredDocuments = filteredDocuments.filter(doc => 
+          filters.tags!.some(tag => doc.documentMetadata.tags?.includes(tag))
+        );
+      }
+
       // Apply sorting
       filteredDocuments.sort((a, b) => {
         const aValue = a.documentMetadata[sort.field as keyof DocumentMetadata];
@@ -210,6 +224,50 @@ export class FirestoreService {
         filters
       });
       throw new Error('Failed to get user documents');
+    }
+  }
+
+  /**
+   * Get all user documents with optional tag filtering
+   */
+  async getAllUserDocuments(userId: string, tag?: string): Promise<UserDocument[]> {
+    try {
+      // Get user document to retrieve documents array
+      const user = await this.userRepo.findByUid(userId);
+
+      if (!user) {
+        throw new Error('User not found');
+      }
+
+      let documents: UserDocument[] = user.documents || [];
+
+      if (documents.length === 0) {
+        return [];
+      }
+
+      this.logger.info('Retrieving all user documents', { documents })
+
+      // Apply tag filter if provided
+      let filteredDocuments = documents;
+      if (tag) {
+        filteredDocuments = documents.filter(doc =>
+          doc.documentMetadata.tags?.includes(tag)
+        );
+      }
+
+      this.logger.info('All user documents retrieved', {
+        userId,
+        count: filteredDocuments.length,
+        tag
+      });
+
+      return filteredDocuments;
+    } catch (error) {
+      this.logger.error('Failed to get all user documents', error as Error, {
+        userId,
+        tag
+      });
+      throw new Error('Failed to get all user documents');
     }
   }
 
