@@ -1526,7 +1526,9 @@ STIL: Professionell, präzise, praxisorientiert für beide Jurisdiktionen`;
             ) || 0,
           },
           createdAt: analysis.createdAt.toISOString(),
-          completedAt: analysis.completedAt?.toISOString()
+          completedAt: analysis.completedAt?.toISOString(),
+          lawyerStatus: analysis.lawyerStatus,
+          lawyerComment: analysis.lawyerComment
         })),
         total: analyses.length
       }, 'Swiss obligation law analyses by document ID retrieved successfully');
