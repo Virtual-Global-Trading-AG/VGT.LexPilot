@@ -12,7 +12,7 @@ export interface UserProfile {
   lastName?: string;
   company?: string;
   phone?: string;
-  role?: 'user' | 'premium' | 'admin';
+  role?: 'user' | 'premium' | 'admin' | 'lawyer';
   subscription?: {
     type: 'free' | 'premium';
     expiresAt?: Date;
@@ -34,7 +34,7 @@ interface AuthState {
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
   clearError: () => void;
-  
+
   // Auth actions
   signIn: (email: string, password: string) => Promise<boolean>;
   register: (data: {
@@ -47,7 +47,7 @@ interface AuthState {
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<boolean>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<boolean>;
-  
+
   // Utility
   initialize: () => Promise<void>;
   refreshAuth: () => Promise<boolean>;
@@ -82,24 +82,26 @@ export const useAuthStore = create<AuthState>()(
     // Auth actions
     signIn: async (email, password) => {
       set({ loading: true, error: null });
-      
+
       try {
         const result = await AuthService.signIn({ email, password });
-        
+
         if (!result.success) {
           set({ error: result.error || 'Login failed', loading: false });
           return false;
         }
 
+        console.log(result);
+
         if (result.user && result.tokens) {
           set({ 
             user: {
               ...result.user,
-              role: (result.user.role as 'user' | 'premium' | 'admin') || 'user'
+              role: (result.user.role as 'user' | 'premium' | 'admin' | 'lawyer') || 'user'
             },
             userProfile: {
               ...result.user,
-              role: (result.user.role as 'user' | 'premium' | 'admin') || 'user'
+              role: (result.user.role as 'user' | 'premium' | 'admin' | 'lawyer') || 'user'
             },
             isAuthenticated: true,
             accessToken: result.tokens.idToken,
@@ -122,10 +124,10 @@ export const useAuthStore = create<AuthState>()(
 
     register: async (data) => {
       set({ loading: true, error: null });
-      
+
       try {
         const result = await AuthService.register(data);
-        
+
         if (!result.success) {
           set({ error: result.error || 'Registration failed', loading: false });
           return false;
@@ -136,11 +138,11 @@ export const useAuthStore = create<AuthState>()(
           set({ 
             user: {
               ...result.user,
-              role: (result.user.role as 'user' | 'premium' | 'admin') || 'user'
+              role: (result.user.role as 'user' | 'premium' | 'admin' | 'lawyer') || 'user'
             },
             userProfile: {
               ...result.user,
-              role: (result.user.role as 'user' | 'premium' | 'admin') || 'user'
+              role: (result.user.role as 'user' | 'premium' | 'admin' | 'lawyer') || 'user'
             },
             isAuthenticated: true,
             accessToken: result.tokens.idToken,
@@ -151,7 +153,7 @@ export const useAuthStore = create<AuthState>()(
           // Registration successful but no auto-login
           set({ loading: false, error: null });
         }
-        
+
         return true;
       } catch (error) {
         set({ 
@@ -164,7 +166,7 @@ export const useAuthStore = create<AuthState>()(
 
     signOut: async () => {
       set({ loading: true, error: null });
-      
+
       try {
         await AuthService.signOut();
         set({ 
@@ -184,16 +186,16 @@ export const useAuthStore = create<AuthState>()(
 
     resetPassword: async (email) => {
       set({ loading: true, error: null });
-      
+
       try {
         const result = await AuthService.resetPassword(email);
         set({ loading: false });
-        
+
         if (!result.success) {
           set({ error: result.error || 'Password reset failed' });
           return false;
         }
-        
+
         return true;
       } catch (error) {
         set({ 
@@ -206,16 +208,16 @@ export const useAuthStore = create<AuthState>()(
 
     changePassword: async (currentPassword, newPassword) => {
       set({ loading: true, error: null });
-      
+
       try {
         const result = await AuthService.changePassword(currentPassword, newPassword);
         set({ loading: false });
-        
+
         if (!result.success) {
           set({ error: result.error || 'Password change failed' });
           return false;
         }
-        
+
         return true;
       } catch (error) {
         set({ 
@@ -235,16 +237,18 @@ export const useAuthStore = create<AuthState>()(
 
       try {
         const result = await AuthService.getCurrentUser();
-        
+
+        console.log('refreshAuth result:', result);
+
         if (result.success && result.user) {
           set({ 
             user: {
               ...result.user,
-              role: (result.user.role as 'user' | 'premium' | 'admin') || 'user'
+              role: (result.user.role as 'user' | 'premium' | 'admin' | 'lawyer') || 'user'
             },
             userProfile: {
               ...result.user,
-              role: (result.user.role as 'user' | 'premium' | 'admin') || 'user'
+              role: (result.user.role as 'user' | 'premium' | 'admin' | 'lawyer') || 'user'
             },
             isAuthenticated: true,
             accessToken: AuthService.getAccessToken()
@@ -259,11 +263,11 @@ export const useAuthStore = create<AuthState>()(
               set({ 
                 user: {
                   ...userResult.user,
-                  role: (userResult.user.role as 'user' | 'premium' | 'admin') || 'user'
+                  role: (userResult.user.role as 'user' | 'premium' | 'admin' | 'lawyer') || 'user'
                 },
                 userProfile: {
                   ...userResult.user,
-                  role: (userResult.user.role as 'user' | 'premium' | 'admin') || 'user'
+                  role: (userResult.user.role as 'user' | 'premium' | 'admin' | 'lawyer') || 'user'
                 },
                 isAuthenticated: true,
                 accessToken: AuthService.getAccessToken()
@@ -271,7 +275,7 @@ export const useAuthStore = create<AuthState>()(
               return true;
             }
           }
-          
+
           // Refresh failed, logout user
           set({ 
             user: null, 
@@ -298,16 +302,16 @@ export const useAuthStore = create<AuthState>()(
         if (AuthService.isAuthenticated()) {
           // Try to get current user with stored token
           const result = await AuthService.getCurrentUser();
-          
+
           if (result.success && result.user) {
             set({ 
               user: {
                 ...result.user,
-                role: (result.user.role as 'user' | 'premium' | 'admin') || 'user'
+                role: (result.user.role as 'user' | 'premium' | 'admin' | 'lawyer') || 'user'
               },
               userProfile: {
                 ...result.user,
-                role: (result.user.role as 'user' | 'premium' | 'admin') || 'user'
+                role: (result.user.role as 'user' | 'premium' | 'admin' | 'lawyer') || 'user'
               },
               isAuthenticated: true,
               accessToken: AuthService.getAccessToken(),
@@ -322,11 +326,11 @@ export const useAuthStore = create<AuthState>()(
                 set({ 
                   user: {
                     ...userResult.user,
-                    role: (userResult.user.role as 'user' | 'premium' | 'admin') || 'user'
+                    role: (userResult.user.role as 'user' | 'premium' | 'admin' | 'lawyer') || 'user'
                   },
                   userProfile: {
                     ...userResult.user,
-                    role: (userResult.user.role as 'user' | 'premium' | 'admin') || 'user'
+                    role: (userResult.user.role as 'user' | 'premium' | 'admin' | 'lawyer') || 'user'
                   },
                   isAuthenticated: true,
                   accessToken: AuthService.getAccessToken(),

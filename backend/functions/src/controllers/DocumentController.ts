@@ -1345,6 +1345,65 @@ STIL: Professionell, präzise, praxisorientiert für beide Jurisdiktionen`;
   }
 
   /**
+   * List shared Swiss obligation law analyses for lawyers
+   * GET /api/documents/swiss-obligation-analyses-shared
+   */
+  public async listSharedSwissObligationAnalyses(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = this.getUserId(req);
+      const limit = parseInt(req.query.limit as string) || 10;
+
+      this.logger.info('Shared Swiss obligation law analyses list requested', {
+        userId,
+        limit
+      });
+
+      const analyses = await this.swissObligationLawService.listSharedAnalyses(userId, limit);
+
+      this.sendSuccess(res, {
+        analyses: analyses.map(analysis => ({
+          analysisId: analysis.analysisId,
+          documentId: analysis.documentId,
+          documentContext: analysis.documentContext,
+          sections: analysis.sections.map(section => ({
+            sectionId: section.sectionId,
+            title: section.sectionContent,
+            isCompliant: section.complianceAnalysis?.isCompliant || false,
+            confidence: section.complianceAnalysis?.confidence || 0,
+            violationCount: section.complianceAnalysis?.violations?.length || 0,
+            violations: section.complianceAnalysis?.violations || [],
+            reasoning: section.complianceAnalysis?.reasoning || '',
+            recommendations: section.complianceAnalysis.recommendations || [],
+            findings: section.findings || [],
+          })),
+          overallCompliance: analysis.overallCompliance,
+          summary: {
+            totalSections: analysis.sections?.length || 0,
+            compliantSections: analysis.sections?.filter(s =>
+              s.complianceAnalysis?.isCompliant === true
+            ).length || 0,
+            totalViolations: analysis.sections?.reduce((sum, s) =>
+              sum + (s.complianceAnalysis?.violations?.length || 0), 0
+            ) || 0,
+          },
+          createdAt: analysis.createdAt.toISOString(),
+          completedAt: analysis.completedAt?.toISOString()
+        })),
+        total: analyses.length
+      }, 'Swiss obligation law analyses by document ID retrieved successfully');
+
+
+    } catch (error) {
+      this.logger.error('Failed to list shared Swiss obligation law analyses', error as Error, {
+        userId: this.getUserId(req)
+      });
+
+      this.sendError(res, 500, 'Failed to retrieve shared analyses list');
+      next(error);
+    }
+  }
+
+  /**
    * Get Swiss obligation law analyses by document ID
    * GET /api/documents/:documentId/swiss-obligation-analyses
    */
@@ -1515,6 +1574,7 @@ STIL: Professionell, präzise, praxisorientiert für beide Jurisdiktionen`;
   public async startLawyerReview(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const userId = this.getUserId(req);
+      const fixedLawyerUserUiId = 'Bt1IiCfV9KgP3AaJR22d3qfzo1o2';
       const { documentId } = req.params;
 
       if (!documentId) {
@@ -1541,7 +1601,7 @@ STIL: Professionell, präzise, praxisorientiert für beide Jurisdiktionen`;
       if (existingAnalyses.length > 0) {
         // Update the most recent analysis with lawyer review status
         const latestAnalysis = existingAnalyses[0]; // Assuming they are sorted by creation date
-        await this.swissObligationLawService.updateAnalysis(latestAnalysis!.analysisId, fixedLawyerId, 'Prüfung durch Anwalt');
+        await this.swissObligationLawService.updateAnalysis(latestAnalysis!.analysisId, fixedLawyerUserUiId, 'Prüfung durch Anwalt');
 
         this.logger.info('Analysis status updated for lawyer review', {
           userId,
@@ -1554,12 +1614,12 @@ STIL: Professionell, präzise, praxisorientiert für beide Jurisdiktionen`;
       this.logger.info('Lawyer review started successfully', {
         userId,
         documentId,
-        sharedUserId: fixedLawyerId
+        sharedUserId: fixedLawyerUserUiId
       });
 
       this.sendSuccess(res, {
         documentId,
-        sharedUserId: fixedLawyerId,
+        sharedUserId: fixedLawyerUserUiId,
         status: 'Prüfung durch Anwalt',
         message: 'Document has been shared with lawyer for review'
       }, 'Lawyer review started successfully');

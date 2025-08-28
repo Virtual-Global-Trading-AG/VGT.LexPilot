@@ -176,6 +176,11 @@ router.get('/swiss-obligation-analyses',
   documentController.listSwissObligationAnalyses.bind(documentController)
 );
 
+// List Shared Swiss Obligation Law Analyses for Lawyers
+router.get('/swiss-obligation-analyses-shared',
+  documentController.listSharedSwissObligationAnalyses.bind(documentController)
+);
+
 // Get Swiss Obligation Law Analyses by Document ID
 router.get('/:documentId/swiss-obligation-analyses',
   documentController.getSwissObligationAnalysesByDocumentId.bind(documentController)

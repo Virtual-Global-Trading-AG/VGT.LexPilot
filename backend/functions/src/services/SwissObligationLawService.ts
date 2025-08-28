@@ -604,12 +604,203 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
    */
   public async listUserAnalyses(userId: string, limit: number = 10): Promise<SwissObligationAnalysisResult[]> {
     try {
-      // For now, return empty array - this would need to be implemented
-      // with proper Firestore collection queries when the collection structure is defined
       this.logger.info('Listing user Swiss obligation analyses', { userId, limit });
-      return [];
+
+      const db = this.firestoreService['db'] || require('firebase-admin').firestore();
+      const analysesRef = db.collection('swissObligationAnalyses');
+
+      const querySnapshot = await analysesRef
+        .where('userId', '==', userId)
+        .orderBy('createdAt', 'desc')
+        .limit(limit)
+        .get();
+
+      const analyses: SwissObligationAnalysisResult[] = [];
+
+      // Process each analysis and reconstruct full structure
+      for (const doc of querySnapshot.docs) {
+        const data = doc.data();
+
+        // Load details from sub-collection for this analysis
+        const detailsPath = `swissObligationAnalyses/${data.analysisId}/details/items`;
+        const details = await this.firestoreService.getSubcollectionDocument(detailsPath) as AnalysisDetails | null;
+
+        let fullSections: SectionAnalysisResult[];
+
+        if (!details) {
+          this.logger.warn('Details not found for analysis, using fallback structure', { analysisId: data.analysisId });
+          // Fallback: return with empty findings and recommendations if details are missing
+          fullSections = (data.sections as CompactSectionResult[]).map(compactSection => ({
+            sectionId: compactSection.sectionId,
+            sectionContent: compactSection.sectionContent,
+            queries: compactSection.queries || [],
+            legalContext: compactSection.legalContext || [],
+            complianceAnalysis: compactSection.complianceAnalysis || {
+              isCompliant: false,
+              confidence: 0,
+              reasoning: '',
+              violations: [],
+              recommendations: []
+            },
+            findings: [],
+            recommendations: []
+          }));
+        } else {
+          // Reconstruct full sections by combining compact data with details
+          fullSections = (data.sections as CompactSectionResult[]).map(compactSection => {
+            // Reconstruct findings from IDs
+            const findings: Finding[] = (compactSection.findingIds || []).map(id => {
+              const finding = details.items[id] as Finding;
+              if (!finding) {
+                this.logger.warn('Finding not found in details', { analysisId: data.analysisId, findingId: id });
+                return null;
+              }
+              return finding;
+            }).filter(Boolean) as Finding[];
+
+            return {
+              sectionId: compactSection.sectionId,
+              sectionContent: compactSection.sectionContent,
+              queries: compactSection.queries || [],
+              legalContext: compactSection.legalContext || [],
+              complianceAnalysis: compactSection.complianceAnalysis || {
+                isCompliant: false,
+                confidence: 0,
+                reasoning: '',
+                violations: [],
+                recommendations: []
+              },
+              findings
+            };
+          });
+        }
+
+        analyses.push({
+          analysisId: data.analysisId,
+          documentId: data.documentId,
+          userId: data.userId,
+          documentContext: data.documentContext,
+          sections: fullSections,
+          overallCompliance: data.overallCompliance,
+          createdAt: new Date(data.createdAt),
+          completedAt: data.completedAt ? new Date(data.completedAt) : undefined
+        });
+      }
+
+      this.logger.info('Retrieved user Swiss obligation analyses', {
+        userId,
+        count: analyses.length
+      });
+
+      return analyses;
     } catch (error) {
       this.logger.error('Error listing user Swiss obligation analyses', error as Error, {
+        userId
+      });
+      return [];
+    }
+  }
+
+  /**
+   * List shared analysis results for lawyers
+   */
+  public async listSharedAnalyses(userId: string, limit: number = 10): Promise<SwissObligationAnalysisResult[]> {
+    try {
+      this.logger.info('Listing shared Swiss obligation analyses for lawyer', { userId, limit });
+
+      const db = this.firestoreService['db'] || require('firebase-admin').firestore();
+      const analysesRef = db.collection('swissObligationAnalyses');
+
+      const querySnapshot = await analysesRef
+        .where('sharedUserId', '==', userId)
+        .orderBy('createdAt', 'desc')
+        .limit(limit)
+        .get();
+
+      const analyses: SwissObligationAnalysisResult[] = [];
+
+      // Process each analysis and reconstruct full structure
+      for (const doc of querySnapshot.docs) {
+        const data = doc.data();
+
+        this.logger.info('Retrieved shared Swiss obligation analysis', { data });
+
+        // Load details from sub-collection for this analysis
+        const detailsPath = `swissObligationAnalyses/${data.analysisId}/details/items`;
+        const details = await this.firestoreService.getSubcollectionDocument(detailsPath) as AnalysisDetails | null;
+
+        let fullSections: SectionAnalysisResult[];
+
+        if (!details) {
+          this.logger.warn('Details not found for analysis, using fallback structure', { analysisId: data.analysisId });
+          // Fallback: return with empty findings and recommendations if details are missing
+          fullSections = (data.sections as CompactSectionResult[]).map(compactSection => ({
+            sectionId: compactSection.sectionId,
+            sectionContent: compactSection.sectionContent,
+            queries: compactSection.queries || [],
+            legalContext: compactSection.legalContext || [],
+            complianceAnalysis: compactSection.complianceAnalysis || {
+              isCompliant: false,
+              confidence: 0,
+              reasoning: '',
+              violations: [],
+              recommendations: []
+            },
+            findings: [],
+            recommendations: []
+          }));
+        } else {
+          // Reconstruct full sections by combining compact data with details
+          fullSections = (data.sections as CompactSectionResult[]).map(compactSection => {
+            // Reconstruct findings from IDs
+            const findings: Finding[] = (compactSection.findingIds || []).map(id => {
+              const finding = details.items[id] as Finding;
+              if (!finding) {
+                this.logger.warn('Finding not found in details', { analysisId: data.analysisId, findingId: id });
+                return null;
+              }
+              return finding;
+            }).filter(Boolean) as Finding[];
+
+            return {
+              sectionId: compactSection.sectionId,
+              sectionContent: compactSection.sectionContent,
+              queries: compactSection.queries || [],
+              legalContext: compactSection.legalContext || [],
+              complianceAnalysis: compactSection.complianceAnalysis || {
+                isCompliant: false,
+                confidence: 0,
+                reasoning: '',
+                violations: [],
+                recommendations: []
+              },
+              findings
+            };
+          });
+        }
+
+        analyses.push({
+          analysisId: data.analysisId,
+          documentId: data.documentId,
+          userId: data.userId,
+          documentContext: data.documentContext,
+          sections: fullSections,
+          overallCompliance: data.overallCompliance,
+          createdAt: new Date(data.createdAt),
+          completedAt: data.completedAt ? new Date(data.completedAt) : undefined
+        });
+      }
+
+      this.logger.info('Retrieved shared Swiss obligation analyses', {
+        sharedUserId: userId,
+        count: analyses.length
+      });
+
+      this.logger.info('lclclc', { analyses })
+
+      return analyses;
+    } catch (error) {
+      this.logger.error('Error listing shared Swiss obligation analyses', error as Error, {
         userId
       });
       return [];

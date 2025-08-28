@@ -625,6 +625,38 @@ export function useDocuments() {
     }
   }, [isAuthenticated]);
 
+  const getSharedSwissObligationAnalyses = useCallback(async (limit: number = 10): Promise<{
+    success: boolean;
+    data?: any;
+    error?: string;
+  }> => {
+    if (!isAuthenticated) {
+      setError('Authentication required');
+      return { success: false, error: 'Authentication required' };
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await apiClient.get(`/documents/swiss-obligation-analyses-shared?limit=${limit}`);
+
+      if (response.success && response.data) {
+        return { success: true, data: response.data };
+      } else {
+        const errorMsg = response.error || 'Failed to fetch shared Swiss obligation analyses';
+        setError(errorMsg);
+        return { success: false, error: errorMsg };
+      }
+    } catch (err) {
+      const errorMsg = 'Network error while fetching shared Swiss obligation analyses';
+      setError(errorMsg);
+      return { success: false, error: errorMsg };
+    } finally {
+      setLoading(false);
+    }
+  }, [isAuthenticated]);
+
   return {
     getDocuments,
     deleteDocument,
@@ -633,6 +665,7 @@ export function useDocuments() {
     getJobStatus,
     getUserJobs,
     getSwissObligationAnalysesByDocumentId,
+    getSharedSwissObligationAnalyses,
     startLawyerReview,
     getAllUserDocuments,
     documents,
