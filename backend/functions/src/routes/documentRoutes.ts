@@ -163,6 +163,19 @@ router.get('/dashboard/progress',
   documentController.getAnalysisProgress.bind(documentController)
 );
 
+// Lawyer Dashboard Routes
+router.get('/dashboard/lawyer/stats',
+  documentController.getLawyerDashboardStats.bind(documentController)
+);
+
+router.get('/dashboard/lawyer/activities',
+  documentController.getLawyerRecentActivities.bind(documentController)
+);
+
+router.get('/dashboard/lawyer/progress',
+  documentController.getLawyerAnalysisProgress.bind(documentController)
+);
+
 router.delete('/:documentId',
   documentController.deleteDocument.bind(documentController)
 );

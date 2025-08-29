@@ -328,7 +328,7 @@ export class DocumentController extends BaseController {
       this.sendSuccess(res, {
         activeContracts: {
           count: activeContracts,
-          growth: contractsGrowth
+          growth: activeContracts > 0 ? contractsGrowth : 0
         },
         highRisks: {
           count: highRisks
@@ -338,7 +338,7 @@ export class DocumentController extends BaseController {
         },
         monthlySavings: {
           amount: monthlySavings,
-          growth: savingsGrowth,
+          growth: activeContracts > 0 ? savingsGrowth : 0,
           currency: 'CHF'
         }
       }, 'Dashboard statistics retrieved successfully');
@@ -368,36 +368,38 @@ export class DocumentController extends BaseController {
 
       const activities: any[] = [];
 
-      // Add recent analyses as activities
+      // Add recent analyses as activities (aligned with contracts table format)
       recentAnalyses.forEach(analysis => {
         // Find the corresponding document
         const document = recentDocuments.find(doc => doc.documentId === analysis.documentId);
-        const fileName = document?.documentMetadata?.fileName || 'Unknown Document';
+        const fileName = document?.documentMetadata?.fileName || 'Unbekanntes Dokument';
 
         if (!analysis.overallCompliance?.isCompliant) {
           activities.push({
             id: `analysis-${analysis.analysisId}`,
-            type: 'high-risk',
-            title: 'Hochrisiko-Klausel erkannt',
-            subtitle: fileName,
+            type: 'violation',
+            fileName: fileName,
+            status: 'Nicht konform',
             time: this.getRelativeTime(analysis.createdAt),
             icon: 'AlertTriangle',
-            iconColor: 'text-red-500'
+            iconColor: 'text-red-500',
+            statusVariant: 'destructive'
           });
         } else {
           activities.push({
             id: `analysis-${analysis.analysisId}`,
-            type: 'completed',
-            title: 'Analyse abgeschlossen',
-            subtitle: fileName,
+            type: 'conformity',
+            fileName: fileName,
+            status: 'Konform',
             time: this.getRelativeTime(analysis.createdAt),
             icon: 'CheckCircle',
-            iconColor: 'text-green-500'
+            iconColor: 'text-green-500',
+            statusVariant: 'default'
           });
         }
       });
 
-      // Add recent document uploads
+      // Add recent document uploads (keep as requested)
       recentDocuments
         .sort((a, b) => new Date(b.documentMetadata.uploadedAt).getTime() - new Date(a.documentMetadata.uploadedAt).getTime())
         .slice(0, 3)
@@ -406,12 +408,53 @@ export class DocumentController extends BaseController {
             id: `upload-${document.documentId}`,
             type: 'uploaded',
             title: 'Neuer Vertrag hochgeladen',
-            subtitle: document.documentMetadata.fileName || 'Unknown Document',
+            subtitle: document.documentMetadata.fileName || 'Unbekanntes Dokument',
             time: this.getRelativeTime(new Date(document.documentMetadata.uploadedAt)),
             icon: 'Upload',
             iconColor: 'text-blue-500'
           });
         });
+
+      // Add contract generation activities
+      try {
+        const contractJobs = await this.jobQueueService.getUserJobs(userId, 5, 0);
+        if (contractJobs && contractJobs.jobs) {
+          contractJobs.jobs
+            .filter(job => job.type === 'contract_generation')
+            .forEach(job => {
+              let status = 'In Bearbeitung';
+              let statusVariant = 'secondary';
+              let iconColor = 'text-blue-500';
+              let icon = 'FileText';
+
+              if (job.status === 'completed') {
+                status = 'Vertrag generiert';
+                statusVariant = 'default';
+                iconColor = 'text-green-500';
+                icon = 'CheckCircle';
+              } else if (job.status === 'failed') {
+                status = 'Generierung fehlgeschlagen';
+                statusVariant = 'destructive';
+                iconColor = 'text-red-500';
+                icon = 'AlertTriangle';
+              }
+
+              activities.push({
+                id: `contract-${job.id}`,
+                type: 'contract_generation',
+                fileName: job.data?.fileName || 'Vertrag',
+                status: status,
+                time: this.getRelativeTime(new Date(job.createdAt)),
+                icon: icon,
+                iconColor: iconColor,
+                statusVariant: statusVariant
+              });
+            });
+        }
+      } catch (error) {
+        // Continue if contract generation jobs can't be retrieved
+        this.logger.warn('Could not retrieve contract generation jobs', error as Error);
+      }
 
       // Sort activities by time and limit
       activities.sort((a, b) => {
@@ -484,6 +527,288 @@ export class DocumentController extends BaseController {
 
     } catch (error) {
       this.logger.error('Get analysis progress failed', error as Error, {
+        userId: this.getUserId(req)
+      });
+      next(error);
+    }
+  }
+
+  /**
+   * Get lawyer dashboard statistics
+   * GET /api/documents/dashboard/lawyer/stats
+   */
+  public async getLawyerDashboardStats(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = this.getUserId(req);
+
+      // Get shared analyses for this lawyer
+      const sharedAnalyses = await this.swissObligationLawService.listSharedAnalyses(userId, 100);
+
+      // Get all analyses where this lawyer has made decisions
+      const db = this.firestoreService['db'] || require('firebase-admin').firestore();
+      const completedAnalysesQuery = await db.collection('swissObligationAnalyses')
+        .where('lawyerStatus', 'in', ['APPROVED', 'DECLINE'])
+        .get();
+
+      const completedAnalyses = completedAnalysesQuery.docs
+        .map(doc => doc.data())
+        .filter(analysis => analysis.sharedUserId === userId || !analysis.sharedUserId);
+
+      // Calculate earnings (approved + declined contracts)
+      const approvedCount = completedAnalyses.filter(analysis => analysis.lawyerStatus === 'APPROVED').length;
+      const declinedCount = completedAnalyses.filter(analysis => analysis.lawyerStatus === 'DECLINE').length;
+      const totalReviewed = approvedCount + declinedCount;
+      const earnings = totalReviewed * 150; // CHF 150 per reviewed contract
+
+      // Calculate unreviewed shared documents
+      const unreviewedCount = sharedAnalyses.length;
+
+      // Calculate pending reviews (CHECK_PENDING status)
+      const pendingReviews = await db.collection('swissObligationAnalyses')
+        .where('lawyerStatus', '==', 'CHECK_PENDING')
+        .where('sharedUserId', '==', userId)
+        .get();
+
+      // Calculate growth percentages (placeholder for now)
+      const earningsGrowth = 15; // +15%
+      const reviewsGrowth = 8; // +8%
+
+      this.sendSuccess(res, {
+        totalEarnings: {
+          amount: earnings,
+          growth: totalReviewed > 0 ? earningsGrowth : 0,
+          currency: 'CHF'
+        },
+        reviewedContracts: {
+          count: totalReviewed,
+          approved: approvedCount,
+          declined: declinedCount,
+          growth: totalReviewed > 0 ? reviewsGrowth : 0
+        },
+        unreviewedDocuments: {
+          count: unreviewedCount
+        },
+        pendingReviews: {
+          count: pendingReviews.size
+        }
+      }, 'Lawyer dashboard statistics retrieved successfully');
+
+    } catch (error) {
+      this.logger.error('Get lawyer dashboard stats failed', error as Error, {
+        userId: this.getUserId(req)
+      });
+      next(error);
+    }
+  }
+
+  /**
+   * Get lawyer recent activities for dashboard
+   * GET /api/documents/dashboard/lawyer/activities
+   */
+  public async getLawyerRecentActivities(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = this.getUserId(req);
+      const limit = parseInt(req.query.limit as string) || 10;
+
+      // Get recent analyses where this lawyer made decisions
+      const db = this.firestoreService['db'] || require('firebase-admin').firestore();
+      const recentDecisionsQuery = await db.collection('swissObligationAnalyses')
+        .where('lawyerStatus', 'in', ['APPROVED', 'DECLINE'])
+        .orderBy('updatedAt', 'desc')
+        .limit(limit)
+        .get();
+
+      const activities: any[] = [];
+
+      // Add recent lawyer decisions as activities (aligned with contracts table format)
+      for (const doc of recentDecisionsQuery.docs) {
+        const analysis = doc.data();
+
+        // Get document information
+        let documentName = 'Unbekanntes Dokument';
+        try {
+          const documentInfo = await this.getUserDocumentInfo(analysis.documentId, analysis.userId);
+          documentName = documentInfo?.documentMetadata?.fileName || 'Unbekanntes Dokument';
+        } catch (error) {
+          // Continue with default name if document info can't be retrieved
+        }
+
+        const decisionDate = analysis.updatedAt !== null ? new Date(analysis.updatedAt) : new Date(analysis.createdAt);
+
+        this.logger.info('date update', { decisionDate })
+        if (analysis.lawyerStatus === 'APPROVED') {
+          activities.push({
+            id: `approved-${analysis.analysisId}`,
+            type: 'approved',
+            fileName: documentName,
+            status: 'Genehmigt',
+            time: this.getRelativeTime(decisionDate),
+            icon: 'CheckCircle',
+            iconColor: 'text-green-500',
+            statusVariant: 'default'
+          });
+        } else if (analysis.lawyerStatus === 'DECLINE') {
+          activities.push({
+            id: `declined-${analysis.analysisId}`,
+            type: 'declined',
+            fileName: documentName,
+            status: 'Abgelehnt',
+            time: this.getRelativeTime(decisionDate),
+            icon: 'AlertTriangle',
+            iconColor: 'text-red-500',
+            statusVariant: 'destructive'
+          });
+        }
+      }
+
+      // Get recent shared analyses (new work) - aligned format
+      const sharedAnalyses = await this.swissObligationLawService.listSharedAnalyses(userId, 3);
+
+
+      for (const analysis of sharedAnalyses) {
+        let documentName = 'Unbekanntes Dokument';
+        try {
+          const documentInfo = await this.getUserDocumentInfo(analysis.documentId, analysis.userId);
+          documentName = documentInfo?.documentMetadata?.fileName || 'Unbekanntes Dokument';
+        } catch (error) {
+          // Continue with default name
+        }
+
+        activities.push({
+          id: `shared-${analysis.analysisId}`,
+          type: 'pending_review',
+          fileName: documentName,
+          status: 'Prüfung erforderlich',
+          time: this.getRelativeTime(new Date(analysis.createdAt)),
+          icon: 'FileText',
+          iconColor: 'text-blue-500',
+          statusVariant: 'secondary'
+        });
+      }
+
+      // Add contract generation activities for lawyers too
+      try {
+        const contractJobs = await this.jobQueueService.getUserJobs(userId, 3, 0);
+        if (contractJobs && contractJobs.jobs) {
+          contractJobs.jobs
+            .filter(job => job.type === 'contract_generation')
+            .forEach(job => {
+              let status = 'In Bearbeitung';
+              let statusVariant = 'secondary';
+              let iconColor = 'text-blue-500';
+              let icon = 'FileText';
+
+              if (job.status === 'completed') {
+                status = 'Vertrag generiert';
+                statusVariant = 'default';
+                iconColor = 'text-green-500';
+                icon = 'CheckCircle';
+              } else if (job.status === 'failed') {
+                status = 'Generierung fehlgeschlagen';
+                statusVariant = 'destructive';
+                iconColor = 'text-red-500';
+                icon = 'AlertTriangle';
+              }
+
+              activities.push({
+                id: `contract-${job.id}`,
+                type: 'contract_generation',
+                fileName: job.data?.fileName || 'Vertrag',
+                status: status,
+                time: this.getRelativeTime(new Date(job.createdAt)),
+                icon: icon,
+                iconColor: iconColor,
+                statusVariant: statusVariant
+              });
+            });
+        }
+      } catch (error) {
+        // Continue if contract generation jobs can't be retrieved
+        this.logger.warn('Could not retrieve contract generation jobs for lawyer', error as Error);
+      }
+
+      // Sort activities by time (most recent first)
+      activities.sort((a, b) => {
+        // This is a simplified sort - in production you'd want proper timestamp sorting
+        return 0;
+      });
+
+      this.sendSuccess(res, {
+        activities: activities.slice(0, limit)
+      }, 'Lawyer recent activities retrieved successfully');
+
+    } catch (error) {
+      this.logger.error('Get lawyer recent activities failed', error as Error, {
+        userId: this.getUserId(req)
+      });
+      next(error);
+    }
+  }
+
+  /**
+   * Get lawyer analysis progress for dashboard
+   * GET /api/documents/dashboard/lawyer/progress
+   */
+  public async getLawyerAnalysisProgress(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = this.getUserId(req);
+
+      // Get shared analyses that need review
+      const sharedAnalyses = await this.swissObligationLawService.listSharedAnalyses(userId, 10);
+
+      const progressItems: any[] = [];
+
+      // Add shared analyses as progress items
+      for (const analysis of sharedAnalyses) {
+        let documentName = 'Unbekanntes Dokument';
+        try {
+          const documentInfo = await this.getUserDocumentInfo(analysis.documentId, analysis.userId);
+          documentName = documentInfo?.documentMetadata?.fileName || 'Unbekanntes Dokument';
+        } catch (error) {
+          // Continue with default name
+        }
+
+        progressItems.push({
+          id: analysis.analysisId,
+          fileName: documentName,
+          status: 'Wartet auf Prüfung',
+          progress: 0 // 0% because it's waiting for lawyer review
+        });
+      }
+
+      // Get recently completed reviews
+      const db = this.firestoreService['db'] || require('firebase-admin').firestore();
+      const recentCompletedQuery = await db.collection('swissObligationAnalyses')
+        .where('lawyerStatus', 'in', ['APPROVED', 'DECLINE'])
+        .orderBy('updatedAt', 'desc')
+        .limit(5)
+        .get();
+
+      for (const doc of recentCompletedQuery.docs) {
+        const analysis = doc.data();
+
+        let documentName = 'Unbekanntes Dokument';
+        try {
+          const documentInfo = await this.getUserDocumentInfo(analysis.documentId, analysis.userId);
+          documentName = documentInfo?.documentMetadata?.fileName || 'Unbekanntes Dokument';
+        } catch (error) {
+          // Continue with default name
+        }
+
+        progressItems.push({
+          id: analysis.analysisId,
+          fileName: documentName,
+          status: analysis.lawyerStatus === 'APPROVED' ? 'Genehmigt' : 'Abgelehnt',
+          progress: 100
+        });
+      }
+
+      this.sendSuccess(res, {
+        progressItems: progressItems.slice(0, 10) // Limit to 10 items
+      }, 'Lawyer analysis progress retrieved successfully');
+
+    } catch (error) {
+      this.logger.error('Get lawyer analysis progress failed', error as Error, {
         userId: this.getUserId(req)
       });
       next(error);

@@ -624,9 +624,6 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
 
       const querySnapshot = await query.get();
 
-
-      this.logger.info('lclclc', { size: querySnapshot.size })
-
       const analyses: SwissObligationAnalysisResult[] = [];
 
       // Process each analysis and reconstruct full structure
@@ -999,7 +996,7 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
       const updateData: any = {
         lawyerStatus,
         sharedUserId: sharedUserId,
-        updatedAt: new Date()
+        updatedAt: new Date().toISOString()
       };
 
       await analysisRef.update(updateData);
@@ -1033,7 +1030,7 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
       const updateData: any = {
         lawyerStatus: decision,
         sharedUserId: null,
-        updatedAt: new Date()
+        updatedAt: new Date().toISOString()
       };
 
       // Add comment only if decision is DECLINE and comment is provided
