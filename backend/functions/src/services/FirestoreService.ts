@@ -1,6 +1,8 @@
+import { DocumentMetadata, UserDocument } from '@models/index';
+import { UserRepository } from '@repositories/UserRepository';
 import * as admin from 'firebase-admin';
 import { Logger } from '../utils/logger';
-import { DocumentMetadata } from './StorageService';
+import { StorageService } from './StorageService';
 
 export interface PaginationOptions {
   page: number;
@@ -17,6 +19,7 @@ export interface DocumentFilters {
   category?: string;
   startDate?: string;
   endDate?: string;
+  tags?: string[];
 }
 
 export interface PaginatedResult<T> {
@@ -29,42 +32,67 @@ export interface PaginatedResult<T> {
 
 export class FirestoreService {
   private readonly logger = Logger.getInstance();
-  private readonly db: admin.firestore.Firestore;
+  public readonly db: admin.firestore.Firestore;
+  private readonly userRepo;
+  private readonly storageService;
 
   constructor() {
     this.db = admin.firestore();
+    this.userRepo = new UserRepository();
+    this.storageService = new StorageService();
   }
 
   /**
    * Create a new document record
    */
-  async createDocument(userId: string, documentId: string, metadata: Partial<DocumentMetadata>): Promise<void> {
+  async createDocument(
+    userId: string,
+    documentId: string,
+    downloadUrl: string,
+    metadata: Partial<DocumentMetadata>
+  ): Promise<void> {
     try {
-      const docRef = this.db
-        .collection('users')
-        .doc(userId)
-        .collection('documents')
-        .doc(documentId);
+
+      const user = await this.userRepo.findByUid(userId);
+      if (!user) {
+        throw new Error(`User not found: ${userId}`);
+      }
 
       const documentData: DocumentMetadata = {
-        userId,
-        fileName: metadata.fileName!,
-        contentType: metadata.contentType!,
-        size: metadata.size!,
+        fileName: metadata.fileName || '',
+        downloadUrl: downloadUrl,
+        size: metadata.size || 0,
+        contentType: metadata.contentType || '',
         uploadedAt: metadata.uploadedAt || new Date().toISOString(),
-        status: metadata.status || 'uploading',
+        status: metadata.status || 'uploaded',
         category: metadata.category,
-        description: metadata.description,
-        tags: metadata.tags || [],
-        analyses: metadata.analyses || []
+        anonymizedKeywords: metadata.anonymizedKeywords || [],
+        description: metadata.description || '',
+        tags: metadata.tags || []
       };
 
-      await docRef.set(documentData);
+
+      // Create UserDocument object with metadata
+      const userDocument: UserDocument = {
+        documentId,
+        downloadUrl,
+        documentMetadata: documentData,
+        addedAt: new Date().toISOString()
+      };
+
+      // Update user's documents array
+      const updatedUser = {
+        ...user,
+        documents: [...user?.documents ?? [], userDocument]
+      };
+
+      await this.userRepo.update(user!.id, updatedUser);
+
 
       this.logger.info('Document record created', {
         userId,
         documentId,
-        fileName: documentData.fileName
+        documentData
       });
     } catch (error) {
       this.logger.error('Failed to create document record', error as Error, {
@@ -77,41 +105,6 @@ export class FirestoreService {
   }
 
   /**
-   * Get document by ID
-   */
-  async getDocument(documentId: string, userId: string): Promise<DocumentMetadata | null> {
-    try {
-      const docRef = this.db
-        .collection('users')
-        .doc(userId)
-        .collection('documents')
-        .doc(documentId);
-
-      const doc = await docRef.get();
-
-      if (!doc.exists) {
-        return null;
-      }
-
-      const data = doc.data() as DocumentMetadata;
-      
-      this.logger.debug('Document retrieved', {
-        userId,
-        documentId,
-        fileName: data.fileName
-      });
-
-      return data;
-    } catch (error) {
-      this.logger.error('Failed to get document', error as Error, {
-        userId,
-        documentId
-      });
-      throw new Error('Failed to get document');
-    }
-  }
-
-  /**
    * Get user documents with pagination and filtering
    */
   async getUserDocuments(
@@ -119,46 +112,96 @@ export class FirestoreService {
     pagination: PaginationOptions,
     sort: SortOptions,
     filters: DocumentFilters = {}
-  ): Promise<PaginatedResult<DocumentMetadata>> {
+  ): Promise<PaginatedResult<UserDocument>> {
     try {
-      let query: admin.firestore.Query = this.db
-        .collection('users')
-        .doc(userId)
-        .collection('documents');
+
+      // Get user document to retrieve documentIds array
+      const user = await this.userRepo.findByUid(userId);
+
+      if (!user) {
+        throw new Error('User not found');
+      }
+
+      const documents: UserDocument[] = user.documents || [];
+
+      if (documents.length === 0) {
+        return {
+          items: [],
+          page: pagination.page,
+          limit: pagination.limit,
+          total: 0,
+          totalPages: 0
+        };
+      }
+
+      // Fetch documents from storage by their IDs
+      const documentsPromises = documents.map(async (doc) => {
+        try {
+          // Get file information from storage
+          const fileInfo = await this.storageService.getDocumentFileInfo(doc.documentId, userId);
+
+          if (!fileInfo) {
+            this.logger.warn('No file found in storage for document', { documentId: doc.documentId, userId });
+            return null;
+          }
+
+          return doc;
+        } catch (error) {
+          this.logger.error('Failed to get file info for document', error as Error, { docId: doc.documentId, userId });
+          return null;
+        }
+      });
+
+      const allDocuments = (await Promise.all(documentsPromises))
+        .filter((doc): doc is UserDocument => doc !== null);
 
       // Apply filters
+      let filteredDocuments = allDocuments;
+
       if (filters.status) {
-        query = query.where('status', '==', filters.status);
+        filteredDocuments = filteredDocuments.filter(doc => doc.documentMetadata.status === filters.status);
       }
 
       if (filters.category) {
-        query = query.where('category', '==', filters.category);
+        filteredDocuments = filteredDocuments.filter(doc => doc.documentMetadata.category === filters.category);
       }
 
       if (filters.startDate) {
-        query = query.where('uploadedAt', '>=', filters.startDate);
+        filteredDocuments = filteredDocuments.filter(doc => 
+          new Date(doc.documentMetadata.uploadedAt) >= new Date(filters.startDate!)
+        );
       }
 
       if (filters.endDate) {
-        query = query.where('uploadedAt', '<=', filters.endDate);
+        filteredDocuments = filteredDocuments.filter(doc => 
+          new Date(doc.documentMetadata.uploadedAt) <= new Date(filters.endDate!)
+        );
+      }
+
+      if (filters.tags && filters.tags.length > 0) {
+        filteredDocuments = filteredDocuments.filter(doc => 
+          filters.tags!.some(tag => doc.documentMetadata.tags?.includes(tag))
+        );
       }
 
       // Apply sorting
-      query = query.orderBy(sort.field, sort.direction);
+      filteredDocuments.sort((a, b) => {
+        const aValue = a.documentMetadata[sort.field as keyof DocumentMetadata];
+        const bValue = b.documentMetadata[sort.field as keyof DocumentMetadata];
 
-      // Get total count for pagination
-      const totalSnapshot = await query.get();
-      const total = totalSnapshot.size;
+        if (!aValue < !bValue) return sort.direction === 'asc' ? -1 : 1;
+        if (!aValue > !bValue) return sort.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+
+      const total = filteredDocuments.length;
 
       // Apply pagination
       const offset = (pagination.page - 1) * pagination.limit;
-      const paginatedQuery = query.offset(offset).limit(pagination.limit);
-      
-      const snapshot = await paginatedQuery.get();
-      const documents = snapshot.docs.map(doc => doc.data() as DocumentMetadata);
+      const paginatedDocuments = filteredDocuments.slice(offset, offset + pagination.limit);
 
-      const result: PaginatedResult<DocumentMetadata> = {
-        items: documents,
+      const result: PaginatedResult<UserDocument> = {
+        items: paginatedDocuments,
         page: pagination.page,
         limit: pagination.limit,
         total,
@@ -167,7 +210,7 @@ export class FirestoreService {
 
       this.logger.debug('User documents retrieved', {
         userId,
-        count: documents.length,
+        count: paginatedDocuments.length,
         total,
         page: pagination.page
       });
@@ -181,6 +224,105 @@ export class FirestoreService {
         filters
       });
       throw new Error('Failed to get user documents');
+    }
+  }
+
+  /**
+   * Get all user documents with optional tag filtering
+   */
+  async getAllUserDocuments(userId: string, tag?: string): Promise<UserDocument[]> {
+    try {
+      // Get user document to retrieve documents array
+      const user = await this.userRepo.findByUid(userId);
+
+      if (!user) {
+        throw new Error('User not found');
+      }
+
+      let documents: UserDocument[] = user.documents || [];
+
+      if (documents.length === 0) {
+        return [];
+      }
+
+      this.logger.info('Retrieving all user documents', { documents })
+
+      // Apply tag filter if provided
+      let filteredDocuments = documents;
+      if (tag) {
+        filteredDocuments = documents.filter(doc =>
+          doc.documentMetadata.tags?.includes(tag)
+        );
+      }
+
+      this.logger.info('All user documents retrieved', {
+        userId,
+        count: filteredDocuments.length,
+        tag
+      });
+
+      return filteredDocuments;
+    } catch (error) {
+      this.logger.error('Failed to get all user documents', error as Error, {
+        userId,
+        tag
+      });
+      throw new Error('Failed to get all user documents');
+    }
+  }
+
+  /**
+   * Get a single document by ID
+   */
+  async getDocument(documentId: string, userId: string): Promise<any | null> {
+    try {
+      // Find the document in the user's documents array
+      const user = await this.userRepo.findByUid(userId);
+
+      if (!user) {
+        throw new Error('User not found');
+      }
+
+      const document = (user.documents || []).find(doc => doc.documentId === documentId);
+
+      if (!document) {
+        return null;
+      }
+
+      // Get additional file info from storage
+      const fileInfo = await this.storageService.getDocumentFileInfo(document.documentId, userId);
+
+      if (!fileInfo) {
+        return null;
+      }
+
+      const result = {
+        documentId: document.documentId,
+        fileName: fileInfo.fileName,
+        contentType: fileInfo.contentType,
+        size: fileInfo.size,
+        uploadedAt: document.documentMetadata.uploadedAt || fileInfo.uploadedAt.toISOString(),
+        status: document.documentMetadata.status || 'uploaded',
+        category: document.documentMetadata.category,
+        anonymizedKeywords: document.documentMetadata.anonymizedKeywords || [],
+        description: document.documentMetadata.description,
+        tags: document.documentMetadata.tags || [],
+        analyses: document.documentMetadata.analyses || [],
+      };
+
+      this.logger.debug('Document retrieved', {
+        userId,
+        documentId,
+        fileName: result.fileName
+      });
+
+      return result;
+    } catch (error) {
+      this.logger.error('Failed to get document', error as Error, {
+        userId,
+        documentId
+      });
+      throw new Error('Failed to get document');
     }
   }
 
@@ -220,21 +362,29 @@ export class FirestoreService {
   }
 
   /**
-   * Delete document record
+   * Delete document record (removes documentId from user's documentIds array)
    */
   async deleteDocument(documentId: string, userId: string): Promise<void> {
     try {
-      const docRef = this.db
-        .collection('users')
-        .doc(userId)
-        .collection('documents')
-        .doc(documentId);
+      // Get user document to retrieve current documentIds array
+      const user = await this.userRepo.findByUid(userId);
 
-      await docRef.delete();
+      if (!user) {
+        throw new Error('User not found');
+      }
 
-      this.logger.info('Document record deleted', {
+      // Remove documentId from the documentIds array
+      const updatedDocuments = (user.documents || []).filter(doc => doc.documentId !== documentId);
+
+      // Update user document with new documentIds array
+      await this.userRepo.update(user.id, {
+        documents: updatedDocuments
+      });
+
+      this.logger.info('Document record deleted from user documentIds', {
         userId,
-        documentId
+        documentId,
+        remainingDocuments: updatedDocuments.length
       });
     } catch (error) {
       this.logger.error('Failed to delete document record', error as Error, {
@@ -466,11 +616,11 @@ export class FirestoreService {
       // Simple text search in fileName and description
       // Note: Firestore doesn't support full-text search natively
       const snapshot = await query.get();
-      
+
       const searchLower = searchText.toLowerCase();
       const filteredDocuments = snapshot.docs
         .map(doc => doc.data() as DocumentMetadata)
-        .filter(doc => 
+        .filter(doc =>
           doc.fileName.toLowerCase().includes(searchLower) ||
           (doc.description && doc.description.toLowerCase().includes(searchLower)) ||
           (doc.tags && doc.tags.some(tag => tag.toLowerCase().includes(searchLower)))
@@ -512,7 +662,7 @@ export class FirestoreService {
   async saveDocument(path: string, data: any): Promise<void> {
     try {
       await this.db.doc(path).set(data, { merge: true });
-      
+
       this.logger.debug('Document saved successfully', {
         path,
         timestamp: new Date().toISOString()
@@ -520,6 +670,50 @@ export class FirestoreService {
     } catch (error) {
       this.logger.error('Failed to save document', error as Error, { path });
       throw new Error(`Failed to save document at ${path}`);
+    }
+  }
+
+  /**
+   * Batch operation for atomic multi-document operations
+   */
+  async saveBatch(operations: Array<{ path: string; data: any }>): Promise<void> {
+    try {
+      const batch = this.db.batch();
+
+      operations.forEach(({ path, data }) => {
+        const docRef = this.db.doc(path);
+        batch.set(docRef, data, { merge: true });
+      });
+
+      await batch.commit();
+
+      this.logger.debug('Batch operation completed successfully', {
+        operationCount: operations.length,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      this.logger.error('Failed to execute batch operation', error as Error, {
+        operationCount: operations.length
+      });
+      throw new Error('Failed to execute batch operation');
+    }
+  }
+
+  /**
+   * Get document from subcollection
+   */
+  async getSubcollectionDocument(path: string): Promise<any | null> {
+    try {
+      const doc = await this.db.doc(path).get();
+
+      if (!doc.exists) {
+        return null;
+      }
+
+      return doc.data();
+    } catch (error) {
+      this.logger.error('Failed to get subcollection document', error as Error, { path });
+      throw new Error(`Failed to get document at ${path}`);
     }
   }
 }

@@ -230,7 +230,7 @@ export function RegisterForm() {
             Account erstellen
           </CardTitle>
           <CardDescription className="text-gray-600 dark:text-gray-400">
-            Registrieren Sie sich für LexPilot AI
+            Registrieren Sie sich für LexForm AI
           </CardDescription>
         </CardHeader>
 

@@ -376,7 +376,8 @@ export class AuthController extends BaseController {
       const authUser = await getAuth().getUser(userId);
 
       // Get user profile from Firestore
-      const userDoc = await this.db.collection('users').doc(userId).get();
+      const user = await this.userRepository.findByUid(userId);
+      const userDoc = await this.db.collection('users').doc(user!.id).get();
       const userProfile = userDoc.data();
 
       this.sendSuccess(res, {
@@ -386,6 +387,7 @@ export class AuthController extends BaseController {
           displayName: authUser.displayName,
           emailVerified: authUser.emailVerified,
           photoURL: authUser.photoURL,
+          role: userProfile ? userProfile.role : 'user',
           profile: userProfile ? {
             firstName: userProfile.firstName,
             lastName: userProfile.lastName,

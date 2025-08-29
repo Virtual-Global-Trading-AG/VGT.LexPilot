@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ReactQueryProvider } from "@/lib/providers";
+import { Toaster } from "@/components/ui/toaster";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -15,7 +16,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "LexPilot AI - Intelligente Rechtsanalyse",
+  title: "LexForm AI - Intelligente Rechtsanalyse",
   description: "KI-gestützte Rechtsanalyse für Schweizer Recht",
 };
 
@@ -37,6 +38,7 @@ export default function RootLayout({
         >
           <ReactQueryProvider>
             {children}
+            <Toaster />
           </ReactQueryProvider>
         </ThemeProvider>
       </body>

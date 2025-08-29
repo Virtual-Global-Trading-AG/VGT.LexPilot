@@ -22,14 +22,6 @@ export class AnalysisController extends BaseController {
   }
 
   /**
-   * Create new analysis
-   * POST /api/analysis/
-   */
-  public async createAnalysis(req: Request, res: Response, next: NextFunction): Promise<void> {
-    return this.startAnalysis(req, res, next);
-  }
-
-  /**
    * Get analysis by ID
    * GET /api/analysis/:analysisId
    */
@@ -180,57 +172,6 @@ export class AnalysisController extends BaseController {
         userId: this.getUserId(req),
         analysisId: req.params.analysisId,
         format: req.query.format
-      });
-      next(error);
-    }
-  }
-
-    /**
-   * Start document analysis
-   * POST /api/analysis/start
-   */
-  public async startAnalysis(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const userId = this.getUserId(req);
-      const { documentId, analysisType, options }: DocumentAnalysisRequest = req.body;
-
-      // Validate request
-      if (!documentId || !analysisType) {
-        this.sendError(res, 400, 'Missing required fields', 'documentId and analysisType are required');
-        return;
-      }
-
-      this.logger.info('Analysis start requested', {
-        userId,
-        documentId,
-        analysisType,
-        options
-      });
-
-      // Start analysis using the integrated service
-      const analysisId = await this.analysisService.startAnalysis({
-        documentId,
-        userId,
-        analysisType,
-        options: {
-          priority: options?.priority || 'normal',
-          notifyByEmail: options?.notifyByEmail || false,
-          detailedReport: options?.detailedReport || true,
-          language: 'de' // Default to German for Swiss legal documents
-        }
-      });
-
-      res.status(202).json({
-        success: true,
-        analysisId,
-        message: 'Analysis started successfully',
-        estimatedDuration: this.getEstimatedDuration(analysisType)
-      });
-
-    } catch (error) {
-      this.logger.error('Analysis start failed', error as Error, {
-        userId: this.getUserId(req),
-        body: req.body
       });
       next(error);
     }

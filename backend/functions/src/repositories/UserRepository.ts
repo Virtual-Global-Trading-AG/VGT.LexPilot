@@ -128,7 +128,8 @@ export class UserRepository extends BaseRepository<User> {
             monthlyUsage: [],
             averageConfidence: 0,
             lastActivity: new Date()
-          }
+          },
+          documents: []
         });
 
         const newUser = await this.findById(newUserId);

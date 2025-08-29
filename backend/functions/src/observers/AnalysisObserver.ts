@@ -281,11 +281,11 @@ export class EmailObserver implements IAnalysisObserver {
   private getEmailSubject(eventType: EventType): string {
     switch (eventType) {
       case EventType.ANALYSIS_COMPLETED:
-        return 'LexPilot: Analyse abgeschlossen';
+        return 'LexForm: Analyse abgeschlossen';
       case EventType.ANALYSIS_FAILED:
-        return 'LexPilot: Analyse fehlgeschlagen';
+        return 'LexForm Analyse fehlgeschlagen';
       default:
-        return 'LexPilot: Benachrichtigung';
+        return 'LexForm: Benachrichtigung';
     }
   }
 

@@ -78,7 +78,7 @@ export function AuthLayout({ children, title, subtitle }: AuthLayoutProps) {
             transition={{ delay: 0.3, duration: 0.8 }}
           >
             <h1 className="text-4xl font-bold mb-6">
-              LexPilot AI
+              LexForm AI
             </h1>
             <p className="text-xl text-blue-100 mb-8 leading-relaxed">
               Intelligente Rechtsanalyse für das Schweizer Recht. 
@@ -132,7 +132,7 @@ export function AuthLayout({ children, title, subtitle }: AuthLayoutProps) {
               transition={{ delay: 1 }}
             >
               <p className="text-sm text-blue-100 italic">
-                &ldquo;LexPilot hat unsere Rechtsdokumentanalyse revolutioniert. 
+                &ldquo;LexForm hat unsere Rechtsdokumentanalyse revolutioniert.
                 Die Präzision und Geschwindigkeit der KI-Analyse ist beeindruckend.&rdquo;
               </p>
               <p className="text-xs text-blue-200 mt-2">

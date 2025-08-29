@@ -1,7 +1,7 @@
 import { Metadata } from "next"
 
 export const metadata: Metadata = {
-  title: "Authentifizierung - VGT.LexPilot",
+  title: "Authentifizierung - VGT.LexForm",
   description: "Melden Sie sich an oder registrieren Sie sich für VGT.LexPilot",
 }
 

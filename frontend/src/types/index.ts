@@ -1,4 +1,4 @@
-// TypeScript Definitions für LexPilot AI
+// TypeScript Definitions für LexForm AI
 
 export interface User {
   id: string;
@@ -72,7 +72,7 @@ export type AnalysisStatus =
 export interface AnalysisResult {
   summary: string;
   findings: Finding[];
-  recommendations: Recommendation[];
+  recommendations: string[];
   riskScore: number;
   complianceScore?: number;
 }
@@ -87,13 +87,6 @@ export interface Finding {
   legalBasis?: string;
 }
 
-export interface Recommendation {
-  id: string;
-  priority: 'low' | 'medium' | 'high';
-  title: string;
-  description: string;
-  actionRequired: boolean;
-}
 
 export interface WebSocketEvent {
   type: 'analysis_progress' | 'analysis_complete' | 'error';
@@ -106,4 +99,70 @@ export interface ApiResponse<T> {
   data?: T;
   error?: string;
   message?: string;
+}
+
+// Swiss Obligation Law Analysis Types
+export interface DocumentContext {
+  documentType: string;
+  businessDomain: string;
+  keyTerms: string[];
+  contextDescription: string;
+}
+
+export interface GeneratedQuery {
+  query: string;
+  context: string;
+  relevanceScore?: number;
+}
+
+export interface SectionComplianceAnalysis {
+  isCompliant: boolean;
+  confidence: number;
+  reasoning: string;
+  violations: string[];
+  recommendations: string[];
+}
+
+export interface SwissObligationSectionResult {
+  sectionId: string;
+  sectionContent: string;
+  title?: string;
+  queries: GeneratedQuery[];
+  legalContext: any[];
+  complianceAnalysis: SectionComplianceAnalysis;
+  findings: Finding[];
+  recommendations: string[];
+  // Computed properties for display
+  isCompliant: boolean;
+  confidence: number;
+  violationCount: number;
+  recommendationCount: number;
+  violations: string[];
+}
+
+export interface SwissObligationOverallCompliance {
+  isCompliant: boolean;
+  complianceScore: number;
+  summary: string;
+}
+
+export interface SwissObligationAnalysisSummary {
+  totalSections: number;
+  compliantSections: number;
+  totalViolations: number;
+  totalRecommendations: number;
+}
+
+export interface SwissObligationAnalysisResult {
+  analysisId: string;
+  documentId: string;
+  userId: string;
+  documentContext?: DocumentContext;
+  sections: SwissObligationSectionResult[];
+  overallCompliance: SwissObligationOverallCompliance;
+  summary?: SwissObligationAnalysisSummary;
+  createdAt: string;
+  completedAt?: string;
+  lawyerStatus?: 'UNCHECKED' | 'CHECK_PENDING' | 'APPROVED' | 'DECLINE';
+  lawyerComment?: string;
 }

@@ -1,9 +1,8 @@
 import { Router } from 'express';
+import * as Joi from 'joi';
 import { DocumentController } from '../controllers/DocumentController';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { ValidationMiddleware } from '../middleware/validationMiddleware';
-import { rateLimitMiddleware } from '../middleware/rateLimitMiddleware';
-import * as Joi from 'joi';
 
 const router = Router();
 const documentController = new DocumentController();
@@ -12,15 +11,15 @@ const documentController = new DocumentController();
 router.use(authMiddleware);
 
 // Apply rate limiting to document operations
-router.use(rateLimitMiddleware);
+//router.use(rateLimitMiddleware);
 
 // Validation schemas
-const uploadDocumentSchema = Joi.object({
+const uploadDocumentDirectSchema = Joi.object({
   fileName: Joi.string().min(1).max(255).required()
-    .pattern(/^[a-zA-Z0-9._\-\s]+\.(pdf|docx|doc|txt|md|csv)$/i)
-    .messages({
-      'string.pattern.base': 'File name must have a valid extension (pdf, docx, doc, txt, md, csv)'
-    }),
+  .pattern(/^.+\.(pdf|docx|doc|txt|md|csv)$/i)
+  .messages({
+    'string.pattern.base': 'File name must have a valid extension (pdf, docx, doc, txt, md, csv)'
+  }),
   contentType: Joi.string().valid(
     'application/pdf',
     'application/msword',
@@ -29,11 +28,21 @@ const uploadDocumentSchema = Joi.object({
     'text/markdown',
     'text/csv'
   ).required(),
-  size: Joi.number().min(1).max(52428800).required(), // Max 50MB
+  base64Content: Joi.string().required()
+  .pattern(/^[A-Za-z0-9+/]*={0,2}$/)
+  .messages({
+    'string.pattern.base': 'Invalid base64 content format'
+  }),
   metadata: Joi.object({
-    category: Joi.string().valid('contract', 'legal_document', 'policy', 'other'),
+    category: Joi.string().valid('contract', 'nda', 'terms_conditions', 'other'),
     description: Joi.string().max(1000),
-    tags: Joi.array().items(Joi.string().max(50)).max(10)
+    tags: Joi.array().items(Joi.string().max(50)).max(10),
+    anonymizedKeywords: Joi.array().items(
+      Joi.object({
+        keyword: Joi.string().min(1).max(500).required(),
+        replaceWith: Joi.string().min(1).max(100).required()
+      })
+    ).max(50)
   }).optional()
 });
 
@@ -41,7 +50,7 @@ const updateDocumentSchema = Joi.object({
   title: Joi.string().min(1).max(255).optional(),
   description: Joi.string().max(1000).optional(),
   tags: Joi.array().items(Joi.string().max(50)).max(10).optional(),
-  category: Joi.string().valid('contract', 'legal_document', 'policy', 'other').optional()
+  category: Joi.string().valid('contract', 'legal_document', 'policy', 'terms_conditions', 'other').optional()
 }).min(1); // At least one field required
 
 const updateStatusSchema = Joi.object({
@@ -70,6 +79,26 @@ const dsgvoCheckSchema = Joi.object({
   language: Joi.string().valid('de', 'en', 'fr', 'it').default('de')
 });
 
+// Schema für den vollständigen DSGVO Check
+const completeDsgvoCheckSchema = Joi.object({
+  question: Joi.string().min(10).max(5000).required().messages({
+    'string.min': 'Die Frage muss mindestens 10 Zeichen lang sein',
+    'string.max': 'Die Frage darf maximal 5.000 Zeichen lang sein',
+    'any.required': 'Eine Benutzerfrage ist erforderlich'
+  }),
+  language: Joi.string().valid('de', 'en', 'fr', 'it').default('de'),
+  includeContext: Joi.boolean().default(true),
+  maxSources: Joi.number().integer().min(3).max(15).default(10)
+});
+
+
+const similaritySearchSchema = Joi.object({
+  text: Joi.string().min(10).max(10000).required(),
+  indexName: Joi.string().default('legal-texts'),
+  namespace: Joi.string().default('legal-regulations'),
+  topK: Joi.number().integer().min(1).max(20).default(5)
+});
+
 const paginationSchema = Joi.object({
   page: Joi.number().integer().min(1).default(1),
   limit: Joi.number().integer().min(1).max(100).default(20),
@@ -80,18 +109,35 @@ const paginationSchema = Joi.object({
 const searchSchema = Joi.object({
   q: Joi.string().min(1).max(255).required(),
   status: Joi.string().valid('uploading', 'uploaded', 'processing', 'processed', 'error').optional(),
-  category: Joi.string().valid('contract', 'legal_document', 'policy', 'other').optional(),
+  category: Joi.string().valid('contract', 'legal_document', 'policy', 'terms_conditions', 'other').optional(),
   page: Joi.number().min(1).default(1).optional(),
   limit: Joi.number().min(1).max(100).default(10).optional()
 });
 
-// Document CRUD routes
-router.post('/', 
-  ValidationMiddleware.validate({ body: uploadDocumentSchema }),
-  documentController.uploadDocument.bind(documentController)
+const lawyerAnalysisResultSchema = Joi.object({
+  decision: Joi.string().valid('APPROVED', 'DECLINE').required().messages({
+    'any.only': 'Decision must be either APPROVED or DECLINE',
+    'any.required': 'Decision is required'
+  }),
+  comment: Joi.when('decision', {
+    is: 'DECLINE',
+    then: Joi.string().min(1).max(2000).required().messages({
+      'string.min': 'Comment cannot be empty when declining',
+      'string.max': 'Comment cannot exceed 2000 characters',
+      'any.required': 'Comment is required when declining an analysis'
+    }),
+    otherwise: Joi.string().max(2000).optional().messages({
+      'string.max': 'Comment cannot exceed 2000 characters'
+    })
+  })
+});
+
+router.post('/upload-direct',
+  ValidationMiddleware.validate({ body: uploadDocumentDirectSchema }),
+  documentController.uploadDocumentDirect.bind(documentController)
 );
 
-router.get('/', 
+router.get('/',
   documentController.getDocuments.bind(documentController)
 );
 
@@ -104,42 +150,38 @@ router.get('/stats',
   documentController.getStorageStats.bind(documentController)
 );
 
-router.get('/:documentId', 
-  documentController.getDocument.bind(documentController)
+// Dashboard Routes
+router.get('/dashboard/stats',
+  documentController.getDashboardStats.bind(documentController)
 );
 
-router.put('/:documentId',
-  ValidationMiddleware.validate({ body: updateDocumentSchema }),
-  documentController.updateDocument.bind(documentController)
+router.get('/dashboard/activities',
+  documentController.getRecentActivities.bind(documentController)
 );
 
-router.patch('/:documentId/status',
-  ValidationMiddleware.validate({ body: updateStatusSchema }),
-  documentController.updateDocumentStatus.bind(documentController)
+router.get('/dashboard/progress',
+  documentController.getAnalysisProgress.bind(documentController)
 );
 
-router.delete('/:documentId', 
+// Lawyer Dashboard Routes
+router.get('/dashboard/lawyer/stats',
+  documentController.getLawyerDashboardStats.bind(documentController)
+);
+
+router.get('/dashboard/lawyer/activities',
+  documentController.getLawyerRecentActivities.bind(documentController)
+);
+
+router.get('/dashboard/lawyer/progress',
+  documentController.getLawyerAnalysisProgress.bind(documentController)
+);
+
+router.delete('/:documentId',
   documentController.deleteDocument.bind(documentController)
 );
 
-// Document content routes
-router.get('/:documentId/content', 
-  documentController.getDocumentContent.bind(documentController)
-);
-
-router.get('/:documentId/download', 
-  documentController.downloadDocument.bind(documentController)
-);
-
-// Document analysis routes
-router.post('/:documentId/analyze',
-  ValidationMiddleware.validate({ body: analyzeDocumentSchema }),
-  documentController.analyzeDocument.bind(documentController)
-);
-
-router.get('/:documentId/analyses',
-  ValidationMiddleware.validate({ query: paginationSchema }),
-  documentController.getDocumentAnalyses.bind(documentController)
+router.get('/:documentId/text',
+  documentController.getDocumentAsText.bind(documentController)
 );
 
 router.get('/:documentId/analysis/:analysisId',
@@ -150,16 +192,61 @@ router.delete('/:documentId/analysis/:analysisId',
   documentController.cancelAnalysis.bind(documentController)
 );
 
-// RAG-Enhanced Analysis Routes
-router.post('/:documentId/analyze-rag',
-  ValidationMiddleware.validate({ body: ragAnalysisSchema }),
-  documentController.analyzeContractWithRAG.bind(documentController)
-);
-
 // DSGVO Compliance Check (Text Input)
 router.post('/dsgvo-check',
   ValidationMiddleware.validate({ body: dsgvoCheckSchema }),
   documentController.checkDSGVOCompliance.bind(documentController)
+);
+
+// Vollständiger DSGVO Check mit ChatGPT/LangChain Integration
+router.post('/dsgvo-check-complete',
+  ValidationMiddleware.validate({ body: completeDsgvoCheckSchema }),
+  documentController.completeDSGVOCheck.bind(documentController)
+);
+
+// Swiss Obligation Law Analysis
+router.post('/:documentId/analyze-swiss-obligation-law',
+  documentController.analyzeSwissObligationLaw.bind(documentController)
+);
+
+// Get Swiss Obligation Law Analysis Result
+router.get('/swiss-obligation-analysis/:analysisId',
+  documentController.getSwissObligationAnalysis.bind(documentController)
+);
+
+// List Swiss Obligation Law Analyses
+router.get('/swiss-obligation-analyses',
+  documentController.listSwissObligationAnalyses.bind(documentController)
+);
+
+// List Shared Swiss Obligation Law Analyses for Lawyers
+router.get('/swiss-obligation-analyses-shared',
+  documentController.listSharedSwissObligationAnalyses.bind(documentController)
+);
+
+// Get Swiss Obligation Law Analyses by Document ID
+router.get('/:documentId/swiss-obligation-analyses',
+  documentController.getSwissObligationAnalysesByDocumentId.bind(documentController)
+);
+
+// Start Lawyer Review for Swiss Obligation Analysis
+router.post('/:documentId/start-lawyer-review',
+  documentController.startLawyerReview.bind(documentController)
+);
+
+// Submit Lawyer Analysis Result
+router.post('/swiss-obligation-analyses/:analysisId/lawyer-result',
+  ValidationMiddleware.validate({ body: lawyerAnalysisResultSchema }),
+  documentController.submitLawyerAnalysisResult.bind(documentController)
+);
+
+// Job Management Routes
+router.get('/jobs/:jobId',
+  documentController.getJobStatus.bind(documentController)
+);
+
+router.get('/jobs',
+  documentController.getUserJobs.bind(documentController)
 );
 
 export default router;

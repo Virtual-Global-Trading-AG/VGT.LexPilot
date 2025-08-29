@@ -1,8 +1,10 @@
-import { Request, Response, NextFunction } from 'express';
-import { getFirestore } from 'firebase-admin/firestore';
+import { NextFunction, Request, Response } from 'express';
 import { getAuth } from 'firebase-admin/auth';
+import { getFirestore } from 'firebase-admin/firestore';
+import * as fs from 'fs';
+import * as path from 'path';
+import pdfParse from 'pdf-parse';
 import { BaseController } from './BaseController';
-import { Logger } from '../utils/logger';
 
 interface AdminUserUpdateRequest {
   role?: 'user' | 'premium' | 'admin';
@@ -130,7 +132,7 @@ export class AdminController extends BaseController {
   static requireAdmin = (req: Request, res: Response, next: NextFunction): void => {
     try {
       const user = (req as any).user;
-      
+
       if (!user || !user.customClaims || user.customClaims.role !== 'admin') {
         res.status(403).json({
           error: 'Forbidden',
@@ -196,18 +198,18 @@ export class AdminController extends BaseController {
    */
   public async listUsers(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { 
-        page = 1, 
-        limit = 20, 
-        role, 
-        status, 
+      const {
+        page = 1,
+        limit = 20,
+        role,
+        status,
         search,
         sortBy = 'createdAt',
         sortOrder = 'desc'
       } = req.query;
 
       const pagination = this.getPaginationParams({ page, limit });
-      
+
       this.logger.info('Admin user list requested', {
         adminId: this.getUserId(req),
         filters: { role, status, search },
@@ -225,17 +227,17 @@ export class AdminController extends BaseController {
       }
 
       // Sortierung
-      const sortField = ['createdAt', 'lastLogin', 'email'].includes(sortBy as string) 
-        ? sortBy as string 
+      const sortField = ['createdAt', 'lastLogin', 'email'].includes(sortBy as string)
+        ? sortBy as string
         : 'createdAt';
       const order = sortOrder === 'asc' ? 'asc' : 'desc';
-      
+
       query = query.orderBy(sortField, order);
 
       // Pagination
       const totalQuery = await query.get();
       const total = totalQuery.size;
-      
+
       const usersSnapshot = await query
         .limit(pagination.limit)
         .offset(pagination.offset)
@@ -254,7 +256,7 @@ export class AdminController extends BaseController {
       // Textsuche auf Client-Seite (da Firestore keine Volltext-Suche hat)
       if (search) {
         const searchTerm = (search as string).toLowerCase();
-        users = users.filter((user: any) => 
+        users = users.filter((user: any) =>
           user.email?.toLowerCase().includes(searchTerm) ||
           user.displayName?.toLowerCase().includes(searchTerm) ||
           user.firstName?.toLowerCase().includes(searchTerm) ||
@@ -290,7 +292,7 @@ export class AdminController extends BaseController {
   public async getUserDetails(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { userId } = req.params;
-      
+
       if (!userId) {
         this.sendError(res, 400, 'Missing userId parameter');
         return;
@@ -303,7 +305,7 @@ export class AdminController extends BaseController {
 
       // Firestore Benutzerdaten
       const userDoc = await this.db.collection('users').doc(userId).get();
-      
+
       if (!userDoc.exists) {
         this.sendError(res, 404, 'User not found');
         return;
@@ -476,11 +478,11 @@ export class AdminController extends BaseController {
    */
   public async getAuditLogs(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { 
-        page = 1, 
-        limit = 50, 
-        level, 
-        userId, 
+      const {
+        page = 1,
+        limit = 50,
+        level,
+        userId,
         action,
         startDate,
         endDate
@@ -642,7 +644,7 @@ export class AdminController extends BaseController {
       const data = doc.data();
       const amount = data.amount || 0;
       totalThisMonth += amount;
-      
+
       const userId = data.userId;
       if (userId) {
         userCosts.set(userId, (userCosts.get(userId) || 0) + amount);
@@ -675,7 +677,7 @@ export class AdminController extends BaseController {
     const snapshot = await this.db.collection('costs')
       .where('userId', '==', userId)
       .get();
-    
+
     return snapshot.docs.reduce((total, doc) => {
       return total + (doc.data().amount || 0);
     }, 0);
@@ -686,12 +688,12 @@ export class AdminController extends BaseController {
 
     // Alle Benutzer-Collections löschen
     const collections = ['documents', 'analyses', 'notifications', 'costs', 'rateLimits'];
-    
+
     for (const collectionName of collections) {
       const snapshot = await this.db.collection(collectionName)
         .where('userId', '==', userId)
         .get();
-      
+
       snapshot.docs.forEach(doc => {
         batch.delete(doc.ref);
       });
@@ -712,7 +714,7 @@ export class AdminController extends BaseController {
       const dbStart = Date.now();
       await this.db.collection('health').limit(1).get();
       const dbTime = Date.now() - dbStart;
-      
+
       checks.push({
         name: 'database',
         status: dbTime < 1000 ? 'healthy' : 'degraded',
@@ -727,7 +729,7 @@ export class AdminController extends BaseController {
         const authStart = Date.now();
         await getAuth().listUsers(1);
         const authTime = Date.now() - authStart;
-        
+
         checks.push({
           name: 'auth',
           status: authTime < 500 ? 'healthy' : 'degraded',
@@ -749,7 +751,7 @@ export class AdminController extends BaseController {
       // Memory usage check
       const memUsage = process.memoryUsage();
       const memUsagePercent = (memUsage.heapUsed / memUsage.heapTotal) * 100;
-      
+
       checks.push({
         name: 'memory',
         status: memUsagePercent < 80 ? 'healthy' : memUsagePercent < 95 ? 'degraded' : 'unhealthy',
@@ -785,10 +787,10 @@ export class AdminController extends BaseController {
     try {
       // TODO: Implement actual metrics collection based on granularity
       // This is a placeholder implementation
-      
+
       const timeDiff = to.getTime() - from.getTime();
-      const timePoints = granularity === 'hour' ? 
-        Math.ceil(timeDiff / (1000 * 60 * 60)) : 
+      const timePoints = granularity === 'hour' ?
+        Math.ceil(timeDiff / (1000 * 60 * 60)) :
         Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
 
       const metrics = {
@@ -831,7 +833,7 @@ export class AdminController extends BaseController {
       // Generate time series data points
       for (let i = 0; i < Math.min(timePoints, 100); i++) {
         const timestamp = new Date(from.getTime() + (i * timeDiff / timePoints));
-        
+
         metrics.timeseries.push({
           timestamp: timestamp.toISOString(),
           users: {
@@ -965,8 +967,8 @@ export class AdminController extends BaseController {
         results: {
           total: searchResults.totalResults,
           returned: searchResults.documents.length,
-          averageScore: searchResults.scores.length > 0 
-            ? searchResults.scores.reduce((a, b) => a + b, 0) / searchResults.scores.length 
+          averageScore: searchResults.scores.length > 0
+            ? searchResults.scores.reduce((a, b) => a + b, 0) / searchResults.scores.length
             : 0,
           documents: searchResults.documents.map((doc, index) => ({
             id: doc.metadata.id,
@@ -1055,4 +1057,112 @@ export class AdminController extends BaseController {
       next(error);
     }
   }
+
+  /**
+   * Create VectorStore from URL (Admin Only)
+   * POST /api/admin/vectorstore/create
+   */
+  public async createVectorStore(req: Request, res: Response, next: NextFunction): Promise<void> {
+    const startTime = Date.now();
+    try {
+
+      const userId = this.getUserId(req);
+
+
+      this.logger.info('Admin VectorStore-Erstellung gestartet', {
+        userId,
+        timestamp: new Date().toISOString()
+      });
+
+      // ==========================================
+      // VectorStore Service importieren und verwenden
+      // ==========================================
+
+      const { VectorStoreService } = await import('../services/VectorStoreService');
+      const vectorStoreService = new VectorStoreService();
+      const FILE_URL = '../../assets/OR.pdf';
+
+      // VectorStore mit der bestehenden Service-Methode erstellen
+      const vectorStoreDoc = await vectorStoreService.createAndSaveVectorStore(
+        'knowledge_base',
+        FILE_URL,
+        userId
+      );
+
+      this.logger.info('Admin VectorStore erfolgreich erstellt', {
+        userId,
+        firestoreDocId: vectorStoreDoc.id,
+        vectorStoreId: vectorStoreDoc.vectorStoreId,
+        totalProcessingTimeMs: Date.now() - startTime
+      });
+
+      // ==========================================
+      // Erfolgreiche Admin-Antwort
+      // ==========================================
+
+      this.sendSuccess(res, {
+        admin: {
+          createdBy: userId,
+          processingTimeMs: Date.now() - startTime,
+          timestamp: new Date().toISOString()
+        },
+        vectorStore: {
+          id: vectorStoreDoc.id,
+          vectorStoreId: vectorStoreDoc.vectorStoreId,
+          name: vectorStoreDoc.name,
+          description: vectorStoreDoc.description,
+          status: vectorStoreDoc.status,
+          fileCount: vectorStoreDoc.fileCount,
+          files: vectorStoreDoc.files.map(file => ({
+            id: file.id,
+            status: file.status,
+            usage_bytes: file.usage_bytes,
+            created_at: file.created_at
+          })),
+          metadata: vectorStoreDoc.metadata,
+          createdAt: vectorStoreDoc.createdAt.toISOString(),
+          FILE_URL,
+          size: vectorStoreDoc.files.reduce((total, file) => total + (file.usage_bytes || 0), 0)
+        },
+        openai: {
+          vectorStoreId: vectorStoreDoc.vectorStoreId,
+          fileId: vectorStoreDoc.fileId,
+          status: vectorStoreDoc.status,
+          file_counts: vectorStoreDoc.fileCount
+        }
+      }, 'Admin: VectorStore erfolgreich erstellt');
+
+    } catch (error) {
+      const processingTimeMs = Date.now() - startTime;
+
+      this.logger.error('Admin VectorStore-Erstellung fehlgeschlagen', error as Error, {
+        adminId: this.getUserId(req),
+        name: req.body?.name,
+        fileUrl: req.body?.fileUrl,
+        targetUserId: req.body?.targetUserId,
+        processingTimeMs,
+        errorDetails: {
+          message: (error as Error).message,
+          stack: (error as Error).stack
+        }
+      });
+
+      // Spezifische Admin-Fehlerbehandlung
+      if ((error as Error).message.includes('file')) {
+        this.sendError(res, 400, 'Admin: Datei-Upload fehlgeschlagen',
+          'Die angegebene Datei konnte nicht zu OpenAI hochgeladen werden. Prüfen Sie die URL und Berechtigung.');
+      } else if ((error as Error).message.includes('vector_store')) {
+        this.sendError(res, 500, 'Admin: VectorStore-Erstellung fehlgeschlagen',
+          'Fehler bei der OpenAI VectorStore-Erstellung. Überprüfen Sie OpenAI-Konfiguration.');
+      } else if ((error as Error).message.includes('permission')) {
+        this.sendError(res, 403, 'Admin: Berechtigung verweigert',
+          'Unzureichende Berechtigung für VectorStore-Erstellung.');
+      } else {
+        this.sendError(res, 500, 'Admin: VectorStore-Erstellung fehlgeschlagen', (error as Error).message);
+      }
+
+      next(error);
+    }
+  }
+
 }

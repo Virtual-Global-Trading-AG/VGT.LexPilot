@@ -1,3 +1,5 @@
+import { index } from '@langchain/core/indexing';
+import { ChatOpenAI } from '@langchain/openai';
 import { Document } from 'langchain/document';
 import { Logger } from '../utils/logger';
 import { StorageService } from './StorageService';
@@ -10,6 +12,7 @@ import { LLMFactory } from '../factories/LLMFactory';
 import { PineconeVectorStore, VectorStoreConfig, SearchResult } from '../vectorstore';
 import { websocketManager } from '../websocket';
 import { v4 as uuidv4 } from 'uuid';
+import { DocumentInterface } from '@langchain/core/documents';
 
 export interface AnalysisRequest {
   documentId: string;
@@ -51,6 +54,11 @@ export interface ProcessingProgress {
   details?: any;
 }
 
+export interface Modules {
+  indexName: string;
+  namespace?: string;
+}
+
 /**
  * Service für die Integration der RAG-Pipeline mit der Dokumentenverwaltung
  * Orchestriert den gesamten Analyse-Workflow von Download bis Ergebnis-Speicherung
@@ -64,11 +72,11 @@ export class AnalysisService {
   private readonly documentSplitter: LegalDocumentSplitter;
   private readonly llmFactory: LLMFactory;
   private readonly vectorStore: PineconeVectorStore;
-  
+
   // Chains für verschiedene Analyse-Typen
   private readonly contractAnalysisChain: ContractAnalysisChain;
   private readonly gdprComplianceChain: GDPRComplianceChain;
-  
+
   // Active analysis tracking
   private readonly activeAnalyses = new Map<string, {
     abortController: AbortController;
@@ -84,190 +92,11 @@ export class AnalysisService {
     this.documentSplitter = new LegalDocumentSplitter();
     this.llmFactory = new LLMFactory();
     this.vectorStore = new PineconeVectorStore(this.embeddingService);
-    
+
     // Initialize analysis chains
     this.contractAnalysisChain = new ContractAnalysisChain();
     this.gdprComplianceChain = new GDPRComplianceChain();
   }
-
-  /**
-   * Startet eine neue Dokument-Analyse
-   */
-  async startAnalysis(request: AnalysisRequest): Promise<string> {
-    const analysisId = uuidv4();
-    const abortController = new AbortController();
-    
-    try {
-      this.logger.info('Starting document analysis', {
-        analysisId,
-        documentId: request.documentId,
-        userId: request.userId,
-        analysisType: request.analysisType
-      });
-
-      // Create analysis record
-      const analysis: AnalysisResult = {
-        analysisId,
-        documentId: request.documentId,
-        userId: request.userId,
-        analysisType: request.analysisType,
-        status: 'pending',
-        progress: 0,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        estimatedCompletion: this.estimateCompletion(request.analysisType)
-      };
-
-      await this.saveAnalysisResult(analysis);
-
-      // Track active analysis
-      this.activeAnalyses.set(analysisId, {
-        abortController,
-        progressCallback: (progress) => this.updateProgress(analysisId, progress),
-        userId: request.userId,
-        requestId: analysisId
-      });
-
-      // Start async processing
-      this.processAnalysisAsync(analysisId, request, abortController.signal)
-        .catch(error => {
-          this.logger.error('Analysis processing failed', error, { analysisId });
-          this.handleAnalysisError(analysisId, error);
-        })
-        .finally(() => {
-          this.activeAnalyses.delete(analysisId);
-        });
-
-      return analysisId;
-
-    } catch (error) {
-      this.logger.error('Failed to start analysis', error as Error, {
-        analysisId,
-        request
-      });
-      this.activeAnalyses.delete(analysisId);
-      throw error;
-    }
-  }
-
-  /**
-   * Asynchrone Verarbeitung der Analyse
-   */
-  private async processAnalysisAsync(
-    analysisId: string,
-    request: AnalysisRequest,
-    abortSignal: AbortSignal
-  ): Promise<void> {
-    const startTime = Date.now();
-    
-    try {
-      await this.updateAnalysisStatus(analysisId, 'processing', 5);
-
-      // 1. Download document from Firebase Storage
-      await this.reportProgress('download', 10, 'Downloading document from storage', analysisId);
-      const documentContent = await this.downloadDocument(request.documentId, request.userId);
-      
-      if (abortSignal.aborted) throw new Error('Analysis cancelled');
-
-      // 2. Split document into hierarchical chunks
-      await this.reportProgress('split', 25, 'Splitting document into chunks', analysisId);
-      const chunks = await this.splitDocument(documentContent, request.documentId);
-      
-      if (abortSignal.aborted) throw new Error('Analysis cancelled');
-
-      // 3. Generate embeddings for chunks
-      await this.reportProgress('embed', 45, 'Generating embeddings', analysisId);
-      const embeddings = await this.generateEmbeddings(chunks, request.options?.language);
-      
-      if (abortSignal.aborted) throw new Error('Analysis cancelled');
-
-      // 4. Perform analysis based on type
-      await this.reportProgress('analyze', 70, 'Performing legal analysis', analysisId);
-      const analysisResults = await this.performAnalysis(
-        request.analysisType,
-        chunks,
-        embeddings,
-        request.options
-      );
-      
-      if (abortSignal.aborted) throw new Error('Analysis cancelled');
-
-      // 5. Save results
-      await this.reportProgress('save', 90, 'Saving analysis results', analysisId);
-      const processingTime = Date.now() - startTime;
-      
-      await this.updateAnalysisResult(analysisId, {
-        status: 'completed',
-        progress: 100,
-        results: analysisResults,
-        processingTimeMs: processingTime,
-        chunks,
-        embeddings,
-        updatedAt: new Date()
-      });
-
-      this.logger.info('Analysis completed successfully', {
-        analysisId,
-        processingTimeMs: processingTime,
-        chunksCount: chunks.length,
-        embeddingsCount: embeddings.length
-      });
-
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      if (errorMessage === 'Analysis cancelled') {
-        await this.updateAnalysisStatus(analysisId, 'cancelled');
-        this.logger.info('Analysis cancelled', { analysisId });
-      } else {
-        throw error;
-      }
-    }
-  }
-
-  /**
-   * Lädt Dokument aus Firebase Storage herunter
-   */
-  private async downloadDocument(documentId: string, userId: string): Promise<string> {
-    try {
-      // Get document metadata
-      const document = await this.firestoreService.getDocument(documentId, userId);
-      if (!document) {
-        throw new Error(`Document not found: ${documentId}`);
-      }
-
-      // Download file content
-      const result = await this.storageService.generateDownloadUrl(
-        documentId,
-        document.fileName,
-        userId
-      );
-
-      // Fetch file content
-      const response = await fetch(result.downloadUrl);
-      if (!response.ok) {
-        throw new Error(`Failed to download document: ${response.statusText}`);
-      }
-
-      // For now, assume text content - in production, add file type detection
-      const content = await response.text();
-      
-      this.logger.debug('Document downloaded successfully', {
-        documentId,
-        contentLength: content.length
-      });
-
-      return content;
-
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error('Failed to download document', error as Error, {
-        documentId,
-        userId
-      });
-      throw new Error(`Document download failed: ${errorMessage}`);
-    }
-  }
-
   /**
    * Teilt Dokument in hierarchische Chunks auf
    */
@@ -283,7 +112,7 @@ export class AnalysisService {
       });
 
       const chunks = await this.documentSplitter.splitDocument(document);
-      
+
       this.logger.debug('Document split completed', {
         documentId,
         chunksCount: chunks.length,
@@ -313,7 +142,7 @@ export class AnalysisService {
       const batchSize = 20;
       for (let i = 0; i < chunks.length; i += batchSize) {
         const batch = chunks.slice(i, i + batchSize);
-        
+
         const batchPromises = batch.map(async (chunk) => {
           const embedding = await this.embeddingService.embedDocument(
             chunk.pageContent,
@@ -464,7 +293,7 @@ export class AnalysisService {
    */
   private inferDocumentType(chunk: HierarchicalChunk): DocumentType {
     const content = chunk.pageContent.toLowerCase();
-    
+
     if (content.includes('vertrag') || content.includes('contract')) {
       return DocumentType.CONTRACT;
     }
@@ -480,7 +309,7 @@ export class AnalysisService {
       'contract_risk': 5 * 60 * 1000, // 5 minutes
       'legal_review': 8 * 60 * 1000 // 8 minutes
     };
-    
+
     const estimateMs = estimates[analysisType] || 5 * 60 * 1000;
     return new Date(Date.now() + estimateMs);
   }
@@ -492,15 +321,15 @@ export class AnalysisService {
 
   private generateRecommendedActions(contractResults: any, gdprResults: any): string[] {
     const actions: string[] = [];
-    
+
     if (contractResults?.conclusion?.criticalIssues?.length > 0) {
       actions.push('Überprüfung kritischer Vertragsklauseln erforderlich');
     }
-    
+
     if (gdprResults?.overallScore < 0.7) {
       actions.push('DSGVO-Compliance-Maßnahmen implementieren');
     }
-    
+
     return actions;
   }
 
@@ -513,17 +342,17 @@ export class AnalysisService {
    * Progress and Status Management mit WebSocket-Integration
    */
   private async reportProgress(
-    stage: ProcessingProgress['stage'], 
-    progress: number, 
+    stage: ProcessingProgress['stage'],
+    progress: number,
     message: string,
     analysisId?: string,
     details?: any
   ): Promise<void> {
     const progressUpdate: ProcessingProgress = { stage, progress, message, details };
-    
+
     // Log für Debugging
     this.logger.debug('Analysis progress', progressUpdate);
-    
+
     // Sende WebSocket Update wenn analysisId verfügbar ist
     if (analysisId) {
       const analysis = this.activeAnalyses.get(analysisId);
@@ -564,7 +393,7 @@ export class AnalysisService {
       status,
       updatedAt: new Date()
     };
-    
+
     if (progress !== undefined) {
       updates.progress = progress;
     }
@@ -628,7 +457,7 @@ export class AnalysisService {
   ): Promise<{ items: AnalysisResult[]; total: number; page: number; limit: number }> {
     // In production, query Firestore
     this.logger.debug('Listing user analyses', { userId, options });
-    
+
     return {
       items: [],
       total: 0,
@@ -642,10 +471,10 @@ export class AnalysisService {
    * Speichert Rechtsgrundlagen im Vector Store für spätere Referenzierung
    */
   async indexLegalTexts(
-    texts: { 
-      content: string; 
-      title: string; 
-      source: string; 
+    texts: {
+      content: string;
+      title: string;
+      source: string;
       jurisdiction: string;
       legalArea: string;
     }[],
@@ -664,7 +493,7 @@ export class AnalysisService {
       for (let i = 0; i < texts.length; i++) {
         const text = texts[i];
         if (!text) continue; // Skip undefined entries
-        
+
         progressCallback?.(Math.round((i / texts.length) * 50), `Processing ${text.title}`);
 
         // Teile jeden Gesetzestext in Chunks auf
@@ -681,7 +510,7 @@ export class AnalysisService {
         });
 
         const chunks = await this.documentSplitter.splitDocument(document);
-        
+
         // Füge spezifische Metadaten für Rechtsgrundlagen hinzu
         const enhancedChunks = chunks.map((chunk, index) => ({
           ...chunk,
@@ -706,13 +535,95 @@ export class AnalysisService {
         progressCallback?.(totalProgress, status);
       });
 
-      this.logger.info('Legal texts indexing completed', { 
+      this.logger.info('Legal texts indexing completed', {
         totalChunks: allChunks.length,
         textsProcessed: texts.length
       });
 
     } catch (error) {
       this.logger.error('Legal texts indexing failed', error as Error);
+      throw new Error(`Legal texts indexing failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+
+  /**
+   * Indexiert Gesetzestexte in einen spezifischen Index/Namespace
+   */
+  async indexLegalTextsToSpecificIndex(
+    texts: {
+      content: string;
+      title: string;
+      source: string;
+      jurisdiction: string;
+      legalArea: string;
+    }[],
+    vectorConfig: VectorStoreConfig,
+    progressCallback?: (progress: number, status: string) => void
+  ): Promise<void> {
+    try {
+      this.logger.info('Starting legal texts indexing to specific index', {
+        textsCount: texts.length,
+        indexName: vectorConfig.indexName,
+        namespace: vectorConfig.namespace
+      });
+
+      let allChunks: HierarchicalChunk[] = [];
+
+      for (let i = 0; i < texts.length; i++) {
+        const text = texts[i];
+        if (!text) continue;
+
+        progressCallback?.(Math.round((i / texts.length) * 50), `Processing ${text.title}`);
+
+        // Teile jeden Gesetzestext in Chunks auf
+        const document = new Document({
+          pageContent: text.content,
+          metadata: {
+            title: text.title,
+            source: text.source,
+            jurisdiction: text.jurisdiction,
+            legalArea: text.legalArea,
+            type: 'legal_regulation',
+            indexed_at: new Date().toISOString()
+          }
+        });
+
+        const chunks = await this.documentSplitter.splitDocument(document);
+
+        // Füge spezifische Metadaten für Rechtsgrundlagen hinzu
+        const enhancedChunks = chunks.map((chunk, index) => ({
+          ...chunk,
+          metadata: {
+            ...chunk.metadata,
+            id: `${text.source}-chunk-${index}`,
+            documentId: text.source,
+            chunkIndex: index,
+            legalReferences: this.extractLegalReferences(chunk.pageContent),
+            isLegalRegulation: true
+          }
+        }));
+
+        allChunks = allChunks.concat(enhancedChunks);
+      }
+
+      progressCallback?.(60, `Storing in vector database (${vectorConfig.indexName})`);
+
+      // Speichere alle Chunks im spezifischen Vector Store
+      await this.vectorStore.addDocuments(allChunks, vectorConfig, (progress, status) => {
+        const totalProgress = 60 + Math.round((progress / 100) * 40);
+        progressCallback?.(totalProgress, `${status} (${vectorConfig.namespace})`);
+      });
+
+      this.logger.info('Legal texts indexing to specific index completed', {
+        totalChunks: allChunks.length,
+        textsProcessed: texts.length,
+        indexName: vectorConfig.indexName,
+        namespace: vectorConfig.namespace
+      });
+
+    } catch (error) {
+      this.logger.error('Legal texts indexing to specific index failed', error as Error);
       throw new Error(`Legal texts indexing failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -724,14 +635,16 @@ export class AnalysisService {
     query: string,
     legalArea?: string,
     jurisdiction?: string,
-    topK: number = 5
+    topK: number = 5,
+    indexName = process.env.PINECONE_LEGAL_INDEX,
+    shoreThreshold: number = 0.75
   ): Promise<SearchResult> {
     try {
       const vectorConfig: VectorStoreConfig = {
-        indexName: process.env.PINECONE_LEGAL_INDEX || 'legal-texts',
+        indexName: indexName ? indexName : process.env.PINECONE_LEGAL_INDEX || 'legal-texts',
         namespace: 'legal-regulations',
         topK,
-        scoreThreshold: 0.75
+        scoreThreshold: shoreThreshold
       };
 
       // Baue Filter für spezifische Suche
@@ -755,8 +668,8 @@ export class AnalysisService {
       this.logger.debug('Legal context search completed', {
         query: query.substring(0, 100),
         resultsCount: results.documents.length,
-        averageScore: results.scores.length > 0 
-          ? results.scores.reduce((a, b) => a + b, 0) / results.scores.length 
+        averageScore: results.scores.length > 0
+          ? results.scores.reduce((a, b) => a + b, 0) / results.scores.length
           : 0
       });
 
@@ -803,7 +716,7 @@ export class AnalysisService {
       const legalTopics = this.extractLegalTopicsFromAnalysis(contractAnalysis);
 
       // 3. Suche relevante Rechtsgrundlagen
-      const searchQueries = legalTopics.map(topic => 
+      const searchQueries = legalTopics.map(topic =>
         `${topic} ${options?.legalArea || ''} ${options?.jurisdiction || 'Schweiz'}`
       );
 
@@ -969,7 +882,7 @@ export class AnalysisService {
 
   private extractLegalTopicsFromAnalysis(analysis: any): string[] {
     const topics: string[] = [];
-    
+
     if (analysis.issues) {
       topics.push(...analysis.issues.map((issue: any) => issue.legalArea || issue.issue));
     }
@@ -985,7 +898,7 @@ export class AnalysisService {
         'Arbeitsrecht', 'Vertragsrecht', 'Datenschutz', 'Handelsrecht',
         'Gesellschaftsrecht', 'Immaterialgüterrecht', 'Steuerrecht'
       ];
-      
+
       legalTerms.forEach(term => {
         if (text.includes(term)) {
           topics.push(term);
@@ -1091,6 +1004,48 @@ export class AnalysisService {
   }
 
   /**
+   * Führt parallele Similarity Searches für mehrere Queries durch
+   * und gibt eindeutige Ergebnisse zurück
+   */
+  public async similaritySearch(
+    text: string,
+    k: number = 5
+  ): Promise<DocumentInterface[]> {
+
+    const vectorConfig: VectorStoreConfig = {
+      indexName: process.env.PINECONE_LEGAL_INDEX || 'legal-texts',
+      namespace: 'legal-regulations',
+      createIfNotExists: false
+    };
+
+    const vectorstore = await this.getVectorStore(vectorConfig);
+
+    const results = await vectorstore.store!.similaritySearch(text, k);
+
+    const uniqueResults = new Map<string, DocumentInterface>();
+    results.flat().forEach((item: DocumentInterface) => {
+      if (item.id && !uniqueResults.has(item.id)) {
+        uniqueResults.set(item.id, item);
+      }
+    });
+
+    return Array.from(uniqueResults.values());
+  }
+
+
+  /**
+   * Holt den Vector Store für die angegebene Jurisdiktion
+   */
+  private async getVectorStore(vectorConfig: VectorStoreConfig) {
+    if (!this.vectorStore) {
+      throw new Error('Vector store not initialized');
+    }
+
+    await this.vectorStore.initializeStore(vectorConfig);
+    return this.vectorStore;
+  }
+
+  /**
    * Health Check
    */
   async healthCheck(): Promise<{ status: string; services: any }> {
@@ -1099,7 +1054,7 @@ export class AnalysisService {
       firestoreService: await this.checkServiceHealth(() => Promise.resolve({ status: 'healthy' })),
       embeddingService: await this.checkServiceHealth(() => Promise.resolve({ status: 'healthy' })),
       llmFactory: await this.checkServiceHealth(() => Promise.resolve({ status: 'healthy' })),
-      vectorStore: await this.checkServiceHealth(() => 
+      vectorStore: await this.checkServiceHealth(() =>
         this.vectorStore.healthCheck(process.env.PINECONE_LEGAL_INDEX || 'legal-texts')
       )
     };

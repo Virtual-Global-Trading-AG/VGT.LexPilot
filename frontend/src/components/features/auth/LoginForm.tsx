@@ -84,7 +84,7 @@ export function LoginForm() {
             Willkommen zurück
           </CardTitle>
           <CardDescription className="text-gray-600 dark:text-gray-400">
-            Melden Sie sich in Ihrem LexPilot-Account an
+            Melden Sie sich in Ihrem LexForm-Account an
           </CardDescription>
         </CardHeader>
 

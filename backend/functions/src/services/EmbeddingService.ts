@@ -47,9 +47,9 @@ export class EmbeddingService {
     this.models.set('openai', new OpenAIEmbeddings({
       openAIApiKey: env.OPENAI_API_KEY,
       modelName: env.OPENAI_EMBEDDINGS_MODEL || 'text-embedding-3-small',
-      dimensions: 1536, // Standard dimension for text-embedding-3-small
-      maxRetries: 3,
-      timeout: 30000
+      dimensions: 1024, // Standard dimension for text-embedding-3-small
+      //maxRetries: 3,
+      //timeout: 30000
     }));
 
     // Kleineres, günstigeres Model für einfache Texte

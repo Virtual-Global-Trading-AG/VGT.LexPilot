@@ -1,9 +1,8 @@
 import { Router } from 'express';
+import * as Joi from 'joi';
 import { AdminController } from '../controllers/AdminController';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { ValidationMiddleware } from '../middleware/validationMiddleware';
-import { rateLimitMiddleware } from '../middleware/rateLimitMiddleware';
-import * as Joi from 'joi';
 
 const router = Router();
 const adminController = new AdminController();
@@ -12,7 +11,7 @@ const adminController = new AdminController();
 router.use(authMiddleware);
 
 // Apply stricter rate limiting for admin operations
-router.use(rateLimitMiddleware);
+// router.use(rateLimitMiddleware);
 
 // Validation schemas
 const indexLegalTextsSchema = Joi.object({
@@ -113,5 +112,14 @@ router.post('/legal-texts/search',
 router.get('/vector-store/stats',
   adminController.getVectorStoreStats.bind(adminController)
 );
+
+/**
+ * Create and Index vectorstore (OR)
+ * POST /api/admin/vector-store/create
+ */
+router.post('/vectorstore/create',
+  adminController.createVectorStore.bind(adminController)
+);
+
 
 export default router;

@@ -7,6 +7,14 @@ export interface BaseEntity {
   updatedBy?: string;
 }
 
+export interface UserDocument {
+  documentId: string;
+  downloadUrl: string;
+  documentMetadata: DocumentMetadata;
+  addedAt: string; // ISO timestamp when document was added to user
+}
+
+
 // User Types
 export interface User extends BaseEntity {
   uid: string;
@@ -18,6 +26,7 @@ export interface User extends BaseEntity {
   lastLogin?: Date;
   settings: UserSettings;
   statistics: UserStatistics;
+  documents: UserDocument[]; // New array of document objects with metadata
 }
 
 export enum UserRole {
@@ -148,14 +157,24 @@ export interface LegalReference {
   jurisdiction: string;
 }
 
+export interface AnonymizedKeyword {
+  keyword: string;
+  replaceWith: string;
+}
+
 export interface DocumentMetadata {
-  tags: string[];
-  category: string;
-  jurisdiction: string;
-  relevantLaws: string[];
-  contractParties?: ContractParty[];
-  keyDates?: KeyDate[];
-  riskLevel: RiskLevel;
+  fileName: string;
+  downloadUrl: string;
+  contentType: string;
+  size: number;
+  uploadedAt: string;
+  processedAt?: string;
+  status: 'uploading' | 'uploaded' | 'processing' | 'processed' | 'error';
+  category?: 'contract' | 'nda' | 'terms_conditions' | 'other';
+  anonymizedKeywords?: AnonymizedKeyword[];
+  description?: string;
+  tags?: string[];
+  analyses?: string[];
 }
 
 export interface ContractParty {
