@@ -114,14 +114,6 @@ router.get('/vector-store/stats',
 );
 
 /**
- * Index Specific Law Text (Admin Only)
- * POST /api/admin/law-texts/index
- */
-router.post('/law-texts/index',
-  adminController.indexLawTexts.bind(adminController)
-);
-
-/**
  * Create and Index vectorstore (OR)
  * POST /api/admin/vector-store/create
  */

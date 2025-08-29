@@ -390,7 +390,6 @@ function ContractsPageContent() {
 
   // Fetch documents on component mount
   useEffect(() => {
-    console.log(userProfile);
     if (userProfile?.role === 'lawyer') {
       // For lawyers, load shared analyses instead of documents
       loadSharedAnalyses();

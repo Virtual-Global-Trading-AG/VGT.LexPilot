@@ -142,8 +142,6 @@ export default function DSGVOCheckPage() {
         maxSources: 10
       });
 
-      console.log('Complete DSGVO check result:', result);
-
       if (result) {
         // Use the structured data directly from the backend response
         const parsedResult = { ...result } as AnalysisResult;
