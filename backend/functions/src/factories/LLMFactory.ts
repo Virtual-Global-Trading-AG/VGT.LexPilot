@@ -66,32 +66,6 @@ export class LLMFactory {
 
     return llm;
   }
-  /**
-   * Erstellt ein LLM für textuelle Analysen
-   * Optimiert für Geschwindigkeit und Effizienz
-   */
-  createSentenceLlm(): ChatGoogleGenerativeAI {
-    const cacheKey = 'analysis';
-
-    const config: LLMConfig = {
-      temperature: 0.1, // Niedrige Temperatur für konsistente, präzise Antworten
-      //maxTokens: 4000,
-      modelName: env.GOOGLE_CHAT_MODEL_FAST,
-      responseFormat: 'json_object', // Strukturierte Ausgaben für Analysen
-      timeout: 60000, // 60 Sekunden für komplexe Analysen
-      maxRetries: 3,
-    };
-
-    const llm = this.createLLMGoogleAI(config);
-    
-    this.logger.info('Created Analysis LLM', {
-      model: config.modelName,
-      temperature: config.temperature,
-      maxTokens: config.maxTokens
-    });
-
-    return llm;
-  }
 
   /**
    * Erstellt ein LLM für Textgenerierung (Verträge, Dokumente)
@@ -293,40 +267,6 @@ export class LLMFactory {
         }
       ],
       service_tier: 'priority'
-    });
-  }
-
-  private createLLMGoogleAI(config: LLMConfig): ChatGoogleGenerativeAI {
-    return new ChatGoogleGenerativeAI({
-      apiKey: env.GOOGLE_API_KEY,
-      model: config.modelName,
-      temperature: config.temperature,
-      maxOutputTokens: config.maxTokens,
-      json: true,
-      streaming: config.streaming || false,
-      maxRetries: config.maxRetries || 2,
-      callbacks: [
-        {
-          handleLLMStart: async (llm, prompts) => {
-            this.logger.info('LLM Request started', {
-              model: config.modelName,
-              promptCount: prompts.length,
-              temperature: config.temperature
-            });
-          },
-          handleLLMEnd: async (output) => {
-            this.logger.info('LLM Request completed', {
-              model: config.modelName,
-              outputLength: output.generations[0]?.[0]?.text?.length || 0
-            });
-          },
-          handleLLMError: async (error) => {
-            this.logger.error('LLM Request failed', error, {
-              model: config.modelName
-            });
-          }
-        }
-      ]
     });
   }
 

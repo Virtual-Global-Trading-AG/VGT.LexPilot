@@ -1,3 +1,4 @@
+import { env } from '@config/environment';
 import HTMLtoDOCX from '@turbodocx/html-to-docx';
 import OpenAI from 'openai';
 import * as puppeteer from 'puppeteer';
@@ -267,7 +268,7 @@ export class ContractGenerationService {
       const prompt = this.createContractPrompt(request.parameters);
 
       const response = await this.openai.responses.create({
-        model: 'gpt-5-mini-2025-08-07',
+        model: env.OPENAI_CHAT_MODEL,
         service_tier: 'priority',
         input: prompt,
         tools: [

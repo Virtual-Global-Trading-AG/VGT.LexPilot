@@ -1,13 +1,11 @@
-import { ChatOpenAI } from '@langchain/openai';
+import { env } from '@config/environment';
 import OpenAI from 'openai';
 import { v4 as uuidv4 } from 'uuid';
-import { LLMFactory } from '../factories/LLMFactory';
 import { AnonymizedKeyword, Finding, Recommendation } from '../models';
 import { Logger } from '../utils/logger';
 import { AnalysisService } from './AnalysisService';
 import { FirestoreService } from './FirestoreService';
 import { TextExtractionService } from './TextExtractionService';
-import { VectorStoreService } from './VectorStoreService';
 
 export interface ContractSection {
   id: string;
@@ -86,20 +84,13 @@ export interface SwissObligationAnalysisResult {
 
 export class SwissObligationLawService {
   private logger = Logger.getInstance();
-  private analysisService: AnalysisService;
   private firestoreService: FirestoreService;
-  private vectorStoreService: VectorStoreService;
-  private llm: ChatOpenAI;
 
   constructor(
     analysisService: AnalysisService,
     firestoreService: FirestoreService
   ) {
-    this.analysisService = analysisService;
     this.firestoreService = firestoreService;
-    this.vectorStoreService = new VectorStoreService();
-    const llmFactory = new LLMFactory();
-    this.llm = llmFactory.createAnalysisLLM();
   }
 
   /**
@@ -133,7 +124,7 @@ export class SwissObligationLawService {
 
     // Initialize OpenAI client and uploadedFile variable in broader scope
     const openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY
+      apiKey: env.OPENAI_API_KEY
     });
     let uploadedFile: any = null;
 
@@ -155,16 +146,19 @@ export class SwissObligationLawService {
       });
 
       const response = await openai.responses.create({
-        model: "gpt-5-mini-2025-08-07",
+        model: env.OPENAI_CHAT_MODEL,
         service_tier: 'priority',
         input: [
+          {
+            role: 'system',
+            content: 'Du bist ein hochspezialisierter KI-gestützter Vertragsanalyst mit Fokus auf Schweizer Obligationenrecht (OR).'
+          },
           {
             role: "user",
             content: [
               {
                 type: "input_text",
-                text: `Du bist Experte für Schweizer Obligationenrecht.  
-Analysiere den Vertrag nach OR (Art. 1–551), wobei du zuerst den Vertragstext und dann deine Vektordatenbank (OR) berücksichtigst.  
+                text: `Analysiere den Vertrag nach OR (Art. 1–551), wobei du zuerst den Vertragstext und dann deine Vektordatenbank (OR) berücksichtigst.  
 Konvertierungsfehler (z. B. falsche Zeichen, Umbrüche) korrigierst du stillschweigend nur zur Lesbarkeit, sie dürfen nicht in die Analyse einfliessen.  
 Ignoriere Platzhalter (ANONYM_x).
 
