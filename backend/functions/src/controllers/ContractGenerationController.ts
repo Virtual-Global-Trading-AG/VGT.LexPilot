@@ -1,10 +1,9 @@
 import { FirestoreService } from '@services/FirestoreService';
 import { StorageService } from '@services/StorageService';
-import { Request, Response, NextFunction } from 'express';
-import { Logger } from '../utils/logger';
-import { BaseController } from './BaseController';
-import { ContractGenerationService, ContractGenerationRequest } from '../services/ContractGenerationService';
+import { NextFunction, Request, Response } from 'express';
+import { ContractGenerationRequest, ContractGenerationService } from '../services/ContractGenerationService';
 import { JobQueueService } from '../services/JobQueueService';
+import { BaseController } from './BaseController';
 
 export class ContractGenerationController extends BaseController {
   private contractGenerationService: ContractGenerationService;

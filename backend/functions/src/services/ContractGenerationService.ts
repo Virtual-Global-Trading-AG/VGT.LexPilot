@@ -270,7 +270,38 @@ export class ContractGenerationService {
       const response = await this.openai.responses.create({
         model: env.OPENAI_CHAT_MODEL,
         service_tier: 'priority',
-        input: prompt,
+        input: [
+          {
+            role: 'system',
+            content: `Du bist ein spezialisierter Schweizer Arbeitsrechtanwalt mit Expertise in OR Art. 319-362. 
+Erstelle AUSSCHLIESSLICH rechtsgültige Arbeitsverträge nach schweizerischem Recht.
+
+RECHTLICHE VALIDIERUNG:
+- Prüfe JEDEN Abschnitt auf OR-Konformität (Art. 319-362)
+- Stelle sicher: Mindestlohn, Arbeitszeit, Kündigungsfristen korrekt
+- Berücksichtige zwingende Bestimmungen (OR Art. 361/362)
+- Validiere Probezeit max. 3 Monate (OR Art. 335b)
+- Prüfe Ferienanspruch min. 4 Wochen (OR Art. 329a)
+
+PFLICHTKLAUSELN SICHERSTELLEN:
+- Vertragsparteien mit vollständigen Adressen
+- Arbeitsort und -beginn eindeutig definiert
+- Lohn und Arbeitspensum rechtlich korrekt
+- Kündigungsfristen nach OR Art. 335 ff.
+- Arbeitszeiten nach ArG
+
+AUSGABE:
+- Erstelle einen sauberen, professionellen Arbeitsvertrag
+- KEINE Empfehlungen, Hinweise oder Kommentare im Dokument
+- KEINE rechtlichen Bewertungen sichtbar
+- NUR den fertigen Vertrag ausgeben
+- Verwende ausschließlich rechtsgültige OR-konforme Klauseln`
+          },
+          {
+            role: 'user',
+            content: prompt
+          }
+        ],
         tools: [
           {
             type: 'file_search',
@@ -353,14 +384,16 @@ export class ContractGenerationService {
       }
     }
 
-    let prompt = `Erstelle einen Arbeitsvertrag nach der angehängten Vertragsvorlage.  
-Berücksichtige die relevanten Artikel der angehängten Schweizer OR (insbesondere Art. 319 ff. OR).
+    let prompt = `Erstelle einen rechtsgültigen Schweizer Arbeitsvertrag nach OR Art. 319-362 mit der angehängten Vertragsvorlage.
 
-Gib das Ergebnis als vollständiges HTML-Dokument zurück:
+WICHTIG: Gib NUR den fertigen Arbeitsvertrag aus - keine Empfehlungen, Hinweise oder Kommentare!
+
+- Gib das Ergebnis als vollständiges HTML-Dokument zurück.
 - Verwende <!DOCTYPE html>, <html>, <head>, <meta charset="UTF-8">, <style>, <body>.
 - Nutze ein modernes, aber seriöses, SCHLICHTES Layout (keine farbigen Hintergründe, keine Boxen, keine Schatten).
 - Kein Markdown, nur valides HTML.
-- Verwende ausschließlich die Abschnitte der Vorlage, KEINE zusätzlichen Abschnitte.
+- Erwähne nie die Vertragsvorlagen oder die Artikel des OR im Vertragstext.
+- Verwende ausschließlich Abschnitte aus der angeängten Vorlage, die du mit den vorliegenden Vertragsdaten befüllen kannst.
 - Abschnitte nummerieren
 - Struktur: Jeder Abschnitt ist ein <section class="section"> mit <h2> und den zugehörigen Inhalten (Absätze, Listen, dl/dt/dd).
 - Abschnitte sollen NICHT über Seiten hinweg getrennt werden. Wenn ein Abschnitt länger als eine Seite ist, soll zumindest die Überschrift mit dem ersten Absatz zusammenbleiben.
@@ -449,7 +482,9 @@ Vertragsdaten:
 - Monatslohn Brutto: ${Math.round(parameters['salary'] / 12)} CHF
 - Arbeitspensum: ${parameters['workingHours'] || 100}%
 - Ferien: ${parameters['vacationDays'] || 25} Tage
-- Probezeit: ${parameters['probationPeriod'] || 3} Monate`;
+- Probezeit: ${parameters['probationPeriod'] || 3} Monate
+    
+Erstelle einen sauberen, professionellen Arbeitsvertrag ohne zusätzliche Kommentare oder Empfehlungen.`;
 
     return prompt;
   }

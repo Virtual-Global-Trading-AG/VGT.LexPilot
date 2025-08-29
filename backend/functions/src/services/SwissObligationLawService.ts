@@ -149,7 +149,7 @@ export class SwissObligationLawService {
         input: [
           {
             role: 'system',
-            content: 'Du bist ein hochspezialisierter KI-gestützter Vertragsanalyst mit Fokus auf Schweizer Obligationenrecht (OR).'
+            content: 'Du bist ein schweizer Rechtsassistent, spezialisiert auf das Obligationenrecht (OR). Deine Aufgabe ist es, Verträge zu analysieren und deren Übereinstimmung mit dem OR zu bewerten.'
           },
           {
             role: "user",
