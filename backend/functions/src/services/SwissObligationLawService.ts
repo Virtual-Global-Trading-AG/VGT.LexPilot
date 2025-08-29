@@ -3,7 +3,6 @@ import OpenAI from 'openai';
 import { v4 as uuidv4 } from 'uuid';
 import { AnonymizedKeyword, Finding, Recommendation } from '../models';
 import { Logger } from '../utils/logger';
-import { AnalysisService } from './AnalysisService';
 import { FirestoreService } from './FirestoreService';
 import { TextExtractionService } from './TextExtractionService';
 
@@ -87,7 +86,6 @@ export class SwissObligationLawService {
   private firestoreService: FirestoreService;
 
   constructor(
-    analysisService: AnalysisService,
     firestoreService: FirestoreService
   ) {
     this.firestoreService = firestoreService;

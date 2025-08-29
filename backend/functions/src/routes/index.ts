@@ -1,22 +1,12 @@
-import { Router, Request, Response, NextFunction } from 'express';
-import * as Joi from 'joi';
-import { AuthMiddleware, authenticate, requireAdmin, requirePremium } from '../middleware/authMiddleware';
-import { RateLimitMiddleware, rateLimitMiddleware } from '../middleware/rateLimitMiddleware';
-import { ValidationMiddleware, validationMiddleware } from '../middleware/validationMiddleware';
+import { Router } from 'express';
 
 // Import Controllers
-import {
-  UserController,
-  DocumentController,
-  AnalysisController,
-  AdminController
-} from '../controllers';
+import adminRoutes from './adminRoutes';
+import createAuthRoutes from './authRoutes';
+import contractRoutes from './contractRoutes';
 
 // Import Route Modules
 import documentRoutes from './documentRoutes';
-import createAuthRoutes from './authRoutes';
-import adminRoutes from './adminRoutes';
-import contractRoutes from './contractRoutes';
 
 /**
  * Zentrale API-Router-Konfiguration

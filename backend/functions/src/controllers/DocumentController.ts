@@ -3,7 +3,7 @@ import { ChatOpenAI } from '@langchain/openai';
 import { UserDocument } from '@models/index';
 import { NextFunction, Request, Response } from 'express';
 import { UserRepository } from '../repositories/UserRepository';
-import { AnalysisService, DataProtectionCheckRequest, DataProtectionService, DocumentFilters, FirestoreService, JobQueueService, PaginationOptions, SortOptions, StorageService, SwissObligationLawService, TextExtractionService } from '../services';
+import { DataProtectionCheckRequest, DataProtectionService, DocumentFilters, FirestoreService, JobQueueService, PaginationOptions, SortOptions, StorageService, SwissObligationLawService, TextExtractionService } from '../services';
 import { BaseController } from './BaseController';
 
 interface DocumentUploadRequest {
@@ -20,7 +20,6 @@ interface DocumentUploadRequest {
 export class DocumentController extends BaseController {
   private readonly storageService: StorageService;
   private readonly firestoreService: FirestoreService;
-  private readonly analysisService: AnalysisService;
   private readonly userRepository: UserRepository;
   private readonly textExtractionService: TextExtractionService;
   private readonly swissObligationLawService: SwissObligationLawService;
@@ -31,11 +30,9 @@ export class DocumentController extends BaseController {
     super();
     this.storageService = new StorageService();
     this.firestoreService = new FirestoreService();
-    this.analysisService = new AnalysisService();
     this.userRepository = new UserRepository();
     this.textExtractionService = new TextExtractionService();
     this.swissObligationLawService = new SwissObligationLawService(
-      this.analysisService,
       this.firestoreService
     );
     this.dataProtectionService = new DataProtectionService();
@@ -881,103 +878,6 @@ export class DocumentController extends BaseController {
       this.logger.error('Search documents failed', error as Error, {
         userId: this.getUserId(req),
         query: req.query
-      });
-      next(error);
-    }
-  }
-
-  /**
-   * Get document analysis results
-   * GET /api/documents/:documentId/analysis/:analysisId
-   */
-  public async getAnalysisResults(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const userId = this.getUserId(req);
-      const { documentId, analysisId } = req.params;
-
-      // Validate request
-      if (!documentId || !analysisId) {
-        this.sendError(res, 400, 'Document ID and Analysis ID are required');
-        return;
-      }
-
-      // Get analysis results
-      const analysis = await this.analysisService.getAnalysisResult(analysisId, userId);
-      if (!analysis) {
-        this.sendError(res, 404, 'Analysis not found');
-        return;
-      }
-
-      // Check if analysis belongs to the document
-      if (analysis.documentId !== documentId) {
-        this.sendError(res, 400, 'Analysis does not belong to this document');
-        return;
-      }
-
-      this.sendSuccess(res, {
-        analysisId: analysis.analysisId,
-        documentId: analysis.documentId,
-        analysisType: analysis.analysisType,
-        status: analysis.status,
-        progress: analysis.progress,
-        results: analysis.results,
-        createdAt: analysis.createdAt,
-        updatedAt: analysis.updatedAt,
-        processingTimeMs: analysis.processingTimeMs
-      });
-
-    } catch (error) {
-      this.logger.error('Get analysis results failed', error as Error, {
-        userId: this.getUserId(req),
-        documentId: req.params.documentId,
-        analysisId: req.params.analysisId
-      });
-      next(error);
-    }
-  }
-
-  /**
-   * Cancel document analysis
-   * DELETE /api/documents/:documentId/analysis/:analysisId
-   */
-  public async cancelAnalysis(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const userId = this.getUserId(req);
-      const { documentId, analysisId } = req.params;
-
-      // Validate request
-      if (!documentId || !analysisId) {
-        this.sendError(res, 400, 'Document ID and Analysis ID are required');
-        return;
-      }
-
-      // Get analysis to verify ownership
-      const analysis = await this.analysisService.getAnalysisResult(analysisId, userId);
-      if (!analysis) {
-        this.sendError(res, 404, 'Analysis not found');
-        return;
-      }
-
-      if (analysis.documentId !== documentId) {
-        this.sendError(res, 400, 'Analysis does not belong to this document');
-        return;
-      }
-
-      // Cancel analysis
-      await this.analysisService.cancelAnalysis(analysisId, userId);
-
-      this.sendSuccess(res, {
-        analysisId,
-        documentId,
-        status: 'cancelled',
-        message: 'Analysis cancelled successfully'
-      });
-
-    } catch (error) {
-      this.logger.error('Cancel analysis failed', error as Error, {
-        userId: this.getUserId(req),
-        documentId: req.params.documentId,
-        analysisId: req.params.analysisId
       });
       next(error);
     }

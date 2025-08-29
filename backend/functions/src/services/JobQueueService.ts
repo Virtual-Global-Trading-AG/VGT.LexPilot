@@ -1,8 +1,6 @@
-import { user } from 'firebase-functions/v1/auth';
+import { v4 as uuidv4 } from 'uuid';
 import { Logger } from '../utils/logger';
 import { FirestoreService } from './FirestoreService';
-import { v4 as uuidv4 } from 'uuid';
-import * as admin from 'firebase-admin';
 
 export interface Job {
   id: string;
@@ -48,7 +46,7 @@ export class JobQueueService {
       progress: data.progress,
       progressMessage: data.progressMessage,
       createdAt: data.createdAt && typeof data.createdAt.toDate === 'function'
-        ? data.createdAt.toDate() 
+        ? data.createdAt.toDate()
         : data.createdAt,
       startedAt: data.startedAt && typeof data.startedAt.toDate === 'function'
         ? data.startedAt.toDate() 
@@ -255,15 +253,12 @@ export class JobQueueService {
    */
   private async processSwissObligationAnalysis(job: Job): Promise<void> {
     const { SwissObligationLawService } = await import('./SwissObligationLawService');
-    const { AnalysisService } = await import('./AnalysisService');
     const { StorageService } = await import('./StorageService');
     const { TextExtractionService } = await import('./TextExtractionService');
 
-    const analysisService = new AnalysisService();
     const storageService = new StorageService();
     const textExtractionService = new TextExtractionService();
     const swissObligationLawService = new SwissObligationLawService(
-      analysisService,
       this.firestoreService
     );
 
