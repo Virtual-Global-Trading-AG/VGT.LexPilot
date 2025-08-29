@@ -184,21 +184,7 @@ router.get('/:documentId/text',
   documentController.getDocumentAsText.bind(documentController)
 );
 
-router.get('/:documentId/analysis/:analysisId',
-  documentController.getAnalysisResults.bind(documentController)
-);
-
-router.delete('/:documentId/analysis/:analysisId',
-  documentController.cancelAnalysis.bind(documentController)
-);
-
-// DSGVO Compliance Check (Text Input)
-router.post('/dsgvo-check',
-  ValidationMiddleware.validate({ body: dsgvoCheckSchema }),
-  documentController.checkDSGVOCompliance.bind(documentController)
-);
-
-// Vollständiger DSGVO Check mit ChatGPT/LangChain Integration
+// Vollständiger DSGVO Check mit ChatGPT
 router.post('/dsgvo-check-complete',
   ValidationMiddleware.validate({ body: completeDsgvoCheckSchema }),
   documentController.completeDSGVOCheck.bind(documentController)

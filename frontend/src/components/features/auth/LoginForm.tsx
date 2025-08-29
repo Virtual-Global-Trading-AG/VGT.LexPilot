@@ -217,22 +217,24 @@ export function LoginForm() {
             </motion.div>
           </form>
 
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.7 }}
-            className="text-center"
-          >
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              Noch kein Account?{" "}
-              <Link
-                href="/register"
-                className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 font-medium transition-colors"
-              >
-                Registrieren
-              </Link>
-            </p>
-          </motion.div>
+          {false && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.7 }}
+              className="text-center"
+            >
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Noch kein Account?{" "}
+                <Link
+                  href="/register"
+                  className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 font-medium transition-colors"
+                >
+                  Registrieren
+                </Link>
+              </p>
+            </motion.div>
+          )}
         </CardContent>
       </Card>
     </motion.div>

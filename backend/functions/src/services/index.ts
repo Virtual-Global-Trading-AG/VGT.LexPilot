@@ -1,10 +1,9 @@
 // Service Exports
 export { StorageService } from './StorageService';
 export { FirestoreService } from './FirestoreService';
-export { EmbeddingService } from './EmbeddingService';
-export { AnalysisService } from './AnalysisService';
 export { TextExtractionService } from './TextExtractionService';
 export { SwissObligationLawService } from './SwissObligationLawService';
+export { DataProtectionService } from './DataProtectionService';
 export { JobQueueService } from './JobQueueService';
 export { FirebaseInitializer, ensureFirebaseInitialized } from './FirebaseInitializer';
 
@@ -26,6 +25,13 @@ export type {
   SectionAnalysisResult,
   SwissObligationAnalysisResult
 } from './SwissObligationLawService';
+
+export type {
+  DataProtectionCheckRequest,
+  DataProtectionReference,
+  DataProtectionAnalysis,
+  DataProtectionCheckResult
+} from './DataProtectionService';
 
 export type {
   Job,

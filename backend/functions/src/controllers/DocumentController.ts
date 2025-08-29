@@ -3,7 +3,7 @@ import { ChatOpenAI } from '@langchain/openai';
 import { UserDocument } from '@models/index';
 import { NextFunction, Request, Response } from 'express';
 import { UserRepository } from '../repositories/UserRepository';
-import { AnalysisService, DocumentFilters, FirestoreService, JobQueueService, PaginationOptions, SortOptions, StorageService, SwissObligationLawService, TextExtractionService } from '../services';
+import { DataProtectionCheckRequest, DataProtectionService, DocumentFilters, FirestoreService, JobQueueService, PaginationOptions, SortOptions, StorageService, SwissObligationLawService, TextExtractionService } from '../services';
 import { BaseController } from './BaseController';
 
 interface DocumentUploadRequest {
@@ -20,23 +20,22 @@ interface DocumentUploadRequest {
 export class DocumentController extends BaseController {
   private readonly storageService: StorageService;
   private readonly firestoreService: FirestoreService;
-  private readonly analysisService: AnalysisService;
   private readonly userRepository: UserRepository;
   private readonly textExtractionService: TextExtractionService;
   private readonly swissObligationLawService: SwissObligationLawService;
+  private readonly dataProtectionService: DataProtectionService;
   private readonly jobQueueService: JobQueueService;
 
   constructor() {
     super();
     this.storageService = new StorageService();
     this.firestoreService = new FirestoreService();
-    this.analysisService = new AnalysisService();
     this.userRepository = new UserRepository();
     this.textExtractionService = new TextExtractionService();
     this.swissObligationLawService = new SwissObligationLawService(
-      this.analysisService,
       this.firestoreService
     );
+    this.dataProtectionService = new DataProtectionService();
     this.jobQueueService = new JobQueueService(this.firestoreService);
   }
 
@@ -72,7 +71,7 @@ export class DocumentController extends BaseController {
       // Check user storage quota
       const quotaInfo = await this.storageService.checkStorageQuota(userId, size);
       if (quotaInfo.available < 0) {
-        this.sendError(res, 413, 'Storage quota exceeded', 
+        this.sendError(res, 413, 'Storage quota exceeded',
           `Upload would exceed storage limit. Used: ${(quotaInfo.used / 1024 / 1024).toFixed(2)}MB, Limit: ${(quotaInfo.limit / 1024 / 1024).toFixed(2)}MB`);
         return;
       }
@@ -219,7 +218,7 @@ export class DocumentController extends BaseController {
       // Check if there are active analyses
       const activeAnalyses = await this.firestoreService.getActiveAnalyses(documentId);
       if (activeAnalyses.length > 0) {
-        this.sendError(res, 409, 'Cannot delete document with active analyses', 
+        this.sendError(res, 409, 'Cannot delete document with active analyses',
           'Please stop or complete all analyses before deleting the document');
         return;
       }
@@ -306,12 +305,12 @@ export class DocumentController extends BaseController {
         analyses
       })
       // Calculate active contracts (documents with status 'processed' or 'uploaded')
-      const activeContracts = documents.filter(doc => 
+      const activeContracts = documents.filter(doc =>
         doc.documentMetadata.status === 'processed' || doc.documentMetadata.status === 'uploaded'
       ).length;
 
       // Calculate high risks (analyses with low compliance score)
-      const highRisks = analyses.filter(analysis => 
+      const highRisks = analyses.filter(analysis =>
         analysis.overallCompliance && !analysis.overallCompliance.isCompliant
       ).length;
 
@@ -401,55 +400,55 @@ export class DocumentController extends BaseController {
 
       // Add recent document uploads (keep as requested)
       recentDocuments
-        .sort((a, b) => new Date(b.documentMetadata.uploadedAt).getTime() - new Date(a.documentMetadata.uploadedAt).getTime())
-        .slice(0, 3)
-        .forEach(document => {
-          activities.push({
-            id: `upload-${document.documentId}`,
-            type: 'uploaded',
-            title: 'Neuer Vertrag hochgeladen',
-            subtitle: document.documentMetadata.fileName || 'Unbekanntes Dokument',
-            time: this.getRelativeTime(new Date(document.documentMetadata.uploadedAt)),
-            icon: 'Upload',
-            iconColor: 'text-blue-500'
-          });
+      .sort((a, b) => new Date(b.documentMetadata.uploadedAt).getTime() - new Date(a.documentMetadata.uploadedAt).getTime())
+      .slice(0, 3)
+      .forEach(document => {
+        activities.push({
+          id: `upload-${document.documentId}`,
+          type: 'uploaded',
+          title: 'Neuer Vertrag hochgeladen',
+          subtitle: document.documentMetadata.fileName || 'Unbekanntes Dokument',
+          time: this.getRelativeTime(new Date(document.documentMetadata.uploadedAt)),
+          icon: 'Upload',
+          iconColor: 'text-blue-500'
         });
+      });
 
       // Add contract generation activities
       try {
         const contractJobs = await this.jobQueueService.getUserJobs(userId, 5, 0);
         if (contractJobs && contractJobs.jobs) {
           contractJobs.jobs
-            .filter(job => job.type === 'contract_generation')
-            .forEach(job => {
-              let status = 'In Bearbeitung';
-              let statusVariant = 'secondary';
-              let iconColor = 'text-blue-500';
-              let icon = 'FileText';
+          .filter(job => job.type === 'contract_generation')
+          .forEach(job => {
+            let status = 'In Bearbeitung';
+            let statusVariant = 'secondary';
+            let iconColor = 'text-blue-500';
+            let icon = 'FileText';
 
-              if (job.status === 'completed') {
-                status = 'Vertrag generiert';
-                statusVariant = 'default';
-                iconColor = 'text-green-500';
-                icon = 'CheckCircle';
-              } else if (job.status === 'failed') {
-                status = 'Generierung fehlgeschlagen';
-                statusVariant = 'destructive';
-                iconColor = 'text-red-500';
-                icon = 'AlertTriangle';
-              }
+            if (job.status === 'completed') {
+              status = 'Vertrag generiert';
+              statusVariant = 'default';
+              iconColor = 'text-green-500';
+              icon = 'CheckCircle';
+            } else if (job.status === 'failed') {
+              status = 'Generierung fehlgeschlagen';
+              statusVariant = 'destructive';
+              iconColor = 'text-red-500';
+              icon = 'AlertTriangle';
+            }
 
-              activities.push({
-                id: `contract-${job.id}`,
-                type: 'contract_generation',
-                fileName: job.data?.fileName || 'Vertrag',
-                status: status,
-                time: this.getRelativeTime(new Date(job.createdAt)),
-                icon: icon,
-                iconColor: iconColor,
-                statusVariant: statusVariant
-              });
+            activities.push({
+              id: `contract-${job.id}`,
+              type: 'contract_generation',
+              fileName: job.data?.fileName || 'Vertrag',
+              status: status,
+              time: this.getRelativeTime(new Date(job.createdAt)),
+              icon: icon,
+              iconColor: iconColor,
+              statusVariant: statusVariant
             });
+          });
         }
       } catch (error) {
         // Continue if contract generation jobs can't be retrieved
@@ -547,12 +546,12 @@ export class DocumentController extends BaseController {
       // Get all analyses where this lawyer has made decisions
       const db = this.firestoreService['db'] || require('firebase-admin').firestore();
       const completedAnalysesQuery = await db.collection('swissObligationAnalyses')
-        .where('lawyerStatus', 'in', ['APPROVED', 'DECLINE'])
-        .get();
+      .where('lawyerStatus', 'in', ['APPROVED', 'DECLINE'])
+      .get();
 
       const completedAnalyses = completedAnalysesQuery.docs
-        .map(doc => doc.data())
-        .filter(analysis => analysis.sharedUserId === userId || !analysis.sharedUserId);
+      .map(doc => doc.data())
+      .filter(analysis => analysis.sharedUserId === userId || !analysis.sharedUserId);
 
       // Calculate earnings (approved + declined contracts)
       const approvedCount = completedAnalyses.filter(analysis => analysis.lawyerStatus === 'APPROVED').length;
@@ -565,9 +564,9 @@ export class DocumentController extends BaseController {
 
       // Calculate pending reviews (CHECK_PENDING status)
       const pendingReviews = await db.collection('swissObligationAnalyses')
-        .where('lawyerStatus', '==', 'CHECK_PENDING')
-        .where('sharedUserId', '==', userId)
-        .get();
+      .where('lawyerStatus', '==', 'CHECK_PENDING')
+      .where('sharedUserId', '==', userId)
+      .get();
 
       // Calculate growth percentages (placeholder for now)
       const earningsGrowth = 15; // +15%
@@ -613,10 +612,10 @@ export class DocumentController extends BaseController {
       // Get recent analyses where this lawyer made decisions
       const db = this.firestoreService['db'] || require('firebase-admin').firestore();
       const recentDecisionsQuery = await db.collection('swissObligationAnalyses')
-        .where('lawyerStatus', 'in', ['APPROVED', 'DECLINE'])
-        .orderBy('updatedAt', 'desc')
-        .limit(limit)
-        .get();
+      .where('lawyerStatus', 'in', ['APPROVED', 'DECLINE'])
+      .orderBy('updatedAt', 'desc')
+      .limit(limit)
+      .get();
 
       const activities: any[] = [];
 
@@ -691,36 +690,36 @@ export class DocumentController extends BaseController {
         const contractJobs = await this.jobQueueService.getUserJobs(userId, 3, 0);
         if (contractJobs && contractJobs.jobs) {
           contractJobs.jobs
-            .filter(job => job.type === 'contract_generation')
-            .forEach(job => {
-              let status = 'In Bearbeitung';
-              let statusVariant = 'secondary';
-              let iconColor = 'text-blue-500';
-              let icon = 'FileText';
+          .filter(job => job.type === 'contract_generation')
+          .forEach(job => {
+            let status = 'In Bearbeitung';
+            let statusVariant = 'secondary';
+            let iconColor = 'text-blue-500';
+            let icon = 'FileText';
 
-              if (job.status === 'completed') {
-                status = 'Vertrag generiert';
-                statusVariant = 'default';
-                iconColor = 'text-green-500';
-                icon = 'CheckCircle';
-              } else if (job.status === 'failed') {
-                status = 'Generierung fehlgeschlagen';
-                statusVariant = 'destructive';
-                iconColor = 'text-red-500';
-                icon = 'AlertTriangle';
-              }
+            if (job.status === 'completed') {
+              status = 'Vertrag generiert';
+              statusVariant = 'default';
+              iconColor = 'text-green-500';
+              icon = 'CheckCircle';
+            } else if (job.status === 'failed') {
+              status = 'Generierung fehlgeschlagen';
+              statusVariant = 'destructive';
+              iconColor = 'text-red-500';
+              icon = 'AlertTriangle';
+            }
 
-              activities.push({
-                id: `contract-${job.id}`,
-                type: 'contract_generation',
-                fileName: job.data?.fileName || 'Vertrag',
-                status: status,
-                time: this.getRelativeTime(new Date(job.createdAt)),
-                icon: icon,
-                iconColor: iconColor,
-                statusVariant: statusVariant
-              });
+            activities.push({
+              id: `contract-${job.id}`,
+              type: 'contract_generation',
+              fileName: job.data?.fileName || 'Vertrag',
+              status: status,
+              time: this.getRelativeTime(new Date(job.createdAt)),
+              icon: icon,
+              iconColor: iconColor,
+              statusVariant: statusVariant
             });
+          });
         }
       } catch (error) {
         // Continue if contract generation jobs can't be retrieved
@@ -779,10 +778,10 @@ export class DocumentController extends BaseController {
       // Get recently completed reviews
       const db = this.firestoreService['db'] || require('firebase-admin').firestore();
       const recentCompletedQuery = await db.collection('swissObligationAnalyses')
-        .where('lawyerStatus', 'in', ['APPROVED', 'DECLINE'])
-        .orderBy('updatedAt', 'desc')
-        .limit(5)
-        .get();
+      .where('lawyerStatus', 'in', ['APPROVED', 'DECLINE'])
+      .orderBy('updatedAt', 'desc')
+      .limit(5)
+      .get();
 
       for (const doc of recentCompletedQuery.docs) {
         const analysis = doc.data();
@@ -885,177 +884,17 @@ export class DocumentController extends BaseController {
   }
 
   /**
-   * Get document analysis results
-   * GET /api/documents/:documentId/analysis/:analysisId
+   * Complete DSGVO Check with User Question
+   * POST /api/documents/dsgvo-check/direct
    */
-  public async getAnalysisResults(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const userId = this.getUserId(req);
-      const { documentId, analysisId } = req.params;
-
-      // Validate request
-      if (!documentId || !analysisId) {
-        this.sendError(res, 400, 'Document ID and Analysis ID are required');
-        return;
-      }
-
-      // Get analysis results
-      const analysis = await this.analysisService.getAnalysisResult(analysisId, userId);
-      if (!analysis) {
-        this.sendError(res, 404, 'Analysis not found');
-        return;
-      }
-
-      // Check if analysis belongs to the document
-      if (analysis.documentId !== documentId) {
-        this.sendError(res, 400, 'Analysis does not belong to this document');
-        return;
-      }
-
-      this.sendSuccess(res, {
-        analysisId: analysis.analysisId,
-        documentId: analysis.documentId,
-        analysisType: analysis.analysisType,
-        status: analysis.status,
-        progress: analysis.progress,
-        results: analysis.results,
-        createdAt: analysis.createdAt,
-        updatedAt: analysis.updatedAt,
-        processingTimeMs: analysis.processingTimeMs
-      });
-
-    } catch (error) {
-      this.logger.error('Get analysis results failed', error as Error, {
-        userId: this.getUserId(req),
-        documentId: req.params.documentId,
-        analysisId: req.params.analysisId
-      });
-      next(error);
-    }
-  }
-
-  /**
-   * Cancel document analysis
-   * DELETE /api/documents/:documentId/analysis/:analysisId
-   */
-  public async cancelAnalysis(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const userId = this.getUserId(req);
-      const { documentId, analysisId } = req.params;
-
-      // Validate request
-      if (!documentId || !analysisId) {
-        this.sendError(res, 400, 'Document ID and Analysis ID are required');
-        return;
-      }
-
-      // Get analysis to verify ownership
-      const analysis = await this.analysisService.getAnalysisResult(analysisId, userId);
-      if (!analysis) {
-        this.sendError(res, 404, 'Analysis not found');
-        return;
-      }
-
-      if (analysis.documentId !== documentId) {
-        this.sendError(res, 400, 'Analysis does not belong to this document');
-        return;
-      }
-
-      // Cancel analysis
-      await this.analysisService.cancelAnalysis(analysisId, userId);
-
-      this.sendSuccess(res, {
-        analysisId,
-        documentId,
-        status: 'cancelled',
-        message: 'Analysis cancelled successfully'
-      });
-
-    } catch (error) {
-      this.logger.error('Cancel analysis failed', error as Error, {
-        userId: this.getUserId(req),
-        documentId: req.params.documentId,
-        analysisId: req.params.analysisId
-      });
-      next(error);
-    }
-  }
-
-  /**
-   * DSGVO Compliance Check with Text Input
-   * POST /api/documents/dsgvo-check
-   */
-  public async checkDSGVOCompliance(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const userId = this.getUserId(req);
-      const { text, saveResults = false, language = 'de' } = req.body;
-
-      if (!text || typeof text !== 'string') {
-        this.sendError(res, 400, 'Text content is required');
-        return;
-      }
-
-      if (text.length > 50000) {
-        this.sendError(res, 400, 'Text content too long (max 50,000 characters)');
-        return;
-      }
-
-      // Perform DSGVO compliance analysis
-      const result = await this.analysisService.analyzeDSGVOCompliance(
-        text,
-        userId,
-        { saveResults, language }
-      );
-
-      this.sendSuccess(res, {
-        complianceScore: result.complianceScore,
-        status: result.status,
-        findings: result.findings,
-        legalBasis: {
-          foundSources: result.legalBasis.documents.length,
-          sources: result.legalBasis.documents.map(doc => ({
-            title: doc.metadata.title || 'DSGVO Artikel',
-            source: doc.metadata.source || 'DSGVO',
-            excerpt: doc.pageContent.substring(0, 150) + '...'
-          }))
-        },
-        summary: {
-          compliantFindings: result.findings.filter(f => f.status === 'compliant').length,
-          nonCompliantFindings: result.findings.filter(f => f.status === 'non_compliant').length,
-          unclearFindings: result.findings.filter(f => f.status === 'unclear').length,
-          criticalIssues: result.findings
-            .filter(f => f.status === 'non_compliant')
-            .map(f => f.recommendation)
-        },
-        timestamp: new Date().toISOString()
-      });
-
-      this.logger.info('DSGVO compliance check completed', {
-        userId,
-        complianceScore: result.complianceScore,
-        status: result.status,
-        textLength: text.length,
-        saved: saveResults
-      });
-
-    } catch (error) {
-      this.logger.error('DSGVO compliance check failed', error as Error, {
-        userId: this.getUserId(req),
-        textLength: req.body.text?.length || 0
-      });
-      next(error);
-    }
-  }
-
   public async completeDSGVOCheck(req: Request, res: Response, next: NextFunction): Promise<void> {
-    const startTime = Date.now();
     try {
       const userId = this.getUserId(req);
       const { question, maxSources = 5, language = 'de', includeContext = true } = req.body;
 
       // Input Validation
       if (!question || typeof question !== 'string') {
-        this.logger.error('DSG Check: Missing or invalid question', undefined, {
+        this.logger.error('Direct DSGVO Check: Missing or invalid question', undefined, {
           userId,
           questionType: typeof question,
           questionValue: question
@@ -1065,7 +904,7 @@ export class DocumentController extends BaseController {
       }
 
       if (question.length > 5000) {
-        this.logger.error('DSG Check: Question too long', undefined, {
+        this.logger.error('Direct DSGVO Check: Question too long', undefined, {
           userId,
           questionLength: question.length,
           maxLength: 5000
@@ -1075,7 +914,7 @@ export class DocumentController extends BaseController {
       }
 
       if (maxSources < 1 || maxSources > 10) {
-        this.logger.error('DSG Check: Invalid maxSources parameter', undefined, {
+        this.logger.error('Direct DSGVO Check: Invalid maxSources parameter', undefined, {
           userId,
           maxSources,
           allowedRange: '1-10'
@@ -1084,539 +923,49 @@ export class DocumentController extends BaseController {
         return;
       }
 
-      this.logger.info('Data Protection Check: Starting complete check with Swiss DSG and EU DSGVO databases', {
+      this.logger.info('Direct DSGVO Check: Starting data protection analysis', {
         userId,
         questionLength: question.length,
         maxSources,
         language,
         includeContext,
-        timestamp: new Date().toISOString(),
-        databaseStatus: 'Pre-populated Swiss DSG and EU DSGVO Vector Stores'
+        timestamp: new Date().toISOString()
       });
 
-      // ==========================================
-      // SCHRITT 1: Optimierte Suchbegriffe für befüllte Datenschutz-Datenbanken
-      // ==========================================
-      const step1StartTime = Date.now();
-      const chatGptQueriesPrompt = `Frage: "${question}"
-
-KONTEXT: Es existiert bereits eine vollständig befüllte Vektor-Datenbank mit dem kompletten Datenschutzgesetz der Schweiz (DSG) und der EU-Datenschutz-Grundverordnung (DSGVO), einschließlich aller Artikel, Absätze, Bestimmungen und Kommentare.
-
-AUFGABE: Erstelle 2-3 präzise deutsche Suchbegriffe, die optimal für die semantische Suche in beiden Datenbanken (Schweizer DSG und EU DSGVO) geeignet sind:
-
-ANFORDERUNGEN:
-- Verwende Rechtsterminologie, die sowohl im Schweizer DSG als auch in der EU DSGVO verwendet wird
-- Fokussiere auf Datenschutzkonzepte, die in beiden Rechtssystemen relevant sind
-- Berücksichtige sowohl schweizer als auch europäische Datenschutzterminologie
-- Wähle Begriffe, die in beiden Vektor-Datenbanken hohe semantische Relevanz-Scores erzielen werden
-- Nutze Begriffe, die häufig in Datenschutz-Dokumenten beider Jurisdiktionen verwendet werden
-
-BEISPIELE für optimale Suchbegriffe:
-- "Personendaten Verarbeitung" (DSG: Bearbeitung, DSGVO: Verarbeitung)
-- "Auskunftsrecht Betroffene" (in beiden Gesetzen relevant)
-- "Datenschutzerklärung Informationspflicht" (in beiden Gesetzen relevant)
-- "Einwilligung Datenverarbeitung" (in beiden Gesetzen relevant)
-- "Datensicherheit Schutzmassnahmen" (in beiden Gesetzen relevant)
-
-Da beide Vector Databases bereits vollständig indexiert sind, optimiere die Suchbegriffe für maximale semantische Übereinstimmung mit DSG- und DSGVO-Inhalten:
-
-Suchbegriffe:`;
-
-      this.logger.debug('Data Protection Check Step 1: Generating optimized search queries for both DSG and DSGVO databases', {
-        userId,
-        promptLength: chatGptQueriesPrompt.length,
-        step: 'query_generation_optimized',
-        targetDatabases: 'Pre-populated Swiss DSG and EU DSGVO Vector Stores',
-        databaseStatus: 'fully_indexed_and_ready',
-        estimatedTokens: Math.ceil(chatGptQueriesPrompt.length / 4)
-      });
-
-      const chatGptResponse = await this.callChatGPT(chatGptQueriesPrompt);
-      const step1Duration = Date.now() - step1StartTime;
-
-      this.logger.debug('Data Protection Check Step 1: Optimized queries for DSG and DSGVO generated successfully', {
-        userId,
-        responseLength: chatGptResponse.length,
-        duration: step1Duration,
-        rawResponse: chatGptResponse.substring(0, 200) + (chatGptResponse.length > 200 ? '...' : ''),
-        step: 'query_generation_completed'
-      });
-
-      // Parse Suchbegriffe aus ChatGPT Response
-      const queries = chatGptResponse.split('\n')
-      .map(q => q.trim().replace(/^[-*•\d+.]\s*/, '')) // Remove bullet points and numbers
-      .filter(q => q.length > 0 &&
-        !q.includes('Suchbegriffe:') &&
-        !q.includes('BEISPIELE') &&
-        !q.includes('AUFGABE') &&
-        q.length > 5)
-      .slice(0, 3); // Max 3 queries
-
-      if (queries.length === 0) {
-        this.logger.error('Data Protection Check Step 1: No valid search queries generated', undefined, {
-          userId,
-          rawResponse: chatGptResponse,
-          step1Duration
-        });
-        this.sendError(res, 500, 'Fehler beim Generieren der Suchbegriffe');
-        return;
-      }
-
-      this.logger.debug('Data Protection Check Step 1: Search queries for DSG and DSGVO parsed and validated', {
-        userId,
-        queriesCount: queries.length,
-        queries: queries,
-        step1Duration,
-        targetDatabases: 'Pre-populated Swiss DSG and EU DSGVO Vector Stores',
-        queryOptimization: 'multi_jurisdiction_optimized'
-      });
-
-      // ==========================================
-      // SCHRITT 2: Similarity Search in Swiss DSG und EU DSGVO Vector Stores
-      // ==========================================
-      const step2StartTime = Date.now();
-      this.logger.debug('Data Protection Check Step 2: Starting parallel similarity search in both DSG and DSGVO databases', {
-        userId,
-        queriesCount: queries.length,
-        maxResultsPerQuery: Math.ceil(maxSources / queries.length) + 1,
-        vectorStores: 'Pre-populated Swiss DSG and EU DSGVO Databases',
-        databaseStatus: 'Ready, Indexed, and Optimized',
-        searchStrategy: 'multi_jurisdiction_parallel_semantic_search',
-        jurisdictions: ['ch', 'eu']
-      });
-
-      const allResults = await Promise.all(
-        queries.map(async (query, index) => {
-          const queryStartTime = Date.now();
-          const resultsPerQuery = Math.ceil(maxSources / queries.length) + 1;
-
-          this.logger.debug('Data Protection Check Step 2: Processing query in both DSG and DSGVO databases', {
-            userId,
-            queryIndex: index,
-            query: query,
-            resultsRequested: resultsPerQuery,
-            timestamp: new Date().toISOString(),
-            searchContext: 'Pre-populated Swiss DSG and EU DSGVO Vector Stores',
-          });
-
-          // Suche in beiden Datenbanken: Swiss DSG und EU DSGVO
-          const results = await this.analysisService.similaritySearch(query, resultsPerQuery);
-          const queryDuration = Date.now() - queryStartTime;
-
-          this.logger.debug('Data Protection Check Step 2: Query results from both DSG and DSGVO databases', {
-            userId,
-            queryIndex: index,
-            query: query,
-            resultsCount: results.length,
-            duration: queryDuration,
-            foundArticles: results.map(r => r.metadata?.article || r.metadata?.section || 'Unknown').filter(Boolean),
-            vectorDatabase: 'Pre-populated Swiss DSG',
-            searchPerformance: queryDuration < 1000 ? 'excellent' : queryDuration < 3000 ? 'good' : 'slow'
-          });
-
-          return results;
-        })
-      );
-
-      const step2Duration = Date.now() - step2StartTime;
-
-      // ==========================================
-      // SCHRITT 3: Eindeutige Ergebnisse aus DSG und DSGVO zusammenführen
-      // ==========================================
-      const uniqueResults = new Map<string, any>();
-      const duplicateCount = { count: 0 };
-      const foundArticles: string[] = [];
-      const relevanceScores: number[] = [];
-      const jurisdictionStats = { ch: 0, eu: 0 };
-
-      allResults.flat().forEach((item: any, index) => {
-        if (item.id && !uniqueResults.has(item.id) && uniqueResults.size < maxSources) {
-          uniqueResults.set(item.id, item);
-
-          // Artikel und Relevanz-Scores extrahieren
-          const article = item.metadata?.article || item.metadata?.section || `Sektion-${index}`;
-            const jurisdiction = (item.metadata?.jurisdiction || 'unknown').toLowerCase();
-
-          if (article && !article.includes('Sektion-')) foundArticles.push(article);
-          if (jurisdiction === 'ch') jurisdictionStats.ch++;
-          if (jurisdiction === 'eu') jurisdictionStats.eu++;
-
-          if (item.score) relevanceScores.push(item.score);
-
-          this.logger.debug('Data Protection Check Step 2: Added unique result from multi-jurisdiction database', {
-            userId,
-            resultId: item.id,
-            resultIndex: index,
-            article: article,
-            jurisdiction: jurisdiction,
-            relevanceScore: item.score,
-            contentPreview: item.pageContent?.substring(0, 100) + '...',
-            source: `Pre-populated Vector Store`
-          });
-        } else if (item.id && uniqueResults.has(item.id)) {
-          duplicateCount.count++;
-        }
-      });
-
-      const vectorSearchResults = Array.from(uniqueResults.values());
-      const avgRelevanceScore = relevanceScores.length > 0 ?
-        relevanceScores.reduce((a, b) => a + b, 0) / relevanceScores.length : 0;
-
-      this.logger.debug('Data Protection Check Step 2: Multi-jurisdiction vector search completed', {
-        userId,
-        totalRawResults: allResults.flat().length,
-        uniqueResults: vectorSearchResults.length,
-        duplicatesFiltered: duplicateCount.count,
-        foundArticles: [...new Set(foundArticles)],
-        jurisdictionDistribution: jurisdictionStats,
-        averageRelevanceScore: avgRelevanceScore,
-        step2Duration,
-        databasePerformance: {
-          searchTime: step2Duration,
-          resultsQuality: avgRelevanceScore > 0.8 ? 'excellent' : avgRelevanceScore > 0.6 ? 'good' : 'moderate',
-          databaseUtilization: 'multi_jurisdiction_optimized'
-        }
-      });
-
-      if (vectorSearchResults.length === 0) {
-        this.logger.warn('Data Protection Check Step 2: No results found in DSG and DSGVO databases', {
-          userId,
-          queries: queries,
-          databaseStatus: 'Pre-populated but no matches',
-          searchedJurisdictions: ['ch', 'eu'],
-          possibleIssues: ['query_too_specific', 'database_content_mismatch', 'threshold_too_high']
-        });
-
-        this.sendError(res, 404, 'Keine relevanten Datenschutz-Artikel in den Datenbanken gefunden. Möglicherweise ist die Anfrage zu spezifisch.');
-        return;
-      }
-
-      // ==========================================
-      // SCHRITT 4: Context-Aufbereitung mit DSG und DSGVO Informationen
-      // ==========================================
-      const step3StartTime = Date.now();
-
-      let contextText = '';
-      if (includeContext && vectorSearchResults.length > 0) {
-        contextText = vectorSearchResults
-        .map((doc, index) => {
-          const contentLength = Math.min(doc.pageContent.length, 300); // Längerer Context für bessere Analyse
-          const shortContent = doc.pageContent.substring(0, contentLength);
-          const article = doc.metadata?.article || doc.metadata?.section || 'Datenschutz-Bestimmung';
-          const jurisdiction = (doc.metadata?.jurisdiction || 'unknown').toLowerCase();
-          const jurisdictionLabel = jurisdiction === 'ch' ? 'DSG' : jurisdiction === 'eu' ? 'DSGVO' : 'Unbekannt';
-          const articleInfo = article ? ` (${jurisdictionLabel}: ${article})` : '';
-          const score = doc.score ? ` [Relevanz: ${(doc.score * 100).toFixed(1)}%]` : '';
-
-          this.logger.debug('Data Protection Check Step 3: Processing context document from multi-jurisdiction database', {
-            userId,
-            docIndex: index,
-            docId: doc.id,
-            article: article,
-            jurisdiction: jurisdiction,
-            relevanceScore: doc.score,
-            originalLength: doc.pageContent.length,
-            includedLength: contentLength,
-            metadata: doc.metadata,
-            source: `Pre-populated ${jurisdiction === 'ch' ? 'Swiss DSG' : jurisdiction === 'eu' ? 'EU DSGVO' : 'Unknown'} Database`
-          });
-
-          return `${index + 1}. ${article}${score} [${jurisdictionLabel}]:\n${shortContent}${contentLength < doc.pageContent.length ? '...' : ''}`;
-        })
-        .join('\n\n');
-      }
-
-      this.logger.debug('Data Protection Check Step 3: Multi-jurisdiction context prepared', {
-        userId,
-        contextLength: contextText.length,
-        documentsIncluded: vectorSearchResults.length,
-        contextSources: 'Pre-populated Swiss DSG and EU DSGVO Vector Databases',
-        jurisdictionDistribution: jurisdictionStats,
-        includeContext,
-        avgContextLength: contextText.length / Math.max(vectorSearchResults.length, 1)
-      });
-
-      // ==========================================
-      // SCHRITT 5: Finale Datenschutz-Analyse mit DSG und DSGVO
-      // ==========================================
-      const finalAnalysisPrompt = `Benutzerfrage: "${question}"
-
-${includeContext && contextText ? `DATENSCHUTZ-KONTEXT aus den indexierten Datenbanken (DSG Schweiz & DSGVO (EU)):
-${contextText}
-
-` : ''}AUFGABE: Analysiere die Benutzerfrage basierend auf dem Schweizer Datenschutzgesetz (DSG) und dem EU-Datenschutzgesetz (DSGVO) und gib eine strukturierte, professionelle Antwort als JSON zurück:
-
-ANALYSE-FOKUS:
-- Schweizer Dateschutzgesetz der Schweiz (DSG 2023) und EU-Datenschutz (DSGVO)
-- Relevante Artikel und Bestimmungen beider Rechtssysteme
-- Praktische Umsetzung in der Schweiz und EU
-- Compliance-Anforderungen für beide Jurisdiktionen
-- Gemeinsamkeiten und Unterschiede zwischen DSG und DSGVO
-
-ANTWORT-STRUKTUR: Gib die Antwort als valides JSON-Objekt mit folgender Struktur zurück:
-
-{
-  "legalBasis": "Relevante Artikel des DSG und/oder DSGVO mit Bezug zur Frage",
-  "dataProtectionAnswer": "Direkte, präzise Antwort zur gestellten Frage unter Berücksichtigung beider Rechtssysteme",
-  "legalAssessment": {
-    "status": "KONFORM | NICHT KONFORM | TEILWEISE KONFORM | UNKLARE RECHTSLAGE",
-    "reasoning": "Juristische Einschätzung basierend auf DSG und DSGVO"
-  },
-  "recommendations": [
-    "Spezifische Handlungsempfehlung 1 (DSG/DSGVO)",
-    "Spezifische Handlungsempfehlung 2 (DSG/DSGVO)",
-    "Spezifische Handlungsempfehlung 3 (DSG/DSGVO)"
-  ],
-  "importantNotes": "Besonderheiten und Unterschiede zwischen DSG und DSGVO, praktische Hinweise",
-  "jurisdictionAnalysis": {
-    "ch": "Spezifische Aspekte nach Schweizer DSG",
-    "eu": "Spezifische Aspekte nach EU DSGVO"
-  },
-  "references": [
-    {
-      "article": "DSG Art. X / DSGVO Art. Y",
-      "description": "Kurzbeschreibung des Artikels",
-      "jurisdiction": "ch | eu"
-    }
-  ]
-}
-
-WICHTIG: Gib NUR das JSON-Objekt zurück, ohne zusätzlichen Text oder Markdown-Formatierung.
-STIL: Professionell, präzise, praxisorientiert für beide Jurisdiktionen`;
-
-      this.logger.debug('Data Protection Check Step 4: Starting comprehensive DSG and DSGVO analysis with LangChain', {
-        userId,
-        finalPromptLength: finalAnalysisPrompt.length,
-        estimatedTokens: Math.ceil(finalAnalysisPrompt.length / 4),
-        analysisContext: 'Swiss DSG and EU DSGVO with pre-populated database context',
-        jurisdictionDistribution: jurisdictionStats,
-        includeContext,
-        contextDocuments: vectorSearchResults.length
-      });
-
-      const finalAnalysisRaw = await this.callChatGPT(finalAnalysisPrompt);
-      const step3Duration = Date.now() - step3StartTime;
-
-      // Parse JSON response from ChatGPT
-      let parsedAnalysis;
-      try {
-        // Clean the response to extract only the JSON part
-        const cleanedResponse = finalAnalysisRaw.trim();
-        const jsonMatch = cleanedResponse.match(/\{[\s\S]*\}/);
-        const jsonString = jsonMatch ? jsonMatch[0] : cleanedResponse;
-
-        parsedAnalysis = JSON.parse(jsonString);
-
-        this.logger.debug('Data Protection Check Step 4: JSON analysis successfully parsed', {
-          userId,
-          rawAnalysisLength: finalAnalysisRaw.length,
-          parsedStructure: Object.keys(parsedAnalysis),
-          step3Duration
-        });
-      } catch (parseError) {
-        this.logger.warn('Data Protection Check Step 4: Failed to parse JSON response, using fallback structure', {
-          userId,
-          parseError: parseError instanceof Error ? parseError.message : String(parseError),
-          rawResponse: finalAnalysisRaw.substring(0, 200) + '...'
-        });
-
-        // Fallback structure if JSON parsing fails
-        parsedAnalysis = {
-          legalBasis: "Fehler beim Parsen der Antwort",
-          dataProtectionAnswer: finalAnalysisRaw,
-          legalAssessment: {
-            status: "UNKLARE RECHTSLAGE",
-            reasoning: "Die Antwort konnte nicht korrekt strukturiert werden"
-          },
-          recommendations: ["Bitte versuchen Sie die Anfrage erneut"],
-          importantNotes: "Technischer Fehler bei der Antwortverarbeitung",
-          jurisdictionAnalysis: {
-            ch: "Fehler bei der Analyse",
-            eu: "Fehler bei der Analyse"
-          },
-          references: []
-        };
-      }
-
-      this.logger.debug('Data Protection Check Step 4: Comprehensive DSG and DSGVO analysis completed', {
-        userId,
-        analysisLength: finalAnalysisRaw.length,
-        step3Duration,
-        analysisQuality: finalAnalysisRaw.length > 500 ? 'comprehensive' : 'basic',
-        structuredResponse: true,
-        jurisdictionDistribution: jurisdictionStats
-      });
-
-      // ==========================================
-      // SCHRITT 6: Response zusammenstellen
-      // ==========================================
-      const totalDuration = Date.now() - startTime;
-      const uniqueArticles = [...new Set(foundArticles)];
-
-      const response = {
-        question: question,
-        searchQueries: {
-          generated: queries,
-          count: queries.length,
-          optimizedFor: 'Pre-populated Swiss DSG and EU DSGVO Vector Databases'
-        },
-        foundSources: {
-          count: vectorSearchResults.length,
-          laws: 'Schweizer Datenschutzgesetz (DSG) und EU-Datenschutz-Grundverordnung (DSGVO)',
-          articles: uniqueArticles,
-          averageRelevance: avgRelevanceScore,
-          jurisdictionDistribution: jurisdictionStats,
-          database: {
-            type: 'Pre-populated Multi-Jurisdiction Vector Store',
-            content: 'Complete Swiss DSG and EU DSGVO',
-            status: 'Fully Indexed and Optimized'
-          },
-          sources: vectorSearchResults.map((doc, index) => {
-            const article = doc.metadata?.article || doc.metadata?.section || 'Datenschutz-Bestimmung';
-            const jurisdiction = doc.metadata?.jurisdiction || 'unknown';
-            const lawLabel = jurisdiction === 'ch' ? 'Swiss DSG' : jurisdiction === 'eu' ? 'EU DSGVO' : 'Unknown';
-
-            this.logger.debug('Data Protection Check: Preparing multi-jurisdiction source for response', {
-              userId,
-              sourceIndex: index,
-              sourceId: doc.id,
-              article: article,
-              jurisdiction: jurisdiction,
-              contentLength: doc.pageContent.length,
-              relevanceScore: doc.score
-            });
-
-            return {
-              content: doc.pageContent,
-              metadata: {
-                ...doc.metadata,
-                law: lawLabel,
-                article: article,
-                jurisdiction: jurisdiction,
-                relevanceScore: doc.score,
-                source: 'Pre-populated Multi-Jurisdiction Vector Database'
-              },
-              id: doc.id
-            };
-          })
-        },
-        legalBasis: parsedAnalysis.legalBasis,
-        dataProtectionAnswer: parsedAnalysis.dataProtectionAnswer,
-        legalAssessment: parsedAnalysis.legalAssessment,
-        recommendations: parsedAnalysis.recommendations,
-        importantNotes: parsedAnalysis.importantNotes,
-        jurisdictionAnalysis: parsedAnalysis.jurisdictionAnalysis,
-        references: parsedAnalysis.references,
-        timestamp: new Date().toISOString(),
-        performance: {
-          totalDuration,
-          step1Duration, // Query generation
-          step2Duration, // Vector search
-          step3Duration, // Final analysis
-          breakdown: {
-            queryGeneration: `${step1Duration}ms`,
-            databaseSearch: `${step2Duration}ms`,
-            finalAnalysis: `${step3Duration}ms`,
-            total: `${totalDuration}ms`
-          },
-          efficiency: totalDuration < 10000 ? 'excellent' : totalDuration < 20000 ? 'good' : 'moderate'
-        },
-        processingSteps: {
-          step1: `Multi-jurisdiktionale Suchbegriffe für DSG und DSGVO Vektor-DBs optimiert (${queries.length} queries)`,
-          step2: `${vectorSearchResults.length} relevante Artikel aus DSG und DSGVO Datenbanken gefunden (Swiss: ${jurisdictionStats.ch}, EU: ${jurisdictionStats.eu})`,
-          step3: 'Vollständige Datenschutz-Compliance-Analyse für DSG und DSGVO erstellt'
-        },
-        legalContext: {
-          jurisdictions: ['Switzerland', 'European Union'],
-          laws: 'Schweizer Datenschutzgesetz (DSG) und EU-Datenschutz-Grundverordnung (DSGVO)',
-          frameworks: ['Swiss Data Protection Law', 'EU General Data Protection Regulation'],
-          effectiveDates: {
-            ch: '2023-09-01',
-            eu: '2018-05-25'
-          },
-          vectorDatabase: {
-            name: 'Multi-Jurisdiction Data Protection Vector Store',
-            status: 'Pre-populated and Fully Indexed',
-            content: 'Complete Swiss DSG and EU DSGVO with Articles and Commentary',
-            articlesFound: uniqueArticles.length,
-            jurisdictionDistribution: jurisdictionStats,
-            searchOptimization: 'Multi-jurisdiction query generation'
-          }
-        },
-        langchainIntegration: {
-          model: 'gpt-4',
-          framework: 'LangChain',
-          version: '0.3.67',
-          totalTokensEstimated: Math.ceil((chatGptQueriesPrompt.length + finalAnalysisPrompt.length) / 4),
-          databaseIntegration: {
-            type: 'Pre-populated Multi-Jurisdiction Vector Store',
-            searchMethod: 'Semantic Similarity',
-            optimization: 'DSG and DSGVO specific'
-          }
-        },
-        config: {
-          maxSources,
-          language,
-          includeContext,
-          databaseOptimized: true
-        }
+      // Create request object for the service
+      const request: DataProtectionCheckRequest = {
+        question,
+        maxSources,
+        language,
+        includeContext
       };
 
-      this.sendSuccess(res, response);
+      // Delegate to the DataProtectionService
+      const result = await this.dataProtectionService.performDirectDSGVOCheck(request, userId);
 
-      this.logger.info('Data Protection Check: Complete DSG and DSGVO check with multi-jurisdiction database finished successfully', {
+      this.logger.info('Direct DSGVO Check: Analysis completed successfully', {
         userId,
-        totalDuration,
         questionLength: question.length,
-        queriesGenerated: queries.length,
-        sourcesFound: vectorSearchResults.length,
-        articlesFound: uniqueArticles,
-        jurisdictionDistribution: jurisdictionStats,
-        analysisLength: finalAnalysisRaw.length,
-        responseSize: JSON.stringify(response).length,
-        averageRelevance: avgRelevanceScore,
-        performance: {
-          step1: step1Duration,
-          step2: step2Duration,
-          step3: step3Duration,
-          total: totalDuration,
-          efficiency: totalDuration < 10000 ? 'excellent' : 'moderate'
-        },
-        databaseUtilization: {
-          type: 'Pre-populated Multi-Jurisdiction Vector Store',
-          performance: 'optimized',
-          contentMatch: 'dsg_and_dsgvo_specific',
-          jurisdictions: ['ch', 'eu']
-        }
+        referencesFound: result.references?.length || 0,
+        status: result.legalAssessment?.status || 'UNKNOWN',
+        totalDuration: result.performance.totalDuration
       });
+
+      this.sendSuccess(res, result);
 
     } catch (error) {
-      const errorDuration = Date.now() - startTime;
-
-      this.logger.error('Data Protection Check: Complete DSG and DSGVO check with multi-jurisdiction database failed', error as Error, {
+      this.logger.error('Direct DSGVO Check: Analysis failed', error as Error, {
         userId: this.getUserId(req),
-        questionLength: req.body.question?.length || 0,
-        errorAfter: errorDuration,
-        errorType: error instanceof Error ? error.constructor.name : typeof error,
-        errorMessage: error instanceof Error ? error.message : String(error),
-        databaseStatus: 'Pre-populated Multi-Jurisdiction DSG and DSGVO Vector Store',
-        jurisdictions: ['ch', 'eu'],
-        possibleCauses: [
-          'vector_database_connection_failed',
-          'chatgpt_api_error',
-          'search_query_generation_failed',
-          'database_content_mismatch',
-          'multi_jurisdiction_search_failed'
-        ]
+        questionLength: req.body?.question?.length || 0
       });
 
-      // Detaillierte Fehlermeldungen für besseres Debugging
+      // Detailed error handling
       if (error instanceof Error) {
-        if (error.message.includes('OPENAI_API_KEY')) {
+        if (error.message.includes('OpenAI API-Konfiguration fehlt')) {
           this.sendError(res, 500, 'OpenAI API-Konfiguration fehlt');
-        } else if (error.message.includes('PINECONE') || error.message.includes('vector')) {
+        } else if (error.message.includes('Datenschutz-Datenbanken')) {
           this.sendError(res, 500, 'Fehler beim Zugriff auf die Datenschutz-Datenbanken');
-        } else if (error.message.includes('timeout')) {
+        } else if (error.message.includes('Timeout')) {
           this.sendError(res, 504, 'Anfrage-Timeout - bitte versuchen Sie es erneut');
         } else {
           this.sendError(res, 500, 'Fehler bei der Datenschutz-Analyse');
@@ -1678,7 +1027,7 @@ STIL: Professionell, präzise, praxisorientiert für beide Jurisdiktionen`;
       if (document.anonymizedKeywords?.length) {
         sanitizedText = this.textExtractionService.replaceSpecificTexts(cleanedText, document.anonymizedKeywords);
       } else {
-        this.logger.info('No anonymized keywords found, use unanonymized text', { cleanedTextLength: cleanedText.length});
+        this.logger.info('No anonymized keywords found, use unanonymized text', { cleanedTextLength: cleanedText.length });
         sanitizedText = cleanedText;
       }
 
@@ -2068,10 +1417,10 @@ STIL: Professionell, präzise, praxisorientiert für beide Jurisdiktionen`;
           overallCompliance: analysis.overallCompliance,
           summary: {
             totalSections: analysis.sections?.length || 0,
-            compliantSections: analysis.sections?.filter(s => 
+            compliantSections: analysis.sections?.filter(s =>
               s.complianceAnalysis?.isCompliant === true
             ).length || 0,
-            totalViolations: analysis.sections?.reduce((sum, s) => 
+            totalViolations: analysis.sections?.reduce((sum, s) =>
               sum + (s.complianceAnalysis?.violations?.length || 0), 0
             ) || 0,
           },

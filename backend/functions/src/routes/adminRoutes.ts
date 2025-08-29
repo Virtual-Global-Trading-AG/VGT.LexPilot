@@ -83,43 +83,4 @@ router.delete('/users/:userId',
   adminController.deleteUser.bind(adminController)
 );
 
-// ==========================================
-// RAG VECTOR STORE MANAGEMENT ROUTES
-// ==========================================
-
-/**
- * Index Legal Texts for RAG Vector Store
- * POST /api/admin/legal-texts/index
- */
-router.post('/legal-texts/index',
-  ValidationMiddleware.validate({ body: indexLegalTextsSchema }),
-  adminController.indexLegalTexts.bind(adminController)
-);
-
-/**
- * Search Legal Context (Admin Testing)
- * POST /api/admin/legal-texts/search
- */
-router.post('/legal-texts/search',
-  ValidationMiddleware.validate({ body: searchLegalContextSchema }),
-  adminController.searchLegalContext.bind(adminController)
-);
-
-/**
- * Get Vector Store Statistics
- * GET /api/admin/vector-store/stats
- */
-router.get('/vector-store/stats',
-  adminController.getVectorStoreStats.bind(adminController)
-);
-
-/**
- * Create and Index vectorstore (OR)
- * POST /api/admin/vector-store/create
- */
-router.post('/vectorstore/create',
-  adminController.createVectorStore.bind(adminController)
-);
-
-
 export default router;

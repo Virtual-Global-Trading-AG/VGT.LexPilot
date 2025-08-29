@@ -68,7 +68,9 @@ export class ExpressApp {
           'http://localhost:3000',
           'http://localhost:3001',
           'https://vgt-lex-pilot.vercel.app',
-          'https://vgt-lex-pilot.vercel.app/'
+          'https://vgt-lex-pilot.vercel.app/',
+          'https://lexform.ai',
+          'https://lexform.ai/'
         ];
 
         // Entwicklung: Erlaube alle Origins wenn kein Origin (z.B. mobile apps, Postman)
