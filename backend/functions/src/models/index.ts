@@ -170,11 +170,13 @@ export interface DocumentMetadata {
   uploadedAt: string;
   processedAt?: string;
   status: 'uploading' | 'uploaded' | 'processing' | 'processed' | 'error';
-  category?: 'contract' | 'nda' | 'terms_conditions' | 'other';
+  category?: 'contract' | 'nda' | 'terms_conditions' | 'contract_questions' | 'other';
   anonymizedKeywords?: AnonymizedKeyword[];
   description?: string;
   tags?: string[];
   analyses?: string[];
+  vectorStoreId?: string;
+  openaiFileId?: string;
 }
 
 export interface ContractParty {

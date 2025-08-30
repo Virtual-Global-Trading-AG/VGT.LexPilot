@@ -68,7 +68,9 @@ export class FirestoreService {
         category: metadata.category,
         anonymizedKeywords: metadata.anonymizedKeywords || [],
         description: metadata.description || '',
-        tags: metadata.tags || []
+        tags: metadata.tags || [],
+        vectorStoreId: metadata.vectorStoreId || '',
+        openaiFileId: metadata.openaiFileId || ''
       };
 
 
@@ -157,6 +159,9 @@ export class FirestoreService {
 
       // Apply filters
       let filteredDocuments = allDocuments;
+
+      // Filter out contract_questions documents by default (they should only appear in the Vertragsfragen tab)
+      filteredDocuments = filteredDocuments.filter(doc => doc.documentMetadata.category !== 'contract_questions');
 
       if (filters.status) {
         filteredDocuments = filteredDocuments.filter(doc => doc.documentMetadata.status === filters.status);
@@ -268,6 +273,43 @@ export class FirestoreService {
         tag
       });
       throw new Error('Failed to get all user documents');
+    }
+  }
+
+  /**
+   * Get contract questions documents for a user with vector store information
+   */
+  async getContractQuestionsDocuments(userId: string): Promise<UserDocument[]> {
+    try {
+      // Get user document to retrieve documents array
+      const user = await this.userRepo.findByUid(userId);
+
+      if (!user) {
+        throw new Error('User not found');
+      }
+
+      let documents: UserDocument[] = user.documents || [];
+
+      if (documents.length === 0) {
+        return [];
+      }
+
+      // Filter for contract questions documents only
+      const contractQuestionsDocuments = documents.filter(doc =>
+        doc.documentMetadata.category === 'contract_questions'
+      );
+
+      this.logger.info('Contract questions documents retrieved', {
+        userId,
+        count: contractQuestionsDocuments.length
+      });
+
+      return contractQuestionsDocuments;
+    } catch (error) {
+      this.logger.error('Failed to get contract questions documents', error as Error, {
+        userId
+      });
+      throw new Error('Failed to get contract questions documents');
     }
   }
 

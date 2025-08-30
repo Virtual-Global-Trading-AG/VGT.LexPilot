@@ -16,7 +16,7 @@ import { useDocuments, useDocumentUpload } from '@/lib/hooks/useApi';
 import { useJobMonitor } from '@/lib/contexts/JobMonitorContext';
 import { useAuthStore } from '@/lib/stores/authStore';
 import { SwissObligationAnalysisResult, SwissObligationSectionResult } from '@/types';
-import { AlertCircle, CheckCircle, ChevronDown, ChevronRight, Clock, Download, FileSearch, FileText, Filter, Plus, Scale, Search, Trash2, Upload, UserCheck, X, } from 'lucide-react';
+import { AlertCircle, CheckCircle, ChevronDown, ChevronRight, Clock, Download, FileSearch, FileText, Filter, MessageSquare, Plus, Scale, Search, Trash2, TrendingUp, Upload, UserCheck, X, } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
 import { ExternalLink } from "lucide-react";
 
@@ -94,7 +94,8 @@ const getStatusText = (status: string) => {
 // Inner component that uses the JobMonitor context
 function ContractsPageContent() {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { uploadDocumentDirect, uploading, uploadProgress, error, clearError } = useDocumentUpload();
+  const contractQuestionsFileInputRef = useRef<HTMLInputElement>(null);
+  const { uploadDocumentDirect, uploadContractForQuestions, getContractQuestionsDocuments, askDocumentQuestion, uploading, uploadProgress, error, clearError } = useDocumentUpload();
   const {
     getDocuments,
     deleteDocument,
@@ -119,6 +120,15 @@ function ContractsPageContent() {
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
   const [allUserDocuments, setAllUserDocuments] = useState<any[]>([]);
   const [allDocumentsLoading, setAllDocumentsLoading] = useState(false);
+  const [contractQuestionsDocuments, setContractQuestionsDocuments] = useState<any[]>([]);
+  const [contractQuestionsLoading, setContractQuestionsLoading] = useState(false);
+
+  // Question dialog state
+  const [questionDialogOpen, setQuestionDialogOpen] = useState(false);
+  const [selectedDocumentForQuestion, setSelectedDocumentForQuestion] = useState<any>(null);
+  const [currentQuestion, setCurrentQuestion] = useState('');
+  const [questionAnswer, setQuestionAnswer] = useState('');
+  const [askingQuestion, setAskingQuestion] = useState(false);
 
   // Function to load all user documents
   const loadAllUserDocuments = async (tag?: string) => {
@@ -132,6 +142,21 @@ function ContractsPageContent() {
       console.error('Error loading all user documents:', error);
     } finally {
       setAllDocumentsLoading(false);
+    }
+  };
+
+  // Function to load contract questions documents
+  const loadContractQuestionsDocuments = async () => {
+    setContractQuestionsLoading(true);
+    try {
+      const documents = await getContractQuestionsDocuments();
+      if (documents) {
+        setContractQuestionsDocuments(documents);
+      }
+    } catch (error) {
+      console.error('Error loading contract questions documents:', error);
+    } finally {
+      setContractQuestionsLoading(false);
     }
   };
 
@@ -169,6 +194,7 @@ function ContractsPageContent() {
   const [lawyerDecision, setLawyerDecision] = useState<'APPROVED' | 'DECLINE' | null>(null);
   const [lawyerComment, setLawyerComment] = useState('');
   const [submittingDecision, setSubmittingDecision] = useState(false);
+  const [deletingDocument, setDeletingDocument] = useState(false);
 
   const { toast } = useToast();
   const { startJobMonitoring, activeJobs } = useJobMonitor();
@@ -329,15 +355,16 @@ function ContractsPageContent() {
   };
 
 
-  // Group documents by category
-  const groupedDocuments = documents.reduce((groups: Record<string, any[]>, document) => {
-    const category = document.documentMetadata?.category || 'other';
-    if (!groups[category]) {
-      groups[category] = [];
-    }
-    groups[category].push(document);
-    return groups;
-  }, {});
+  // Group documents by category (contract_questions documents are already filtered out in the backend)
+  const groupedDocuments = documents
+    .reduce((groups: Record<string, any[]>, document) => {
+      const category = document.documentMetadata?.category || 'other';
+      if (!groups[category]) {
+        groups[category] = [];
+      }
+      groups[category].push(document);
+      return groups;
+    }, {});
 
   // Load all document analyses for the given documents
   const loadAllDocumentAnalyses = async (documents: any[]) => {
@@ -539,6 +566,122 @@ function ContractsPageContent() {
     setCategoryDialogOpen(true);
   };
 
+  const handleContractQuestionsUpload = () => {
+    if (contractQuestionsFileInputRef.current) {
+      contractQuestionsFileInputRef.current.click();
+    }
+  };
+
+  const handleContractQuestionsFileSelect = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+
+    const file = files[0];
+
+    // Validate file type
+    const allowedTypes = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'text/plain',
+      'text/markdown'
+    ];
+
+    if (!allowedTypes.includes(file.type)) {
+      toast({
+        variant: 'destructive',
+        title: 'Ungültiger Dateityp',
+        description: 'Bitte wählen Sie eine PDF-, DOCX-, DOC-, TXT- oder MD-Datei aus.'
+      });
+      return;
+    }
+
+    try {
+      const result = await uploadContractForQuestions(file, {
+        description: `Vertrag für Fragen: ${file.name}`,
+        tags: ['contract_questions', 'vector_store']
+      });
+
+      if (result) {
+        toast({
+          variant: 'success',
+          title: 'Vertrag hochgeladen',
+          description: `${file.name} wurde erfolgreich hochgeladen und ist bereit für Fragen!`
+        });
+
+        // Refresh the contract questions documents list to show the new contract
+        loadContractQuestionsDocuments();
+      }
+    } catch (err) {
+      console.error('Contract questions upload error:', err);
+      toast({
+        variant: 'destructive',
+        title: 'Upload fehlgeschlagen',
+        description: 'Fehler beim Hochladen des Vertrags für Fragen.'
+      });
+    }
+  };
+
+  // Question dialog handlers
+  const handleOpenQuestionDialog = (document: any) => {
+    if (!document.documentMetadata.vectorStoreId) {
+      toast({
+        variant: 'destructive',
+        title: 'Dokument nicht bereit',
+        description: 'Dieses Dokument ist noch nicht bereit für Fragen. Bitte warten Sie, bis die Verarbeitung abgeschlossen ist.'
+      });
+      return;
+    }
+
+    setSelectedDocumentForQuestion(document);
+    setCurrentQuestion('');
+    setQuestionAnswer('');
+    setQuestionDialogOpen(true);
+  };
+
+  const handleCloseQuestionDialog = () => {
+    setQuestionDialogOpen(false);
+    setSelectedDocumentForQuestion(null);
+    setCurrentQuestion('');
+    setQuestionAnswer('');
+  };
+
+  const handleSubmitQuestion = async () => {
+    if (!currentQuestion.trim() || !selectedDocumentForQuestion) {
+      return;
+    }
+
+    setAskingQuestion(true);
+    try {
+      const result = await askDocumentQuestion(
+        currentQuestion.trim(),
+        selectedDocumentForQuestion.documentMetadata.vectorStoreId
+      );
+
+      if (result) {
+        // Handle both structured and unstructured responses
+        if (result.is_structured && result.structured_answer) {
+          setQuestionAnswer(JSON.stringify(result.structured_answer));
+        } else {
+          setQuestionAnswer(result.answer || 'Keine Antwort erhalten');
+        }
+        toast({
+          variant: 'success',
+          title: 'Frage beantwortet',
+          description: 'Die Antwort wurde erfolgreich generiert.'
+        });
+      }
+    } catch (err) {
+      console.error('Question submission error:', err);
+      toast({
+        variant: 'destructive',
+        title: 'Fehler beim Stellen der Frage',
+        description: 'Es gab einen Fehler beim Verarbeiten Ihrer Frage.'
+      });
+    } finally {
+      setAskingQuestion(false);
+    }
+  };
+
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -571,6 +714,8 @@ function ContractsPageContent() {
   const confirmDeleteDocument = async () => {
     if (!documentToDelete) return;
 
+    setDeletingDocument(true);
+
     try {
       const success = await deleteDocument(documentToDelete.id);
       if (success) {
@@ -579,13 +724,24 @@ function ContractsPageContent() {
           title: 'Dokument gelöscht',
           description: 'Dokument wurde erfolgreich gelöscht!'
         });
-        // Refresh the documents list
-        getDocuments({
-          page: 1,
-          limit: 10,
-          sortBy: 'uploadedAt',
-          sortOrder: 'desc'
-        });
+
+        // Check if the deleted document was a contract questions document
+        const isContractQuestionsDocument = contractQuestionsDocuments.some(
+          doc => doc.documentId === documentToDelete.id
+        );
+
+        if (isContractQuestionsDocument) {
+          // Refresh the contract questions documents list
+          loadContractQuestionsDocuments();
+        } else {
+          // Refresh the main documents list
+          getDocuments({
+            page: 1,
+            limit: 10,
+            sortBy: 'uploadedAt',
+            sortOrder: 'desc'
+          });
+        }
       } else {
         toast({
           variant: 'destructive',
@@ -601,6 +757,7 @@ function ContractsPageContent() {
         description: 'Fehler beim Löschen des Dokuments.'
       });
     } finally {
+      setDeletingDocument(false);
       setDeleteDialogOpen(false);
       setDocumentToDelete(null);
     }
@@ -741,11 +898,12 @@ function ContractsPageContent() {
         )}
         {/* Contracts Tabs */}
         <Tabs defaultValue="analyzed" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="analyzed">
               {userProfile?.role === 'lawyer' ? 'Zu prüfende Dokumente' : 'Analysierte Verträge'}
             </TabsTrigger>
             <TabsTrigger value="all" onClick={() => loadAllUserDocuments('generated')}>Generierte Dokumente</TabsTrigger>
+            <TabsTrigger value="questions" onClick={() => loadContractQuestionsDocuments()}>Vertragsfragen</TabsTrigger>
           </TabsList>
 
           <TabsContent value="analyzed">
@@ -1150,6 +1308,151 @@ function ContractsPageContent() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          <TabsContent value="questions">
+            <Card>
+              <CardHeader>
+                <CardTitle>Vertragsfragen</CardTitle>
+                <div className="text-sm text-muted-foreground">
+                  Laden Sie Verträge hoch, um Fragen dazu zu stellen. Die Verträge werden in einem Vektorspeicher gespeichert für optimale Fragenbeantwortung.
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-6">
+                  {/* Upload Section */}
+                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-6">
+                    <div className="text-center">
+                      <Upload className="mx-auto h-12 w-12 text-gray-400" />
+                      <div className="mt-4">
+                        <Button onClick={handleContractQuestionsUpload} disabled={uploading}>
+                          <Upload className="mr-2 h-4 w-4"/>
+                          {uploading ? 'Wird hochgeladen...' : 'Vertrag für Fragen hochladen'}
+                        </Button>
+                      </div>
+                      <p className="mt-2 text-sm text-gray-500">
+                        Unterstützte Formate: PDF, DOCX, DOC, TXT, MD
+                      </p>
+                      {uploading && uploadProgress > 0 && (
+                        <div className="mt-4">
+                          <div className="bg-gray-200 rounded-full h-2">
+                            <div 
+                              className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                              style={{ width: `${uploadProgress}%` }}
+                            ></div>
+                          </div>
+                          <p className="text-sm text-gray-600 mt-1">{uploadProgress}% hochgeladen</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Contract Questions Documents List */}
+                  <div>
+                    <h3 className="text-lg font-medium mb-4">Hochgeladene Verträge für Fragen</h3>
+                    {contractQuestionsLoading ? (
+                      <div className="flex items-center justify-center py-8">
+                        <div className="text-sm text-muted-foreground">Lade Dokumente...</div>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {contractQuestionsDocuments.length === 0 ? (
+                          <div className="flex items-center justify-center py-8">
+                            <div className="text-sm text-muted-foreground">Noch keine Verträge für Fragen hochgeladen</div>
+                          </div>
+                        ) : (
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Dateiname</TableHead>
+                                <TableHead>Größe</TableHead>
+                                <TableHead>Hochgeladen</TableHead>
+                                <TableHead>Status</TableHead>
+                                <TableHead>Vector Store ID</TableHead>
+                                <TableHead className="w-24">Aktionen</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {contractQuestionsDocuments.map((document) => (
+                                <TableRow key={document.documentId}>
+                                  <TableCell>
+                                    <div className="space-y-1">
+                                      <div className="font-medium">{document.documentMetadata.fileName || 'Unbekannt'}</div>
+                                      <div className="text-sm text-muted-foreground">
+                                        {document.documentMetadata.description || 'Vertrag für Fragen'}
+                                      </div>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell>
+                                    <div className="text-sm">
+                                      {document.documentMetadata.size ? `${(document.documentMetadata.size / 1024 / 1024).toFixed(1)} MB` : 'Unbekannt'}
+                                    </div>
+                                  </TableCell>
+                                  <TableCell>
+                                    <div className="text-sm">
+                                      {document.documentMetadata.uploadedAt ? new Date(document.documentMetadata.uploadedAt).toLocaleDateString('de-DE') : 'Unbekannt'}
+                                    </div>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge variant="default" className="text-xs">
+                                      {document.documentMetadata.vectorStoreId ? 'Bereit für Fragen' : 'Wird verarbeitet'}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell>
+                                    <div className="text-xs font-mono">
+                                      {document.documentMetadata.vectorStoreId ? 
+                                        document.documentMetadata.vectorStoreId.substring(0, 20) + '...' : 
+                                        'N/A'
+                                      }
+                                    </div>
+                                  </TableCell>
+                                  <TableCell>
+                                    <div className="flex items-center space-x-2">
+                                      {document.downloadUrl && (
+                                        <a
+                                          href={document.downloadUrl}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="inline-flex items-center justify-center w-8 h-8 rounded-md hover:bg-muted transition-colors"
+                                          title="Dokument öffnen"
+                                        >
+                                          <ExternalLink className="h-4 w-4" />
+                                        </a>
+                                      )}
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                        onClick={() => handleOpenQuestionDialog(document)}
+                                        title="Frage stellen"
+                                        disabled={!document.documentMetadata.vectorStoreId}
+                                      >
+                                        <Search className="h-4 w-4"/>
+                                        <span className="sr-only">Frage stellen</span>
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                        onClick={() => handleDeleteDocument(document.documentId, document.documentMetadata.fileName || 'Unbekannt')}
+                                        title="Dokument löschen"
+                                      >
+                                        <Trash2 className="h-4 w-4"/>
+                                        <span className="sr-only">Dokument löschen</span>
+                                      </Button>
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
         </Tabs>
 
         {/* Extracted Text Display */}
@@ -1244,8 +1547,16 @@ function ContractsPageContent() {
             <Button
               variant="destructive"
               onClick={confirmDeleteDocument}
+              disabled={deletingDocument}
             >
-              Löschen
+              {deletingDocument ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Wird gelöscht...
+                </>
+              ) : (
+                'Löschen'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1751,6 +2062,218 @@ function ContractsPageContent() {
           </div>
         </div>
       )}
+
+      {/* Question Dialog */}
+      <Dialog open={questionDialogOpen} onOpenChange={setQuestionDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center space-x-2">
+              <Search className="h-5 w-5"/>
+              <span>Frage an Dokument stellen</span>
+            </DialogTitle>
+            <DialogDescription>
+              {selectedDocumentForQuestion && (
+                <span>
+                  Stellen Sie eine Frage zu: <strong>{selectedDocumentForQuestion.documentMetadata.fileName}</strong>
+                </span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Question Input */}
+            <div className="space-y-2">
+              <Label htmlFor="question-input">Ihre Frage</Label>
+              <Textarea
+                id="question-input"
+                placeholder="Stellen Sie hier Ihre Frage zum Dokument..."
+                value={currentQuestion}
+                onChange={(e) => setCurrentQuestion(e.target.value)}
+                className="min-h-[100px]"
+                disabled={askingQuestion}
+              />
+              <div className="text-sm text-muted-foreground">
+                {currentQuestion.length}/2000 Zeichen
+              </div>
+            </div>
+
+            {/* Submit Button */}
+            <div className="flex justify-end">
+              <Button
+                onClick={handleSubmitQuestion}
+                disabled={!currentQuestion.trim() || askingQuestion || currentQuestion.length > 2000}
+                className="min-w-[120px]"
+              >
+                {askingQuestion ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Wird bearbeitet...
+                  </>
+                ) : (
+                  'Frage stellen'
+                )}
+              </Button>
+            </div>
+
+            {/* Answer Display */}
+            {questionAnswer && (
+              <div className="space-y-2 border-t pt-4">
+                <Label>Antwort</Label>
+                {(() => {
+                  // Try to parse structured answer
+                  try {
+                    const parsedAnswer = JSON.parse(questionAnswer);
+                    if (parsedAnswer.answer && parsedAnswer.answer.summary) {
+                      // Structured answer display
+                      return (
+                        <div className="space-y-6">
+                          {/* Question Display */}
+                          <Card className="border-l-4 border-l-blue-500">
+                            <CardHeader className="pb-3">
+                              <CardTitle className="flex items-center space-x-2 text-lg">
+                                <MessageSquare className="h-5 w-5 text-blue-500" />
+                                <span>Ihre Frage</span>
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              <p className="text-sm text-muted-foreground italic">{currentQuestion}</p>
+                            </CardContent>
+                          </Card>
+
+                          {/* Summary Card with Gradient Background */}
+                          <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
+                            <CardHeader className="pb-3">
+                              <CardTitle className="flex items-center justify-between">
+                                <div className="flex items-center space-x-2">
+                                  <TrendingUp className="h-5 w-5 text-blue-600" />
+                                  <span>Zusammenfassung</span>
+                                </div>
+                                <Badge 
+                                  variant={parsedAnswer.answer.confidence >= 0.8 ? "default" : parsedAnswer.answer.confidence >= 0.6 ? "secondary" : "destructive"}
+                                  className={parsedAnswer.answer.confidence >= 0.8 ? "bg-green-500 hover:bg-green-600" : parsedAnswer.answer.confidence >= 0.6 ? "bg-yellow-500 hover:bg-yellow-600" : ""}
+                                >
+                                  {parsedAnswer.answer.confidence >= 0.8 ? "Hoch" : parsedAnswer.answer.confidence >= 0.6 ? "Mittel" : "Niedrig"} ({Math.round(parsedAnswer.answer.confidence * 100)}%)
+                                </Badge>
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              <p className="text-sm font-medium text-gray-800 mb-3">{parsedAnswer.answer.summary}</p>
+                              <div className="text-sm text-gray-600">
+                                <p>{parsedAnswer.answer.detailed_explanation}</p>
+                              </div>
+                            </CardContent>
+                          </Card>
+
+                          {/* Key Points */}
+                          {parsedAnswer.answer.key_points && parsedAnswer.answer.key_points.length > 0 && (
+                            <Card>
+                              <CardHeader className="pb-3">
+                                <CardTitle className="flex items-center space-x-2">
+                                  <CheckCircle className="h-5 w-5 text-green-600" />
+                                  <span>Wichtige Punkte</span>
+                                </CardTitle>
+                              </CardHeader>
+                              <CardContent>
+                                <ul className="space-y-2">
+                                  {parsedAnswer.answer.key_points.map((point: string, index: number) => (
+                                    <li key={index} className="flex items-start space-x-2">
+                                      <div className="w-2 h-2 bg-green-500 rounded-full mt-2 flex-shrink-0"></div>
+                                      <span className="text-sm text-gray-700">{point}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </CardContent>
+                            </Card>
+                          )}
+
+                          {/* Sources */}
+                          {parsedAnswer.sources && parsedAnswer.sources.length > 0 && (
+                            <Card>
+                              <CardHeader className="pb-3">
+                                <CardTitle className="flex items-center space-x-2">
+                                  <FileText className="h-5 w-5 text-purple-600" />
+                                  <span>Quellen ({parsedAnswer.sources.length})</span>
+                                </CardTitle>
+                              </CardHeader>
+                              <CardContent>
+                                <div className="space-y-3">
+                                  {parsedAnswer.sources.map((source: any, index: number) => (
+                                    <Card key={index} className="border border-gray-200">
+                                      <CardHeader className="pb-2">
+                                        <div className="flex items-center justify-between">
+                                          <div className="flex items-center space-x-2">
+                                            <span className="text-sm font-medium">Quelle {index + 1}</span>
+                                            <span className="text-xs text-muted-foreground">({source.context})</span>
+                                          </div>
+                                          <Badge variant="outline" className="text-xs">
+                                            Relevanz: {Math.round(source.relevance_score * 100)}%
+                                          </Badge>
+                                        </div>
+                                      </CardHeader>
+                                      <CardContent className="pt-0">
+                                        <div className="bg-gray-50 p-3 rounded-md">
+                                          <p className="text-sm text-gray-700 whitespace-pre-wrap">{source.content}</p>
+                                        </div>
+                                      </CardContent>
+                                    </Card>
+                                  ))}
+                                </div>
+                              </CardContent>
+                            </Card>
+                          )}
+                        </div>
+                      );
+                    }
+                  } catch (e) {
+                    // Fall back to plain text display
+                  }
+
+                  // Plain text fallback
+                  return (
+                    <div className="bg-gray-50 p-4 rounded-lg">
+                      <div className="whitespace-pre-wrap text-sm">
+                        {questionAnswer}
+                      </div>
+                    </div>
+                  );
+                })()}
+                <div className="flex justify-end">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      navigator.clipboard.writeText(questionAnswer);
+                      toast({
+                        variant: 'success',
+                        title: 'Antwort kopiert',
+                        description: 'Die Antwort wurde in die Zwischenablage kopiert.'
+                      });
+                    }}
+                  >
+                    Antwort kopieren
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={handleCloseQuestionDialog}>
+              Schließen
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Hidden file input for contract questions upload */}
+      <input
+        ref={contractQuestionsFileInputRef}
+        type="file"
+        accept=".pdf,.doc,.docx,.txt,.md"
+        onChange={(e) => handleContractQuestionsFileSelect(e.target.files)}
+        className="hidden"
+        style={{ display: 'none' }}
+      />
 
     </>
   );
