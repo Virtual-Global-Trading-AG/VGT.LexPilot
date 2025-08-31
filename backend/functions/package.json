@@ -22,7 +22,8 @@
     "setup:complete": "npm run setup:env && npm run build && npm run deploy",
     "dev": "npm run build:watch",
     "predeploy": "npm run lint && npm run test && npm run build",
-    "postdeploy": "npm run logs"
+    "postdeploy": "npm run logs",
+    "postinstall": "puppeteer browsers install chrome"
   },
   "engines": {
     "node": "22"
