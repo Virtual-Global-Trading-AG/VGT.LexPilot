@@ -2,9 +2,11 @@ import { HumanMessage } from '@langchain/core/messages';
 import { ChatOpenAI } from '@langchain/openai';
 import { UserDocument } from '@models/index';
 import { NextFunction, Request, Response } from 'express';
+import OpenAI from 'openai';
 import { UserRepository } from '../repositories/UserRepository';
 import { DataProtectionCheckRequest, DataProtectionService, DocumentFilters, FirestoreService, JobQueueService, PaginationOptions, SortOptions, StorageService, SwissObligationLawService, TextExtractionService } from '../services';
 import { BaseController } from './BaseController';
+import { env } from '@config/environment';
 
 interface DocumentUploadRequest {
   fileName: string;
@@ -215,12 +217,55 @@ export class DocumentController extends BaseController {
         return;
       }
 
+      // Get the document details to check if it's a contract_questions document
+      const document = user.documents.find(doc => doc.documentId === documentId);
+
       // Check if there are active analyses
       const activeAnalyses = await this.firestoreService.getActiveAnalyses(documentId);
       if (activeAnalyses.length > 0) {
         this.sendError(res, 409, 'Cannot delete document with active analyses',
           'Please stop or complete all analyses before deleting the document');
         return;
+      }
+
+      // If this is a contract_questions document with vector store, clean up OpenAI resources
+      if (document && document.documentMetadata.category === 'contract_questions') {
+        const { vectorStoreId, openaiFileId } = document.documentMetadata;
+
+        if (vectorStoreId || openaiFileId) {
+          this.logger.info('Cleaning up OpenAI resources for contract questions document', {
+            documentId,
+            vectorStoreId,
+            openaiFileId
+          });
+
+          try {
+            // Initialize OpenAI client
+            const openai = new OpenAI({
+              apiKey: env.OPENAI_API_KEY,
+            });
+
+            // Delete vector store if it exists
+            if (vectorStoreId) {
+              await openai.vectorStores.delete(vectorStoreId);
+              this.logger.info('Vector store deleted successfully', { vectorStoreId });
+            }
+
+            // Delete OpenAI file if it exists
+            if (openaiFileId) {
+              await openai.files.delete(openaiFileId);
+              this.logger.info('OpenAI file deleted successfully', { openaiFileId });
+            }
+          } catch (openaiError) {
+            this.logger.warn('Failed to cleanup OpenAI resources, continuing with document deletion', openaiError as Error);
+            this.logger.info('OpenAI cleanup context', {
+              documentId,
+              vectorStoreId,
+              openaiFileId
+            });
+            // Continue with document deletion even if OpenAI cleanup fails
+          }
+        }
       }
 
       // Delete document from storage, database, and associated Swiss obligation analyses

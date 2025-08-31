@@ -129,29 +129,29 @@ export default function SettingsPage() {
       <div className="space-y-6">
         {/* Header */}
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Einstellungen</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Einstellungen</h1>
+          <p className="text-sm sm:text-base text-muted-foreground">
             Verwalten Sie Ihr Profil, Abonnement und Benachrichtigungen
           </p>
         </div>
 
         <Tabs defaultValue="profile" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="profile" className="flex items-center space-x-2">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 h-auto p-1 gap-1 sm:gap-0">
+            <TabsTrigger value="profile" className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 py-2 sm:py-1 px-2 sm:px-3">
               <User className="h-4 w-4" />
-              <span>Benutzerprofil</span>
+              <span className="text-xs sm:text-sm">Benutzerprofil</span>
             </TabsTrigger>
-            <TabsTrigger value="subscription" className="flex items-center space-x-2">
+            <TabsTrigger value="subscription" className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 py-2 sm:py-1 px-2 sm:px-3">
               <CreditCard className="h-4 w-4" />
-              <span>Tarifübersicht</span>
+              <span className="text-xs sm:text-sm">Tarifübersicht</span>
             </TabsTrigger>
-            <TabsTrigger value="notifications" className="flex items-center space-x-2">
+            <TabsTrigger value="notifications" className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 py-2 sm:py-1 px-2 sm:px-3">
               <Bell className="h-4 w-4" />
-              <span>Benachrichtigungen</span>
+              <span className="text-xs sm:text-sm">Benachrichtigungen</span>
             </TabsTrigger>
-            <TabsTrigger value="security" className="flex items-center space-x-2">
+            <TabsTrigger value="security" className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 py-2 sm:py-1 px-2 sm:px-3">
               <Shield className="h-4 w-4" />
-              <span>Sicherheit</span>
+              <span className="text-xs sm:text-sm">Sicherheit</span>
             </TabsTrigger>
           </TabsList>
 
@@ -227,7 +227,7 @@ export default function SettingsPage() {
                       </Badge>
                     </div>
                   )}
-                  
+
                   <CardHeader className="text-center">
                     <CardTitle className="flex items-center justify-center space-x-2">
                       {plan.name === 'Pro' && <Crown className="h-5 w-5 text-yellow-500" />}
@@ -241,7 +241,7 @@ export default function SettingsPage() {
                       )}
                     </div>
                   </CardHeader>
-                  
+
                   <CardContent className="space-y-4">
                     <ul className="space-y-2">
                       {plan.features.map((feature, index) => (
@@ -251,7 +251,7 @@ export default function SettingsPage() {
                         </li>
                       ))}
                     </ul>
-                    
+
                     <Button
                       className="w-full"
                       variant={plan.current ? 'secondary' : 'default'}

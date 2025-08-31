@@ -115,10 +115,10 @@ function DashboardContent() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">
+          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">
             {isLawyer ? 'Anwalt Dashboard' : 'Dashboard'}
           </h1>
-          <p className="text-muted-foreground">
+          <p className="text-sm sm:text-base text-muted-foreground">
             {isLawyer
               ? 'Überblick über Ihre Prüfungen und Verdienste'
               : 'Überblick über Ihre Rechtsanalysen und Aktivitäten'

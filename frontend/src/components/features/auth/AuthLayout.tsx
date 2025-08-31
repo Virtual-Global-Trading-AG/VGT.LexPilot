@@ -13,7 +13,7 @@ export function AuthLayout({ children, title, subtitle }: AuthLayoutProps) {
   return (
     <div className="min-h-screen flex">
       {/* Left side - Form */}
-      <div className="flex-1 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
+      <div className="flex-1 flex flex-col justify-center py-8 sm:py-12 px-4 sm:px-6 lg:px-8">
         <div className="w-full max-w-md mx-auto">
           {children}
         </div>
@@ -42,7 +42,7 @@ export function AuthLayout({ children, title, subtitle }: AuthLayoutProps) {
               ease: 'linear'
             }}
           />
-          
+
           {/* Floating elements */}
           <motion.div
             className="absolute top-1/4 left-1/4 w-32 h-32 bg-white/10 rounded-full blur-xl"
@@ -85,7 +85,7 @@ export function AuthLayout({ children, title, subtitle }: AuthLayoutProps) {
               Nutzen Sie die Kraft der KI für präzise und effiziente 
               Rechtsdokumentanalyse.
             </p>
-            
+
             <div className="space-y-4">
               <motion.div 
                 className="flex items-center gap-3"

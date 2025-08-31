@@ -307,9 +307,137 @@ export function useDocumentUpload() {
     }
   }, [isAuthenticated]);
 
+  const uploadContractForQuestions = useCallback(async (
+    file: File,
+    metadata?: {
+      description?: string;
+      tags?: string[];
+    }
+  ): Promise<{ documentId: string; fileName: string; size: number; vectorStoreId: string } | null> => {
+    if (!isAuthenticated) {
+      setError('Not authenticated');
+      return null;
+    }
+
+    setUploading(true);
+    setError(null);
+    setUploadProgress(0);
+
+    try {
+      // Convert file to base64
+      const base64Content = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result as string;
+          // Remove the data URL prefix (e.g., "data:application/pdf;base64,")
+          const base64 = result.split(',')[1];
+          resolve(base64);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      // Simulate progress for base64 conversion
+      setUploadProgress(50);
+
+      // Upload contract for questions with vector store creation
+      const uploadResult = await apiClient.post('/contracts/upload-for-questions', {
+        fileName: file.name,
+        contentType: file.type,
+        base64Content,
+        metadata
+      });
+
+      setUploadProgress(100);
+
+      if (uploadResult.success && uploadResult.data) {
+        return uploadResult.data as { documentId: string; fileName: string; size: number; vectorStoreId: string };
+      } else {
+        setError(uploadResult.error || 'Contract upload for questions failed');
+        return null;
+      }
+    } catch (err) {
+      setError('Network error during contract upload for questions');
+      return null;
+    } finally {
+      setUploading(false);
+      setUploadProgress(0);
+    }
+  }, [isAuthenticated]);
+
+  const getContractQuestionsDocuments = useCallback(async (): Promise<any[] | null> => {
+    if (!isAuthenticated) {
+      setError('Not authenticated');
+      return null;
+    }
+
+    try {
+      const result = await apiClient.get('/contracts/contract-questions-documents');
+
+      if (result.success && result.data) {
+        return result.data.documents || [];
+      } else {
+        setError(result.error || 'Failed to fetch contract questions documents');
+        return null;
+      }
+    } catch (err) {
+      setError('Network error while fetching contract questions documents');
+      return null;
+    }
+  }, [isAuthenticated]);
+
+  const askDocumentQuestion = useCallback(async (
+    question: string,
+    vectorStoreId: string
+  ): Promise<{ 
+    question: string; 
+    answer?: string; 
+    structured_answer?: any;
+    is_structured: boolean;
+    vectorStoreId: string; 
+    timestamp: string 
+  } | null> => {
+    if (!isAuthenticated) {
+      setError('Not authenticated');
+      return null;
+    }
+
+    setUploading(true); // Reuse uploading state for loading indicator
+    setError(null);
+
+    try {
+      const result = await apiClient.post('/contracts/ask-question', {
+        question,
+        vectorStoreId
+      });
+
+      if (result.success && result.data) {
+        return result.data as { 
+          question: string; 
+          answer?: string; 
+          structured_answer?: any;
+          is_structured: boolean;
+          vectorStoreId: string; 
+          timestamp: string 
+        };
+      } else {
+        setError(result.error || 'Failed to get answer from document');
+        return null;
+      }
+    } catch (err) {
+      setError('Network error while asking document question');
+      return null;
+    } finally {
+      setUploading(false);
+    }
+  }, [isAuthenticated]);
+
   return {
     uploadDocument,
     uploadDocumentDirect,
+    uploadContractForQuestions,
+    getContractQuestionsDocuments,
+    askDocumentQuestion,
     uploading,
     uploadProgress,
     error,
