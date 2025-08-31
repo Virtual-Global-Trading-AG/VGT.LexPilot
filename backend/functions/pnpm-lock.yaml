@@ -16,7 +16,7 @@ importers:
         version: 7.16.0(encoding@0.1.13)
       '@langchain/community':
         specifier: ^0.3.50
-        version: 0.3.50(33dcebee2584f0d8076fcd0d50651e31)
+        version: 0.3.50(647dc1457c27e02ca8cc50426b8146a3)
       '@langchain/core':
         specifier: ^0.3.67
         version: 0.3.67(@opentelemetry/api@1.9.0)(openai@5.13.1(ws@8.18.3)(zod@3.25.76))
@@ -105,8 +105,8 @@ importers:
         specifier: ^1.1.0
         version: 1.1.2
       puppeteer:
-        specifier: ^24.17.0
-        version: 24.17.0(typescript@5.8.3)
+        specifier: ^24.17.1
+        version: 24.17.1(typescript@5.8.3)
       reflect-metadata:
         specifier: ^0.1.13
         version: 0.1.14
@@ -1332,8 +1332,8 @@ packages:
   '@protobufjs/utf8@1.1.0':
     resolution: {integrity: sha512-Vvn3zZrhQZkkBE8LSuW3em98c0FwgO4nxzv6OdSxPKJIEKY2bGbHn+mhGIPerzI4twdxaP8/0+06HBpwf345Lw==}
 
-  '@puppeteer/browsers@2.10.7':
-    resolution: {integrity: sha512-wHWLkQWBjHtajZeqCB74nsa/X70KheyOhySYBRmVQDJiNj0zjZR/naPCvdWjMhcG1LmjaMV/9WtTo5mpe8qWLw==}
+  '@puppeteer/browsers@2.10.8':
+    resolution: {integrity: sha512-f02QYEnBDE0p8cteNoPYHHjbDuwyfbe4cCIVlNi8/MRicIxFW4w4CfgU0LNgWEID6s06P+hRJ1qjpBLMhPRCiQ==}
     engines: {node: '>=18'}
     hasBin: true
 
@@ -4146,12 +4146,12 @@ packages:
     resolution: {integrity: sha512-vYt7UD1U9Wg6138shLtLOvdAu+8DsC/ilFtEVHcH+wydcSpNE20AfSOduf6MkRFahL5FY7X1oU7nKVZFtfq8Fg==}
     engines: {node: '>=6'}
 
-  puppeteer-core@24.17.0:
-    resolution: {integrity: sha512-RYOBKFiF+3RdwIZTEacqNpD567gaFcBAOKTT7742FdB1icXudrPI7BlZbYTYWK2wgGQUXt9Zi1Yn+D5PmCs4CA==}
+  puppeteer-core@24.17.1:
+    resolution: {integrity: sha512-Msh/kf9k1XFN0wuKiT4/npMmMWOT7kPBEUw01gWvRoKOOoz3It9TEmWjnt4Gl4eO+p73VMrvR+wfa0dm9rfxjw==}
     engines: {node: '>=18'}
 
-  puppeteer@24.17.0:
-    resolution: {integrity: sha512-CGrmJ8WgilK3nyE73k+pbxHggETPpEvL6AQ9H5JSK1RgZRGMQVJ+iO3MocGm9yBQXQJ9U5xijyLvkYXFeb0/+g==}
+  puppeteer@24.17.1:
+    resolution: {integrity: sha512-KIuX0w+0um4TUbm55yFl2WIsbgjya2BHIgW9ylTuhavtwjXCOM7lMo9oLR1jQnCxrFvm9h/Yeb+zfs4nlgntPg==}
     engines: {node: '>=18'}
     hasBin: true
 
@@ -5621,7 +5621,7 @@ snapshots:
 
   '@js-sdsl/ordered-map@4.4.2': {}
 
-  '@langchain/community@0.3.50(33dcebee2584f0d8076fcd0d50651e31)':
+  '@langchain/community@0.3.50(647dc1457c27e02ca8cc50426b8146a3)':
     dependencies:
       '@browserbasehq/stagehand': 1.14.0(@playwright/test@1.54.2)(deepmerge@4.3.1)(dotenv@16.6.1)(encoding@0.1.13)(openai@5.13.1(ws@8.18.3)(zod@3.25.76))(zod@3.25.76)
       '@ibm-cloud/watsonx-ai': 1.6.10
@@ -5654,7 +5654,7 @@ snapshots:
       pdf-parse: 1.1.1
       pg: 8.16.3
       playwright: 1.54.2
-      puppeteer: 24.17.0(typescript@5.8.3)
+      puppeteer: 24.17.1(typescript@5.8.3)
       redis: 4.7.1
       weaviate-client: 3.8.0(encoding@0.1.13)
       ws: 8.18.3
@@ -6164,7 +6164,7 @@ snapshots:
 
   '@protobufjs/utf8@1.1.0': {}
 
-  '@puppeteer/browsers@2.10.7':
+  '@puppeteer/browsers@2.10.8':
     dependencies:
       debug: 4.4.1
       extract-zip: 2.0.1
@@ -6400,7 +6400,7 @@ snapshots:
 
   '@types/puppeteer@7.0.4(typescript@5.8.3)':
     dependencies:
-      puppeteer: 24.17.0(typescript@5.8.3)
+      puppeteer: 24.17.1(typescript@5.8.3)
     transitivePeerDependencies:
       - bare-buffer
       - bufferutil
@@ -9404,9 +9404,9 @@ snapshots:
 
   punycode@2.3.1: {}
 
-  puppeteer-core@24.17.0:
+  puppeteer-core@24.17.1:
     dependencies:
-      '@puppeteer/browsers': 2.10.7
+      '@puppeteer/browsers': 2.10.8
       chromium-bidi: 8.0.0(devtools-protocol@0.0.1475386)
       debug: 4.4.1
       devtools-protocol: 0.0.1475386
@@ -9418,13 +9418,13 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  puppeteer@24.17.0(typescript@5.8.3):
+  puppeteer@24.17.1(typescript@5.8.3):
     dependencies:
-      '@puppeteer/browsers': 2.10.7
+      '@puppeteer/browsers': 2.10.8
       chromium-bidi: 8.0.0(devtools-protocol@0.0.1475386)
       cosmiconfig: 9.0.0(typescript@5.8.3)
       devtools-protocol: 0.0.1475386
-      puppeteer-core: 24.17.0
+      puppeteer-core: 24.17.1
       typed-query-selector: 2.12.0
     transitivePeerDependencies:
       - bare-buffer
