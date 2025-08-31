@@ -869,12 +869,12 @@ function ContractsPageContent() {
 
   return (
     <>
-      <div className="space-y-6">
+      <div className="space-y-4 sm:space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Verträge</h1>
-            <p className="text-muted-foreground">
+            <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Verträge</h1>
+            <p className="text-sm sm:text-base text-muted-foreground">
               Verwalten und analysieren Sie Ihre Rechtsdokumente
             </p>
           </div>
@@ -899,61 +899,61 @@ function ContractsPageContent() {
           </div>
         )}
         {/* Modern Unified Contract Management Interface */}
-        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 mb-6">
-          <div className="text-center mb-6">
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Vertragsmanagement</h2>
-            <p className="text-gray-600">Verwalten Sie Ihre Verträge, Dokumente und Fragen an einem zentralen Ort</p>
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4 sm:p-6 mb-4 sm:mb-6">
+          <div className="text-center mb-4 sm:mb-6">
+            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">Vertragsmanagement</h2>
+            <p className="text-sm sm:text-base text-gray-600">Verwalten Sie Ihre Verträge, Dokumente und Fragen an einem zentralen Ort</p>
           </div>
         </div>
 
         <Tabs defaultValue="analyzed" className="w-full">
-          <TabsList className="grid w-full grid-cols-3 h-auto p-1 bg-white border border-gray-200 rounded-xl shadow-sm">
+          <TabsList className="grid w-full grid-cols-1 sm:grid-cols-3 h-auto p-1 bg-white border border-gray-200 rounded-xl shadow-sm gap-1 sm:gap-0">
             <TabsTrigger 
               value="analyzed" 
-              className="flex flex-col items-center gap-2 py-4 px-6 data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 data-[state=active]:border-blue-200 data-[state=active]:shadow-sm rounded-lg transition-all duration-200 hover:bg-gray-50"
+              className="flex flex-col sm:flex-col items-center gap-1 sm:gap-2 py-3 sm:py-4 px-3 sm:px-6 data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 data-[state=active]:border-blue-200 data-[state=active]:shadow-sm rounded-lg transition-all duration-200 hover:bg-gray-50"
             >
-              <div className="flex items-center gap-2">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="flex items-center gap-1 sm:gap-2">
+                <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
-                <span className="font-medium">
+                <span className="font-medium text-sm sm:text-base">
                   {userProfile?.role === 'lawyer' ? 'Zu prüfende Dokumente' : 'Analysierte Verträge'}
                 </span>
               </div>
-              <span className="text-xs text-gray-500">Risikoanalyse & Compliance</span>
+              <span className="text-xs text-gray-500 hidden sm:block">Risikoanalyse & Compliance</span>
             </TabsTrigger>
             <TabsTrigger 
               value="questions" 
               onClick={() => loadContractQuestionsDocuments()}
-              className="flex flex-col items-center gap-2 py-4 px-6 data-[state=active]:bg-purple-50 data-[state=active]:text-purple-700 data-[state=active]:border-purple-200 data-[state=active]:shadow-sm rounded-lg transition-all duration-200 hover:bg-gray-50"
+              className="flex flex-col sm:flex-col items-center gap-1 sm:gap-2 py-3 sm:py-4 px-3 sm:px-6 data-[state=active]:bg-purple-50 data-[state=active]:text-purple-700 data-[state=active]:border-purple-200 data-[state=active]:shadow-sm rounded-lg transition-all duration-200 hover:bg-gray-50"
             >
-              <div className="flex items-center gap-2">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="flex items-center gap-1 sm:gap-2">
+                <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                <span className="font-medium">Vertragsfragen</span>
+                <span className="font-medium text-sm sm:text-base">Vertragsfragen</span>
               </div>
-              <span className="text-xs text-gray-500">KI-gestützte Beratung</span>
+              <span className="text-xs text-gray-500 hidden sm:block">KI-gestützte Beratung</span>
             </TabsTrigger>
             <TabsTrigger
               value="all"
               onClick={() => loadAllUserDocuments('generated')}
-              className="flex flex-col items-center gap-2 py-4 px-6 data-[state=active]:bg-green-50 data-[state=active]:text-green-700 data-[state=active]:border-green-200 data-[state=active]:shadow-sm rounded-lg transition-all duration-200 hover:bg-gray-50"
+              className="flex flex-col sm:flex-col items-center gap-1 sm:gap-2 py-3 sm:py-4 px-3 sm:px-6 data-[state=active]:bg-green-50 data-[state=active]:text-green-700 data-[state=active]:border-green-200 data-[state=active]:shadow-sm rounded-lg transition-all duration-200 hover:bg-gray-50"
             >
-              <div className="flex items-center gap-2">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="flex items-center gap-1 sm:gap-2">
+                <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
                 </svg>
-                <span className="font-medium">Generierte Dokumente</span>
+                <span className="font-medium text-sm sm:text-base">Generierte Dokumente</span>
               </div>
-              <span className="text-xs text-gray-500">Alle erstellten Dokumente</span>
+              <span className="text-xs text-gray-500 hidden sm:block">Alle erstellten Dokumente</span>
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="analyzed" className="mt-6">
             {userProfile?.role !== 'lawyer' && (
-              <div className="flex flex-row-reverse mb-6">
-                <Button onClick={handleButtonClick} disabled={uploading} className="bg-blue-600 hover:bg-blue-700 text-white shadow-sm">
+              <div className="flex justify-center sm:justify-end mb-6">
+                <Button onClick={handleButtonClick} disabled={uploading} className="bg-blue-600 hover:bg-blue-700 text-white shadow-sm w-full sm:w-auto">
                   <Upload className="mr-2 h-4 w-4"/>
                   {uploading ? 'Wird hochgeladen...' : 'Vertrag hochladen'}
                 </Button>
@@ -961,13 +961,13 @@ function ContractsPageContent() {
             )}
             <Card className="border-0 shadow-lg bg-white rounded-xl">
               <CardHeader className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-t-xl border-b border-blue-200">
-                <CardTitle className="text-xl font-semibold text-blue-900 flex items-center gap-2 pt-6">
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <CardTitle className="text-lg sm:text-xl font-semibold text-blue-900 flex items-center gap-2 pt-4 sm:pt-6">
+                  <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
                   {userProfile?.role === 'lawyer' ? 'Zu prüfende Dokumente' : 'Analysierte Verträge'}
                 </CardTitle>
-                <p className="text-sm text-blue-700 mt-1">
+                <p className="text-xs sm:text-sm text-blue-700 mt-1">
                   {userProfile?.role === 'lawyer' 
                     ? 'Bewerten Sie die automatischen Analysen und geben Sie Ihr Feedback ab' 
                     : 'Übersicht über alle analysierten Verträge mit Risikobewertung und Compliance-Status'
@@ -987,73 +987,139 @@ function ContractsPageContent() {
                     </div>
                   ) : (
                     <div className="space-y-6">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Dokument</TableHead>
-                            <TableHead>Risiko</TableHead>
-                            <TableHead>Erstellt</TableHead>
-                            <TableHead>Aktionen</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {sharedAnalyses.map((analysis) => (
-                            <TableRow 
-                              key={analysis.analysisId}
-                              className="cursor-pointer hover:bg-gray-50"
-                              onClick={() => handleAnalysisRowClick(analysis)}
-                            >
-                              <TableCell>
-                                <div className="space-y-1">
-                                  <div className="font-medium">{analysis.document.documentMetadata.fileName || analysis.document.documentMetadata.originalName || 'Unbekannt'}</div>
-                                  <div className="text-sm text-muted-foreground">
-                                    {analysis.document.documentMetadata.uploadedAt ? new Date(analysis.document.documentMetadata.uploadedAt).toLocaleDateString('de-DE') : 'Unbekannt'} • {analysis.document.documentMetadata.size ? `${(analysis.document.documentMetadata.size / 1024 / 1024).toFixed(1)} MB` : 'Unbekannt'}
+                      {/* Desktop Table View */}
+                      <div className="hidden md:block">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Dokument</TableHead>
+                              <TableHead>Risiko</TableHead>
+                              <TableHead>Erstellt</TableHead>
+                              <TableHead>Aktionen</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {sharedAnalyses.map((analysis) => (
+                              <TableRow 
+                                key={analysis.analysisId}
+                                className="cursor-pointer hover:bg-gray-50"
+                                onClick={() => handleAnalysisRowClick(analysis)}
+                              >
+                                <TableCell>
+                                  <div className="space-y-1">
+                                    <div className="font-medium">{analysis.document.documentMetadata.fileName || analysis.document.documentMetadata.originalName || 'Unbekannt'}</div>
+                                    <div className="text-sm text-muted-foreground">
+                                      {analysis.document.documentMetadata.uploadedAt ? new Date(analysis.document.documentMetadata.uploadedAt).toLocaleDateString('de-DE') : 'Unbekannt'} • {analysis.document.documentMetadata.size ? `${(analysis.document.documentMetadata.size / 1024 / 1024).toFixed(1)} MB` : 'Unbekannt'}
+                                    </div>
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant={analysis.overallCompliance?.isCompliant ? 'default' : 'destructive'} className="text-xs">
+                                    {analysis.overallCompliance?.isCompliant ? 'Konform' : 'Nicht konform'}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell>
+                                  <div className="text-sm">
+                                    {new Date(analysis.createdAt).toLocaleDateString('de-DE')}
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex items-center space-x-2">
+                                    {analysis.document?.downloadUrl && (
+                                      <a
+                                        href={analysis.document.downloadUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center justify-center w-8 h-8 rounded-md hover:bg-muted transition-colors"
+                                        title="Dokument öffnen"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        <ExternalLink className="h-4 w-4" />
+                                      </a>
+                                    )}
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleOpenLawyerDecisionModal(analysis);
+                                      }}
+                                      title="Analyse bewerten"
+                                    >
+                                      <UserCheck className="h-4 w-4"/>
+                                      <span className="sr-only">Analyse bewerten</span>
+                                    </Button>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+
+                      {/* Mobile Card View */}
+                      <div className="md:hidden space-y-4">
+                        {sharedAnalyses.map((analysis) => (
+                          <Card 
+                            key={analysis.analysisId}
+                            className="cursor-pointer hover:shadow-md transition-shadow"
+                            onClick={() => handleAnalysisRowClick(analysis)}
+                          >
+                            <CardContent className="p-4">
+                              <div className="space-y-3">
+                                <div className="flex items-start justify-between">
+                                  <div className="flex-1 min-w-0">
+                                    <div className="font-medium text-sm truncate">
+                                      {analysis.document.documentMetadata.fileName || analysis.document.documentMetadata.originalName || 'Unbekannt'}
+                                    </div>
+                                    <div className="text-xs text-muted-foreground mt-1">
+                                      {analysis.document.documentMetadata.uploadedAt ? new Date(analysis.document.documentMetadata.uploadedAt).toLocaleDateString('de-DE') : 'Unbekannt'}
+                                      {analysis.document.documentMetadata.size && ` • ${(analysis.document.documentMetadata.size / 1024 / 1024).toFixed(1)} MB`}
+                                    </div>
+                                  </div>
+                                  <Badge variant={analysis.overallCompliance?.isCompliant ? 'default' : 'destructive'} className="text-xs ml-2">
+                                    {analysis.overallCompliance?.isCompliant ? 'Konform' : 'Nicht konform'}
+                                  </Badge>
+                                </div>
+
+                                <div className="flex items-center justify-between">
+                                  <div className="text-xs text-muted-foreground">
+                                    Erstellt: {new Date(analysis.createdAt).toLocaleDateString('de-DE')}
+                                  </div>
+                                  <div className="flex items-center space-x-2">
+                                    {analysis.document?.downloadUrl && (
+                                      <a
+                                        href={analysis.document.downloadUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center justify-center w-8 h-8 rounded-md hover:bg-muted transition-colors"
+                                        title="Dokument öffnen"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        <ExternalLink className="h-4 w-4" />
+                                      </a>
+                                    )}
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleOpenLawyerDecisionModal(analysis);
+                                      }}
+                                      title="Analyse bewerten"
+                                    >
+                                      <UserCheck className="h-4 w-4"/>
+                                      <span className="sr-only">Analyse bewerten</span>
+                                    </Button>
                                   </div>
                                 </div>
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant={analysis.overallCompliance?.isCompliant ? 'default' : 'destructive'} className="text-xs">
-                                  {analysis.overallCompliance?.isCompliant ? 'Konform' : 'Nicht konform'}
-                                </Badge>
-                              </TableCell>
-                              <TableCell>
-                                <div className="text-sm">
-                                  {new Date(analysis.createdAt).toLocaleDateString('de-DE')}
-                                </div>
-                              </TableCell>
-                              <TableCell>
-                                <div className="flex items-center space-x-2">
-                                  {analysis.document?.downloadUrl && (
-                                    <a
-                                      href={analysis.document.downloadUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="inline-flex items-center justify-center w-8 h-8 rounded-md hover:bg-muted transition-colors"
-                                      title="Dokument öffnen"
-                                      onClick={(e) => e.stopPropagation()}
-                                    >
-                                      <ExternalLink className="h-4 w-4" />
-                                    </a>
-                                  )}
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleOpenLawyerDecisionModal(analysis);
-                                    }}
-                                    title="Analyse bewerten"
-                                  >
-                                    <UserCheck className="h-4 w-4"/>
-                                    <span className="sr-only">Analyse bewerten</span>
-                                  </Button>
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
                     </div>
                   )
                 ) : (
@@ -1097,88 +1163,255 @@ function ContractsPageContent() {
                             {getCategoryBadge(category)}
                             <span className="text-sm text-muted-foreground">({categoryDocuments.length})</span>
                           </div>
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead>Titel</TableHead>
-                                <TableHead>Risiko</TableHead>
-                                <TableHead>Hochgeladen</TableHead>
-                                <TableHead>Status Anwalt</TableHead>
-                                <TableHead>Aktionen</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {categoryDocuments.map((document) => (
-                                <React.Fragment key={document.documentId}>
-                                  <TableRow 
-                                    className={`border-b ${documentAnalyses[document.documentId] && !isDocumentAnalysisRunning(document.documentId) ? 'cursor-pointer hover:bg-gray-50' : ''}`}
-                                    onClick={() => documentAnalyses[document.documentId] && !isDocumentAnalysisRunning(document.documentId) && handleAnalysisRowClick(documentAnalyses[document.documentId][0])}
-                                  >
-                                    <TableCell>
-                                      <div className="space-y-1">
-                                        <div className="font-medium">{document.documentMetadata.fileName || document.documentMetadata.originalName || 'Unbekannt'}</div>
-                                        <div className="text-sm text-muted-foreground">
-                                          {document.documentMetadata.uploadedAt ? new Date(document.documentMetadata.uploadedAt).toLocaleDateString('de-DE') : 'Unbekannt'} • {document.documentMetadata.size ? `${(document.documentMetadata.size / 1024 / 1024).toFixed(1)} MB` : 'Unbekannt'}
-                                          {isDocumentAnalysisRunning(document.documentId) ? (
-                                            <span className="ml-2">
-                                              • <span className="text-blue-600 flex items-center"><Clock className="h-3 w-3 mr-1 animate-spin"/>Analyse läuft</span>
-                                            </span>
-                                          ) : documentAnalyses[document.documentId] && (
-                                            <span className="ml-2">
-                                              • <span className="text-blue-600">Obligationenanalyse: {Math.round((documentAnalyses[document.documentId][0].overallCompliance?.complianceScore || 0) * 100)}% konform</span>
-                                            </span>
-                                          )}
+                          {/* Desktop Table View */}
+                          <div className="hidden md:block">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>Titel</TableHead>
+                                  <TableHead>Risiko</TableHead>
+                                  <TableHead>Hochgeladen</TableHead>
+                                  <TableHead>Status Anwalt</TableHead>
+                                  <TableHead>Aktionen</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {categoryDocuments.map((document) => (
+                                  <React.Fragment key={document.documentId}>
+                                    <TableRow 
+                                      className={`border-b ${documentAnalyses[document.documentId] && !isDocumentAnalysisRunning(document.documentId) ? 'cursor-pointer hover:bg-gray-50' : ''}`}
+                                      onClick={() => documentAnalyses[document.documentId] && !isDocumentAnalysisRunning(document.documentId) && handleAnalysisRowClick(documentAnalyses[document.documentId][0])}
+                                    >
+                                      <TableCell>
+                                        <div className="space-y-1">
+                                          <div className="font-medium">{document.documentMetadata.fileName || document.documentMetadata.originalName || 'Unbekannt'}</div>
+                                          <div className="text-sm text-muted-foreground">
+                                            {document.documentMetadata.uploadedAt ? new Date(document.documentMetadata.uploadedAt).toLocaleDateString('de-DE') : 'Unbekannt'} • {document.documentMetadata.size ? `${(document.documentMetadata.size / 1024 / 1024).toFixed(1)} MB` : 'Unbekannt'}
+                                            {isDocumentAnalysisRunning(document.documentId) ? (
+                                              <span className="ml-2">
+                                                • <span className="text-blue-600 flex items-center"><Clock className="h-3 w-3 mr-1 animate-spin"/>Analyse läuft</span>
+                                              </span>
+                                            ) : documentAnalyses[document.documentId] && (
+                                              <span className="ml-2">
+                                                • <span className="text-blue-600">Obligationenanalyse: {Math.round((documentAnalyses[document.documentId][0].overallCompliance?.complianceScore || 0) * 100)}% konform</span>
+                                              </span>
+                                            )}
+                                          </div>
                                         </div>
-                                      </div>
-                                    </TableCell>
-                                    <TableCell>
-                                      {!isDocumentAnalysisRunning(document.documentId) && documentAnalyses[document.documentId] ? (
-                                        <Badge variant={documentAnalyses[document.documentId][0].overallCompliance?.isCompliant ? 'default' : 'destructive'} className="text-xs">
-                                          {documentAnalyses[document.documentId][0].overallCompliance?.isCompliant ? 'Konform' : 'Nicht konform'}
-                                        </Badge>
-                                      ) : (
-                                        <span className="text-sm text-muted-foreground">-</span>
-                                      )}
-                                    </TableCell>
-                                    <TableCell>
-                                      <div className="text-sm">
-                                        {document.documentMetadata.uploadedAt ? new Date(document.documentMetadata.uploadedAt).toLocaleDateString('de-DE') : 'Unbekannt'}
-                                      </div>
-                                    </TableCell>
-                                    <TableCell>
-                                      {documentAnalyses[document.documentId]?.length > 0 && documentAnalyses[document.documentId][0].lawyerStatus && documentAnalyses[document.documentId][0].lawyerStatus !== 'UNCHECKED' ? (
-                                        <div className="flex items-center space-x-2">
-                                          <Badge 
-                                            variant={
-                                              documentAnalyses[document.documentId][0].lawyerStatus === 'APPROVED' ? 'default' :
-                                              documentAnalyses[document.documentId][0].lawyerStatus === 'DECLINE' ? 'destructive' :
-                                              'secondary'
-                                            } 
-                                            className="text-xs"
-                                          >
-                                            {translateLawyerStatus(documentAnalyses[document.documentId][0].lawyerStatus)}
+                                      </TableCell>
+                                      <TableCell>
+                                        {!isDocumentAnalysisRunning(document.documentId) && documentAnalyses[document.documentId] ? (
+                                          <Badge variant={documentAnalyses[document.documentId][0].overallCompliance?.isCompliant ? 'default' : 'destructive'} className="text-xs">
+                                            {documentAnalyses[document.documentId][0].overallCompliance?.isCompliant ? 'Konform' : 'Nicht konform'}
                                           </Badge>
-                                          {documentAnalyses[document.documentId][0].lawyerStatus === 'DECLINE' && documentAnalyses[document.documentId][0].lawyerComment && (
+                                        ) : (
+                                          <span className="text-sm text-muted-foreground">-</span>
+                                        )}
+                                      </TableCell>
+                                      <TableCell>
+                                        <div className="text-sm">
+                                          {document.documentMetadata.uploadedAt ? new Date(document.documentMetadata.uploadedAt).toLocaleDateString('de-DE') : 'Unbekannt'}
+                                        </div>
+                                      </TableCell>
+                                      <TableCell>
+                                        {documentAnalyses[document.documentId]?.length > 0 && documentAnalyses[document.documentId][0].lawyerStatus && documentAnalyses[document.documentId][0].lawyerStatus !== 'UNCHECKED' ? (
+                                          <div className="flex items-center space-x-2">
+                                            <Badge 
+                                              variant={
+                                                documentAnalyses[document.documentId][0].lawyerStatus === 'APPROVED' ? 'default' :
+                                                documentAnalyses[document.documentId][0].lawyerStatus === 'DECLINE' ? 'destructive' :
+                                                'secondary'
+                                              } 
+                                              className="text-xs"
+                                            >
+                                              {translateLawyerStatus(documentAnalyses[document.documentId][0].lawyerStatus)}
+                                            </Badge>
+                                            {documentAnalyses[document.documentId][0].lawyerStatus === 'DECLINE' && documentAnalyses[document.documentId][0].lawyerComment && (
+                                              <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-6 w-6 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  handleOpenLawyerCommentModal(documentAnalyses[document.documentId][0].lawyerComment || '');
+                                                }}
+                                                title="Kommentar anzeigen"
+                                              >
+                                                <FileText className="h-3 w-3"/>
+                                                <span className="sr-only">Kommentar anzeigen</span>
+                                              </Button>
+                                            )}
+                                          </div>
+                                        ) : (
+                                          <span className="text-sm text-muted-foreground">-</span>
+                                        )}
+                                      </TableCell>
+                                      <TableCell>
+                                        <div className="flex items-center space-x-2">
+                                          {document.downloadUrl && (
+                                            <a
+                                              href={document.downloadUrl}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="inline-flex items-center justify-center w-8 h-8 rounded-md hover:bg-muted transition-colors"
+                                              title="PDF öffnen"
+                                            >
+                                              <ExternalLink className="h-4 w-4" />
+                                            </a>
+                                          )}
+                                          {/* Just for debugging */}
+                                          {false && (
                                             <Button
                                               variant="ghost"
                                               size="sm"
-                                              className="h-6 w-6 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                              className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
                                               onClick={(e) => {
                                                 e.stopPropagation();
-                                                handleOpenLawyerCommentModal(documentAnalyses[document.documentId][0].lawyerComment || '');
+                                                handleExtractText(document.documentId, document.documentMetadata.fileName || 'Unbekannt');
                                               }}
-                                              title="Kommentar anzeigen"
+                                              disabled={extractingText}
                                             >
-                                              <FileText className="h-3 w-3"/>
-                                              <span className="sr-only">Kommentar anzeigen</span>
+                                              <FileSearch className="h-4 w-4"/>
+                                              <span className="sr-only">Text extrahieren</span>
                                             </Button>
                                           )}
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleSwissObligationAnalysis(document.documentId, document.documentMetadata.fileName || 'Unbekannt');
+                                            }}
+                                            disabled={swissAnalysisLoading === document.documentId || isDocumentAnalysisRunning(document.documentId)}
+                                            title={
+                                              isDocumentAnalysisRunning(document.documentId)
+                                                ? 'Obligationenanalyse läuft bereits - bitte warten Sie bis zum Abschluss'
+                                                : documentAnalyses[document.documentId]?.length > 0
+                                                ? 'Obligationenanalyse erneut ausführen (überschreibt bestehende Analyse)'
+                                                : 'Schweizer Obligationenrecht-Analyse starten'
+                                            }
+                                          >
+                                            <Scale className="h-4 w-4"/>
+                                            <span className="sr-only">
+                                              {documentAnalyses[document.documentId]?.length > 0
+                                                ? 'Analyse erneut ausführen'
+                                                : 'Schweizer Obligationenrecht-Analyse'
+                                              }
+                                            </span>
+                                          </Button>
+                                          {/* Only show lawyer review button if document has analysis and lawyerStatus is UNCHECKED */}
+                                          {documentAnalyses[document.documentId]?.length > 0 && 
+                                           documentAnalyses[document.documentId][0].lawyerStatus === 'UNCHECKED' && (
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleStartLawyerReview(document.documentId, document.documentMetadata.fileName || 'Unbekannt');
+                                              }}
+                                              title="Kontrolle durch Anwalt starten"
+                                            >
+                                              <UserCheck className="h-4 w-4"/>
+                                              <span className="sr-only">Kontrolle durch Anwalt starten</span>
+                                            </Button>
+                                          )}
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleDeleteDocument(document.documentId, document.documentMetadata.fileName || 'Unbekannt');
+                                            }}
+                                          >
+                                            <Trash2 className="h-4 w-4"/>
+                                            <span className="sr-only">Löschen</span>
+                                          </Button>
                                         </div>
-                                      ) : (
-                                        <span className="text-sm text-muted-foreground">-</span>
-                                      )}
-                                    </TableCell>
-                                    <TableCell>
+                                      </TableCell>
+                                    </TableRow>
+                                  </React.Fragment>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+
+                          {/* Mobile Card View */}
+                          <div className="md:hidden space-y-3">
+                            {categoryDocuments.map((document) => (
+                              <Card 
+                                key={document.documentId}
+                                className={`${documentAnalyses[document.documentId] && !isDocumentAnalysisRunning(document.documentId) ? 'cursor-pointer hover:shadow-md' : ''} transition-shadow`}
+                                onClick={() => documentAnalyses[document.documentId] && !isDocumentAnalysisRunning(document.documentId) && handleAnalysisRowClick(documentAnalyses[document.documentId][0])}
+                              >
+                                <CardContent className="p-4">
+                                  <div className="space-y-3">
+                                    {/* Header with title and risk badge */}
+                                    <div className="flex items-start justify-between">
+                                      <div className="flex-1 min-w-0">
+                                        <div className="font-medium text-sm truncate">
+                                          {document.documentMetadata.fileName || document.documentMetadata.originalName || 'Unbekannt'}
+                                        </div>
+                                        <div className="text-xs text-muted-foreground mt-1">
+                                          {document.documentMetadata.uploadedAt ? new Date(document.documentMetadata.uploadedAt).toLocaleDateString('de-DE') : 'Unbekannt'}
+                                          {document.documentMetadata.size && ` • ${(document.documentMetadata.size / 1024 / 1024).toFixed(1)} MB`}
+                                        </div>
+                                      </div>
+                                      {!isDocumentAnalysisRunning(document.documentId) && documentAnalyses[document.documentId] ? (
+                                        <Badge variant={documentAnalyses[document.documentId][0].overallCompliance?.isCompliant ? 'default' : 'destructive'} className="text-xs ml-2">
+                                          {documentAnalyses[document.documentId][0].overallCompliance?.isCompliant ? 'Konform' : 'Nicht konform'}
+                                        </Badge>
+                                      ) : null}
+                                    </div>
+
+                                    {/* Analysis status */}
+                                    {isDocumentAnalysisRunning(document.documentId) ? (
+                                      <div className="flex items-center text-xs text-blue-600">
+                                        <Clock className="h-3 w-3 mr-1 animate-spin"/>
+                                        Analyse läuft
+                                      </div>
+                                    ) : documentAnalyses[document.documentId] && (
+                                      <div className="text-xs text-blue-600">
+                                        Obligationenanalyse: {Math.round((documentAnalyses[document.documentId][0].overallCompliance?.complianceScore || 0) * 100)}% konform
+                                      </div>
+                                    )}
+
+                                    {/* Lawyer status */}
+                                    {documentAnalyses[document.documentId]?.length > 0 && documentAnalyses[document.documentId][0].lawyerStatus && documentAnalyses[document.documentId][0].lawyerStatus !== 'UNCHECKED' && (
+                                      <div className="flex items-center space-x-2">
+                                        <span className="text-xs text-muted-foreground">Anwalt:</span>
+                                        <Badge 
+                                          variant={
+                                            documentAnalyses[document.documentId][0].lawyerStatus === 'APPROVED' ? 'default' :
+                                            documentAnalyses[document.documentId][0].lawyerStatus === 'DECLINE' ? 'destructive' :
+                                            'secondary'
+                                          } 
+                                          className="text-xs"
+                                        >
+                                          {translateLawyerStatus(documentAnalyses[document.documentId][0].lawyerStatus)}
+                                        </Badge>
+                                        {documentAnalyses[document.documentId][0].lawyerStatus === 'DECLINE' && documentAnalyses[document.documentId][0].lawyerComment && (
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-6 w-6 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleOpenLawyerCommentModal(documentAnalyses[document.documentId][0].lawyerComment || '');
+                                            }}
+                                            title="Kommentar anzeigen"
+                                          >
+                                            <FileText className="h-3 w-3"/>
+                                            <span className="sr-only">Kommentar anzeigen</span>
+                                          </Button>
+                                        )}
+                                      </div>
+                                    )}
+
+                                    {/* Action buttons */}
+                                    <div className="flex items-center justify-between pt-2 border-t border-gray-100">
                                       <div className="flex items-center space-x-2">
                                         {document.downloadUrl && (
                                           <a
@@ -1187,25 +1420,10 @@ function ContractsPageContent() {
                                             rel="noopener noreferrer"
                                             className="inline-flex items-center justify-center w-8 h-8 rounded-md hover:bg-muted transition-colors"
                                             title="PDF öffnen"
+                                            onClick={(e) => e.stopPropagation()}
                                           >
                                             <ExternalLink className="h-4 w-4" />
                                           </a>
-                                        )}
-                                        {/* Just for debugging */}
-                                        {false && (
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              handleExtractText(document.documentId, document.documentMetadata.fileName || 'Unbekannt');
-                                            }}
-                                            disabled={extractingText}
-                                          >
-                                            <FileSearch className="h-4 w-4"/>
-                                            <span className="sr-only">Text extrahieren</span>
-                                          </Button>
                                         )}
                                         <Button
                                           variant="ghost"
@@ -1249,25 +1467,26 @@ function ContractsPageContent() {
                                             <span className="sr-only">Kontrolle durch Anwalt starten</span>
                                           </Button>
                                         )}
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleDeleteDocument(document.documentId, document.documentMetadata.fileName || 'Unbekannt');
-                                          }}
-                                        >
-                                          <Trash2 className="h-4 w-4"/>
-                                          <span className="sr-only">Löschen</span>
-                                        </Button>
                                       </div>
-                                    </TableCell>
-                                  </TableRow>
-                                </React.Fragment>
-                              ))}
-                            </TableBody>
-                          </Table>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleDeleteDocument(document.documentId, document.documentMetadata.fileName || 'Unbekannt');
+                                        }}
+                                        title="Löschen"
+                                      >
+                                        <Trash2 className="h-4 w-4"/>
+                                        <span className="sr-only">Löschen</span>
+                                      </Button>
+                                    </div>
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            ))}
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -1280,13 +1499,13 @@ function ContractsPageContent() {
           <TabsContent value="all" className="mt-6">
             <Card className="border-0 shadow-lg bg-white rounded-xl">
               <CardHeader className="bg-gradient-to-r from-green-50 to-green-100 rounded-t-xl border-b border-green-200">
-                <CardTitle className="text-xl font-semibold text-green-900 flex items-center gap-2 pt-6">
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <CardTitle className="text-lg sm:text-xl font-semibold text-green-900 flex items-center gap-2 pt-4 sm:pt-6">
+                  <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
                   </svg>
                   Generierte Dokumente
                 </CardTitle>
-                <p className="text-sm text-green-700 mt-1">
+                <p className="text-xs sm:text-sm text-green-700 mt-1">
                   Alle von der KI generierten und bearbeiteten Dokumente in chronologischer Übersicht
                 </p>
               </CardHeader>
@@ -1370,11 +1589,11 @@ function ContractsPageContent() {
             </Card>
           </TabsContent>
           <TabsContent value="questions" className="mt-6">
-            <div className="flex flex-row-reverse mb-6">
+            <div className="flex justify-center sm:justify-end mb-6">
               <Button
                 onClick={handleContractQuestionsUpload}
                 disabled={uploading}
-                className="bg-purple-600 hover:bg-purple-700 text-white shadow-sm"
+                className="bg-purple-600 hover:bg-purple-700 text-white shadow-sm w-full sm:w-auto"
               >
                 <Upload className="mr-2 h-4 w-4"/>
                 {uploading ? 'Wird hochgeladen...' : 'Vertrag hochladen'}
@@ -1382,13 +1601,13 @@ function ContractsPageContent() {
             </div>
             <Card className="border-0 shadow-lg bg-white rounded-xl">
               <CardHeader className="bg-gradient-to-r from-purple-50 to-purple-100 rounded-t-xl border-b border-purple-200">
-                <CardTitle className="text-xl font-semibold text-purple-900 flex items-center gap-2 pt-6">
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <CardTitle className="text-lg sm:text-xl font-semibold text-purple-900 flex items-center gap-2 pt-4 sm:pt-6">
+                  <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                   Vertragsfragen
                 </CardTitle>
-                <p className="text-sm text-purple-700 mt-1">
+                <p className="text-xs sm:text-sm text-purple-700 mt-1">
                   Laden Sie Verträge hoch, um KI-gestützte Fragen dazu zu stellen.
                 </p>
               </CardHeader>

@@ -300,8 +300,8 @@ export default function GeneratorPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Generator</h1>
-            <p className="text-muted-foreground">
+            <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Generator</h1>
+            <p className="text-sm sm:text-base text-muted-foreground">
               Erstellen Sie rechtssichere Verträge mit KI-Unterstützung
             </p>
           </div>

@@ -16,7 +16,7 @@ import { useAuthStore } from "@/lib/stores/authStore"
 export function LoginForm() {
   const router = useRouter()
   const { signIn, loading, error, clearError } = useAuthStore()
-  
+
   const [formData, setFormData] = useState({
     email: "",
     password: ""
@@ -26,19 +26,19 @@ export function LoginForm() {
 
   const validateForm = () => {
     const errors: Record<string, string> = {}
-    
+
     if (!formData.email) {
       errors.email = "E-Mail ist erforderlich"
     } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
       errors.email = "Ungültige E-Mail-Adresse"
     }
-    
+
     if (!formData.password) {
       errors.password = "Passwort ist erforderlich"
     } else if (formData.password.length < 6) {
       errors.password = "Passwort muss mindestens 6 Zeichen lang sein"
     }
-    
+
     setValidationErrors(errors)
     return Object.keys(errors).length === 0
   }
@@ -46,9 +46,9 @@ export function LoginForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     clearError()
-    
+
     if (!validateForm()) return
-    
+
     const success = await signIn(formData.email, formData.password)
     if (success) {
       router.push("/dashboard")
@@ -71,29 +71,29 @@ export function LoginForm() {
       className="w-full max-w-md mx-auto"
     >
       <Card className="border-0 shadow-2xl bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm">
-        <CardHeader className="space-y-1 text-center pb-8">
+        <CardHeader className="space-y-1 text-center pb-6 sm:pb-8">
           <motion.div
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
             transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
-            className="mx-auto w-12 h-12 bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl flex items-center justify-center mb-4"
+            className="mx-auto w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl flex items-center justify-center mb-3 sm:mb-4"
           >
-            <Lock className="w-6 h-6 text-white" />
+            <Lock className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
           </motion.div>
-          <CardTitle className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 dark:from-white dark:to-gray-300 bg-clip-text text-transparent">
+          <CardTitle className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 dark:from-white dark:to-gray-300 bg-clip-text text-transparent">
             Willkommen zurück
           </CardTitle>
-          <CardDescription className="text-gray-600 dark:text-gray-400">
+          <CardDescription className="text-sm sm:text-base text-gray-600 dark:text-gray-400">
             Melden Sie sich in Ihrem LexForm-Account an
           </CardDescription>
         </CardHeader>
 
-        <CardContent className="space-y-6">
+        <CardContent className="space-y-4 sm:space-y-6">
           {error && (
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="mb-4"
+              className="mb-3 sm:mb-4"
             >
               <Alert variant="destructive">
                 <AlertDescription>{error}</AlertDescription>
@@ -101,7 +101,7 @@ export function LoginForm() {
             </motion.div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
             <motion.div
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
@@ -119,7 +119,7 @@ export function LoginForm() {
                   placeholder="ihre@email.com"
                   value={formData.email}
                   onChange={(e) => handleInputChange("email", e.target.value)}
-                  className={`pl-10 h-12 transition-all duration-200 ${
+                  className={`pl-10 h-10 sm:h-12 transition-all duration-200 ${
                     validationErrors.email ? "border-red-500 focus:ring-red-500" : ""
                   }`}
                   disabled={loading}
@@ -153,7 +153,7 @@ export function LoginForm() {
                   placeholder="Ihr Passwort"
                   value={formData.password}
                   onChange={(e) => handleInputChange("password", e.target.value)}
-                  className={`pl-10 pr-10 h-12 transition-all duration-200 ${
+                  className={`pl-10 pr-10 h-10 sm:h-12 transition-all duration-200 ${
                     validationErrors.password ? "border-red-500 focus:ring-red-500" : ""
                   }`}
                   disabled={loading}
@@ -199,7 +199,7 @@ export function LoginForm() {
             >
               <Button
                 type="submit"
-                className="w-full h-12 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98]"
+                className="w-full h-10 sm:h-12 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98]"
                 disabled={loading}
               >
                 {loading ? (
