@@ -22,7 +22,8 @@
     "setup:complete": "npm run setup:env && npm run build && npm run deploy",
     "dev": "npm run build:watch",
     "predeploy": "npm run lint && npm run test && npm run build",
-    "postdeploy": "npm run logs"
+    "postdeploy": "npm run logs",
+    "postinstall": "puppeteer browsers install chrome"
   },
   "engines": {
     "node": "22"
@@ -60,7 +61,7 @@
     "pdf-parse": "^1.1.1",
     "pdfkit": "^0.17.1",
     "pinecone-client": "^1.1.0",
-    "puppeteer": "^24.17.0",
+    "puppeteer": "^24.17.1",
     "reflect-metadata": "^0.1.13",
     "socket.io": "^4.7.4",
     "tiktoken": "^1.0.15",
