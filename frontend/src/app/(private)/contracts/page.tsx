@@ -118,6 +118,7 @@ function ContractsPageContent() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [documentToDelete, setDocumentToDelete] = useState<{ id: string, name: string } | null>(null);
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
+  const [contractQuestionsDialogOpen, setContractQuestionsDialogOpen] = useState(false);
   const [allUserDocuments, setAllUserDocuments] = useState<any[]>([]);
   const [allDocumentsLoading, setAllDocumentsLoading] = useState(false);
   const [contractQuestionsDocuments, setContractQuestionsDocuments] = useState<any[]>([]);
@@ -567,15 +568,16 @@ function ContractsPageContent() {
   };
 
   const handleContractQuestionsUpload = () => {
-    if (contractQuestionsFileInputRef.current) {
-      contractQuestionsFileInputRef.current.click();
-    }
+    setContractQuestionsDialogOpen(true);
   };
 
   const handleContractQuestionsFileSelect = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
 
     const file = files[0];
+
+    // Close the dialog immediately after file selection
+    setContractQuestionsDialogOpen(false);
 
     // Validate file type
     const allowedTypes = [
@@ -896,30 +898,81 @@ function ContractsPageContent() {
             </Button>
           </div>
         )}
-        {/* Contracts Tabs */}
+        {/* Modern Unified Contract Management Interface */}
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 mb-6">
+          <div className="text-center mb-6">
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Vertragsmanagement</h2>
+            <p className="text-gray-600">Verwalten Sie Ihre Verträge, Dokumente und Fragen an einem zentralen Ort</p>
+          </div>
+        </div>
+
         <Tabs defaultValue="analyzed" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="analyzed">
-              {userProfile?.role === 'lawyer' ? 'Zu prüfende Dokumente' : 'Analysierte Verträge'}
+          <TabsList className="grid w-full grid-cols-3 h-auto p-1 bg-white border border-gray-200 rounded-xl shadow-sm">
+            <TabsTrigger 
+              value="analyzed" 
+              className="flex flex-col items-center gap-2 py-4 px-6 data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 data-[state=active]:border-blue-200 data-[state=active]:shadow-sm rounded-lg transition-all duration-200 hover:bg-gray-50"
+            >
+              <div className="flex items-center gap-2">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span className="font-medium">
+                  {userProfile?.role === 'lawyer' ? 'Zu prüfende Dokumente' : 'Analysierte Verträge'}
+                </span>
+              </div>
+              <span className="text-xs text-gray-500">Risikoanalyse & Compliance</span>
             </TabsTrigger>
-            <TabsTrigger value="all" onClick={() => loadAllUserDocuments('generated')}>Generierte Dokumente</TabsTrigger>
-            <TabsTrigger value="questions" onClick={() => loadContractQuestionsDocuments()}>Vertragsfragen</TabsTrigger>
+            <TabsTrigger 
+              value="questions" 
+              onClick={() => loadContractQuestionsDocuments()}
+              className="flex flex-col items-center gap-2 py-4 px-6 data-[state=active]:bg-purple-50 data-[state=active]:text-purple-700 data-[state=active]:border-purple-200 data-[state=active]:shadow-sm rounded-lg transition-all duration-200 hover:bg-gray-50"
+            >
+              <div className="flex items-center gap-2">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="font-medium">Vertragsfragen</span>
+              </div>
+              <span className="text-xs text-gray-500">KI-gestützte Beratung</span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="all"
+              onClick={() => loadAllUserDocuments('generated')}
+              className="flex flex-col items-center gap-2 py-4 px-6 data-[state=active]:bg-green-50 data-[state=active]:text-green-700 data-[state=active]:border-green-200 data-[state=active]:shadow-sm rounded-lg transition-all duration-200 hover:bg-gray-50"
+            >
+              <div className="flex items-center gap-2">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                </svg>
+                <span className="font-medium">Generierte Dokumente</span>
+              </div>
+              <span className="text-xs text-gray-500">Alle erstellten Dokumente</span>
+            </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="analyzed">
+          <TabsContent value="analyzed" className="mt-6">
             {userProfile?.role !== 'lawyer' && (
-              <div className="flex flex-row-reverse mt-4 mb-4">
-                <Button onClick={handleButtonClick} disabled={uploading}>
+              <div className="flex flex-row-reverse mb-6">
+                <Button onClick={handleButtonClick} disabled={uploading} className="bg-blue-600 hover:bg-blue-700 text-white shadow-sm">
                   <Upload className="mr-2 h-4 w-4"/>
                   {uploading ? 'Wird hochgeladen...' : 'Vertrag hochladen'}
                 </Button>
               </div>
             )}
-            <Card>
-              <CardHeader>
-                <CardTitle>
+            <Card className="border-0 shadow-lg bg-white rounded-xl">
+              <CardHeader className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-t-xl border-b border-blue-200">
+                <CardTitle className="text-xl font-semibold text-blue-900 flex items-center gap-2 pt-6">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
                   {userProfile?.role === 'lawyer' ? 'Zu prüfende Dokumente' : 'Analysierte Verträge'}
                 </CardTitle>
+                <p className="text-sm text-blue-700 mt-1">
+                  {userProfile?.role === 'lawyer' 
+                    ? 'Bewerten Sie die automatischen Analysen und geben Sie Ihr Feedback ab' 
+                    : 'Übersicht über alle analysierten Verträge mit Risikobewertung und Compliance-Status'
+                  }
+                </p>
               </CardHeader>
               <CardContent>
                 {userProfile?.role === 'lawyer' ? (
@@ -1224,10 +1277,18 @@ function ContractsPageContent() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="all">
-            <Card>
-              <CardHeader>
-                <CardTitle>Dokumente</CardTitle>
+          <TabsContent value="all" className="mt-6">
+            <Card className="border-0 shadow-lg bg-white rounded-xl">
+              <CardHeader className="bg-gradient-to-r from-green-50 to-green-100 rounded-t-xl border-b border-green-200">
+                <CardTitle className="text-xl font-semibold text-green-900 flex items-center gap-2 pt-6">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                  </svg>
+                  Generierte Dokumente
+                </CardTitle>
+                <p className="text-sm text-green-700 mt-1">
+                  Alle von der KI generierten und bearbeiteten Dokumente in chronologischer Übersicht
+                </p>
               </CardHeader>
               <CardContent>
                 {allDocumentsLoading ? (
@@ -1308,44 +1369,31 @@ function ContractsPageContent() {
               </CardContent>
             </Card>
           </TabsContent>
-
-          <TabsContent value="questions">
-            <Card>
-              <CardHeader>
-                <CardTitle>Vertragsfragen</CardTitle>
-                <div className="text-sm text-muted-foreground">
-                  Laden Sie Verträge hoch, um Fragen dazu zu stellen. Die Verträge werden in einem Vektorspeicher gespeichert für optimale Fragenbeantwortung.
-                </div>
+          <TabsContent value="questions" className="mt-6">
+            <div className="flex flex-row-reverse mb-6">
+              <Button
+                onClick={handleContractQuestionsUpload}
+                disabled={uploading}
+                className="bg-purple-600 hover:bg-purple-700 text-white shadow-sm"
+              >
+                <Upload className="mr-2 h-4 w-4"/>
+                {uploading ? 'Wird hochgeladen...' : 'Vertrag hochladen'}
+              </Button>
+            </div>
+            <Card className="border-0 shadow-lg bg-white rounded-xl">
+              <CardHeader className="bg-gradient-to-r from-purple-50 to-purple-100 rounded-t-xl border-b border-purple-200">
+                <CardTitle className="text-xl font-semibold text-purple-900 flex items-center gap-2 pt-6">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Vertragsfragen
+                </CardTitle>
+                <p className="text-sm text-purple-700 mt-1">
+                  Laden Sie Verträge hoch, um KI-gestützte Fragen dazu zu stellen.
+                </p>
               </CardHeader>
               <CardContent>
                 <div className="space-y-6">
-                  {/* Upload Section */}
-                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-6">
-                    <div className="text-center">
-                      <Upload className="mx-auto h-12 w-12 text-gray-400" />
-                      <div className="mt-4">
-                        <Button onClick={handleContractQuestionsUpload} disabled={uploading}>
-                          <Upload className="mr-2 h-4 w-4"/>
-                          {uploading ? 'Wird hochgeladen...' : 'Vertrag für Fragen hochladen'}
-                        </Button>
-                      </div>
-                      <p className="mt-2 text-sm text-gray-500">
-                        Unterstützte Formate: PDF, DOCX, DOC, TXT, MD
-                      </p>
-                      {uploading && uploadProgress > 0 && (
-                        <div className="mt-4">
-                          <div className="bg-gray-200 rounded-full h-2">
-                            <div 
-                              className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
-                              style={{ width: `${uploadProgress}%` }}
-                            ></div>
-                          </div>
-                          <p className="text-sm text-gray-600 mt-1">{uploadProgress}% hochgeladen</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
                   {/* Contract Questions Documents List */}
                   <div>
                     <h3 className="text-lg font-medium mb-4">Hochgeladene Verträge für Fragen</h3>
@@ -1367,7 +1415,6 @@ function ContractsPageContent() {
                                 <TableHead>Größe</TableHead>
                                 <TableHead>Hochgeladen</TableHead>
                                 <TableHead>Status</TableHead>
-                                <TableHead>Vector Store ID</TableHead>
                                 <TableHead className="w-24">Aktionen</TableHead>
                               </TableRow>
                             </TableHeader>
@@ -1396,14 +1443,6 @@ function ContractsPageContent() {
                                     <Badge variant="default" className="text-xs">
                                       {document.documentMetadata.vectorStoreId ? 'Bereit für Fragen' : 'Wird verarbeitet'}
                                     </Badge>
-                                  </TableCell>
-                                  <TableCell>
-                                    <div className="text-xs font-mono">
-                                      {document.documentMetadata.vectorStoreId ? 
-                                        document.documentMetadata.vectorStoreId.substring(0, 20) + '...' : 
-                                        'N/A'
-                                      }
-                                    </div>
                                   </TableCell>
                                   <TableCell>
                                     <div className="flex items-center space-x-2">
@@ -1692,6 +1731,58 @@ function ContractsPageContent() {
             type="file"
             accept=".pdf,.doc,.docx"
             onChange={(e) => handleFileSelect(e.target.files)}
+            className="hidden"
+          />
+        </DialogContent>
+      </Dialog>
+
+      {/* Contract Questions Upload Dialog */}
+      <Dialog open={contractQuestionsDialogOpen} onOpenChange={setContractQuestionsDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Vertrag für Fragen hochladen</DialogTitle>
+            <DialogDescription>
+              Wählen Sie einen Vertrag aus, um KI-gestützte Fragen dazu stellen zu können.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {/* File Selection Area */}
+            <div className="space-y-2">
+              <Label>Datei auswählen</Label>
+              <div
+                className="flex flex-col items-center justify-center space-y-4 text-center border-2 border-dashed rounded-lg p-6 transition-colors border-purple-200 bg-purple-50 hover:border-purple-300"
+              >
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-purple-100">
+                  <FileText className="h-6 w-6 text-purple-600"/>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-purple-900">Vertrag auswählen</p>
+                  <p className="text-xs text-purple-600">PDF, DOCX, DOC, TXT, MD (max. 50MB)</p>
+                </div>
+                <Button
+                  size="sm"
+                  onClick={() => contractQuestionsFileInputRef.current?.click()}
+                  className="bg-purple-600 hover:bg-purple-700 text-white"
+                >
+                  Datei auswählen
+                </Button>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setContractQuestionsDialogOpen(false)}
+              disabled={uploading}
+            >
+              Abbrechen
+            </Button>
+          </DialogFooter>
+          <input
+            ref={contractQuestionsFileInputRef}
+            type="file"
+            accept=".pdf,.doc,.docx,.txt,.md"
+            onChange={(e) => handleContractQuestionsFileSelect(e.target.files)}
             className="hidden"
           />
         </DialogContent>
