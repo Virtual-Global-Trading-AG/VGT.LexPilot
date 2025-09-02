@@ -37,9 +37,6 @@ export function AuthGuard({
         <div className="min-h-screen flex items-center justify-center">
           <div className="text-center space-y-4">
             <Spinner size="lg" />
-            <p className="text-gray-600 dark:text-gray-400">
-              Authentifizierung wird überprüft...
-            </p>
           </div>
         </div>
       )
