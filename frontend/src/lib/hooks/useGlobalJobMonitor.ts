@@ -74,13 +74,9 @@ export function useGlobalJobMonitor() {
         clearInterval(pollIntervalRef.current);
       }
 
-      const interval = getGlobalPollInterval();
+      const interval = 1000;
       pollIntervalRef.current = setInterval(() => {
         checkForActiveJobs();
-        // Restart with new interval if it changed
-        if (getGlobalPollInterval() !== interval) {
-          setupGlobalPolling();
-        }
       }, interval);
     };
 
@@ -269,7 +265,7 @@ export function useGlobalJobMonitor() {
     const now = Date.now();
 
     // Throttle API calls - don't check more than once every 5 seconds
-    if (now - lastCheckRef.current < 5000) {
+    if (now - lastCheckRef.current < 1000) {
       return;
     }
 

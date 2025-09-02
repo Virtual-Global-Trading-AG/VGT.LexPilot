@@ -40,8 +40,7 @@ const contractTemplates = [
     description: 'Standardvorlage für Geheimhaltungsvereinbarungen (Comming Soon)',
     category: 'Geschäft',
     icon: Shield,
-    selected: false,
-    disabled: true,
+    selected: false
   },
   {
     id: 'terms',
