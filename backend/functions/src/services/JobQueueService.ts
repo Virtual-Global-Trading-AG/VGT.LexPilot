@@ -370,7 +370,7 @@ export class JobQueueService {
       await progressCallback(20, 'Erstelle Prompt für ChatGPT...');
 
       // Generate contract using the existing service
-      const result = await contractGenerationService.generateContract({
+      const result = await contractGenerationService.generateContractDocument({
         contractType,
         parameters,
         userId

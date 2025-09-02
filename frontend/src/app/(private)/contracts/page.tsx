@@ -1639,82 +1639,84 @@ function ContractsPageContent() {
                             <div className="text-sm text-muted-foreground">Noch keine Verträge für Fragen hochgeladen</div>
                           </div>
                         ) : (
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead>Dateiname</TableHead>
-                                <TableHead>Größe</TableHead>
-                                <TableHead>Hochgeladen</TableHead>
-                                <TableHead>Status</TableHead>
-                                <TableHead className="w-24">Aktionen</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {contractQuestionsDocuments.map((document) => (
-                                <TableRow key={document.documentId}>
-                                  <TableCell>
-                                    <div className="space-y-1">
-                                      <div className="font-medium">{document.documentMetadata.fileName || 'Unbekannt'}</div>
-                                      <div className="text-sm text-muted-foreground">
-                                        {document.documentMetadata.description || 'Vertrag für Fragen'}
-                                      </div>
-                                    </div>
-                                  </TableCell>
-                                  <TableCell>
-                                    <div className="text-sm">
-                                      {document.documentMetadata.size ? `${(document.documentMetadata.size / 1024 / 1024).toFixed(1)} MB` : 'Unbekannt'}
-                                    </div>
-                                  </TableCell>
-                                  <TableCell>
-                                    <div className="text-sm">
-                                      {document.documentMetadata.uploadedAt ? new Date(document.documentMetadata.uploadedAt).toLocaleDateString('de-DE') : 'Unbekannt'}
-                                    </div>
-                                  </TableCell>
-                                  <TableCell>
-                                    <Badge variant="default" className="text-xs">
-                                      {document.documentMetadata.vectorStoreId ? 'Bereit für Fragen' : 'Wird verarbeitet'}
-                                    </Badge>
-                                  </TableCell>
-                                  <TableCell>
-                                    <div className="flex items-center space-x-2">
-                                      {document.downloadUrl && (
-                                        <a
-                                          href={document.downloadUrl}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="inline-flex items-center justify-center w-8 h-8 rounded-md hover:bg-muted transition-colors"
-                                          title="Dokument öffnen"
-                                        >
-                                          <ExternalLink className="h-4 w-4" />
-                                        </a>
-                                      )}
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                                        onClick={() => handleOpenQuestionDialog(document)}
-                                        title="Frage stellen"
-                                        disabled={!document.documentMetadata.vectorStoreId}
-                                      >
-                                        <Search className="h-4 w-4"/>
-                                        <span className="sr-only">Frage stellen</span>
-                                      </Button>
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
-                                        onClick={() => handleDeleteDocument(document.documentId, document.documentMetadata.fileName || 'Unbekannt')}
-                                        title="Dokument löschen"
-                                      >
-                                        <Trash2 className="h-4 w-4"/>
-                                        <span className="sr-only">Dokument löschen</span>
-                                      </Button>
-                                    </div>
-                                  </TableCell>
+                          <div className="space-y-4">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>Dateiname</TableHead>
+                                  <TableHead>Größe</TableHead>
+                                  <TableHead>Hochgeladen</TableHead>
+                                  <TableHead>Status</TableHead>
+                                  <TableHead className="w-24">Aktionen</TableHead>
                                 </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
+                              </TableHeader>
+                              <TableBody>
+                                {contractQuestionsDocuments.map((document) => (
+                                  <TableRow key={document.documentId}>
+                                    <TableCell>
+                                      <div className="space-y-1">
+                                        <div className="font-medium">{document.documentMetadata.fileName || 'Unbekannt'}</div>
+                                        <div className="text-sm text-muted-foreground">
+                                          {document.documentMetadata.description || 'Vertrag für Fragen'}
+                                        </div>
+                                      </div>
+                                    </TableCell>
+                                    <TableCell>
+                                      <div className="text-sm">
+                                        {document.documentMetadata.size ? `${(document.documentMetadata.size / 1024 / 1024).toFixed(1)} MB` : 'Unbekannt'}
+                                      </div>
+                                    </TableCell>
+                                    <TableCell>
+                                      <div className="text-sm">
+                                        {document.documentMetadata.uploadedAt ? new Date(document.documentMetadata.uploadedAt).toLocaleDateString('de-DE') : 'Unbekannt'}
+                                      </div>
+                                    </TableCell>
+                                    <TableCell>
+                                      <Badge variant="default" className="text-xs">
+                                        {document.documentMetadata.vectorStoreId ? 'Bereit für Fragen' : 'Wird verarbeitet'}
+                                      </Badge>
+                                    </TableCell>
+                                    <TableCell>
+                                      <div className="flex items-center space-x-2">
+                                        {document.downloadUrl && (
+                                          <a
+                                            href={document.downloadUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="inline-flex items-center justify-center w-8 h-8 rounded-md hover:bg-muted transition-colors"
+                                            title="Dokument öffnen"
+                                          >
+                                            <ExternalLink className="h-4 w-4" />
+                                          </a>
+                                        )}
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          className="h-9 px-3 text-blue-600 hover:text-blue-700 hover:bg-blue-50 border-blue-200 font-medium"
+                                          onClick={() => handleOpenQuestionDialog(document)}
+                                          title="Frage zu diesem Dokument stellen"
+                                          disabled={!document.documentMetadata.vectorStoreId}
+                                        >
+                                          <MessageSquare className="h-4 w-4 mr-1"/>
+                                          <span className="text-xs">Frage stellen</span>
+                                        </Button>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                          onClick={() => handleDeleteDocument(document.documentId, document.documentMetadata.fileName || 'Unbekannt')}
+                                          title="Dokument löschen"
+                                        >
+                                          <Trash2 className="h-4 w-4"/>
+                                          <span className="sr-only">Dokument löschen</span>
+                                        </Button>
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
                         )}
                       </div>
                     )}
