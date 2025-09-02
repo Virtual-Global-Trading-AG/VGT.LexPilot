@@ -370,7 +370,7 @@ export class JobQueueService {
       await progressCallback(20, 'Erstelle Prompt für ChatGPT...');
 
       // Generate contract using the existing service
-      const result = await contractGenerationService.generateContract({
+      const result = await contractGenerationService.generateContractDocument({
         contractType,
         parameters,
         userId
@@ -453,11 +453,6 @@ export class JobQueueService {
         createdAt: new Date()
       };
 
-      await this.firestoreService.db
-        .collection('notifications')
-        .doc(notification.id)
-        .set(notification);
-
       this.logger.info('Job completion notification sent', { jobId, userId: job.userId });
     } catch (error) {
       this.logger.error('Failed to send job completion notification', error as Error, { jobId });
@@ -515,11 +510,6 @@ export class JobQueueService {
         read: false,
         createdAt: new Date()
       };
-
-      await this.firestoreService.db
-        .collection('notifications')
-        .doc(notification.id)
-        .set(notification);
 
       this.logger.info('Job error notification sent', { jobId, userId: job.userId, error });
     } catch (err) {

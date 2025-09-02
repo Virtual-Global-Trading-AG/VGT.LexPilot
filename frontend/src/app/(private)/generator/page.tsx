@@ -37,11 +37,10 @@ const contractTemplates = [
   {
     id: 'nda',
     title: 'Geheimhaltungsvereinbarung (NDA)',
-    description: 'Standardvorlage für Geheimhaltungsvereinbarungen (Comming Soon)',
+    description: 'Standardvorlage für Geheimhaltungsvereinbarungen',
     category: 'Geschäft',
     icon: Shield,
-    selected: false,
-    disabled: true,
+    selected: false
   },
   {
     id: 'terms',
@@ -70,10 +69,13 @@ export default function GeneratorPage() {
   const [formData, setFormData] = useState<Record<string, any>>({
     // NDA fields
     disclosingParty: '',
+    disclosingPartyAddress: '',
     receivingParty: '',
+    receivingPartyAddress: '',
     purpose: '',
     duration: 5,
-    mutualNDA: false,
+    penalty: '',
+    jurisdiction: '',
     // Employment fields
     employeeName: '',
     employerName: '',
@@ -111,10 +113,13 @@ export default function GeneratorPage() {
     setFormData({
       // NDA fields
       disclosingParty: '',
+      disclosingPartyAddress: '',
       receivingParty: '',
+      receivingPartyAddress: '',
       purpose: '',
       duration: 5,
-      mutualNDA: false,
+      penalty: '',
+      jurisdiction: '',
       // Employment fields
       employeeName: '',
       employerName: '',
@@ -152,10 +157,13 @@ export default function GeneratorPage() {
     setFormData({
       // NDA fields
       disclosingParty: '',
+      disclosingPartyAddress: '',
       receivingParty: '',
+      receivingPartyAddress: '',
       purpose: '',
       duration: 5,
-      mutualNDA: false,
+      penalty: '',
+      jurisdiction: '',
       // Employment fields
       employeeName: '',
       employerName: '',
@@ -185,10 +193,13 @@ export default function GeneratorPage() {
     if (selectedTemplate === 'nda') {
       return {
         disclosingParty: formData.disclosingParty,
+        disclosingPartyAddress: formData.disclosingPartyAddress,
         receivingParty: formData.receivingParty,
+        receivingPartyAddress: formData.receivingPartyAddress,
         purpose: formData.purpose,
-        duration: formData.duration,
-        mutualNDA: formData.mutualNDA
+        duration: `${formData.duration} Jahre`,
+        penalty: formData.penalty,
+        jurisdiction: formData.jurisdiction
       };
     } else if (selectedTemplate === 'employment') {
       return {
@@ -226,8 +237,12 @@ export default function GeneratorPage() {
 
     if (selectedTemplate === 'nda') {
       if (!formData.disclosingParty) missingFields.push('Offenlegende Partei');
+      if (!formData.disclosingPartyAddress) missingFields.push('Adresse der offenlegenden Partei');
       if (!formData.receivingParty) missingFields.push('Empfangende Partei');
+      if (!formData.receivingPartyAddress) missingFields.push('Adresse der empfangenden Partei');
       if (!formData.purpose) missingFields.push('Zweck der Offenlegung');
+      if (!formData.penalty) missingFields.push('Vertragsstrafe');
+      if (!formData.jurisdiction) missingFields.push('Gerichtsstand');
     } else if (selectedTemplate === 'employment') {
       if (!formData.employeeName) missingFields.push('Name des Arbeitnehmers');
       if (!formData.employerName) missingFields.push('Name des Arbeitgebers');
@@ -271,6 +286,7 @@ export default function GeneratorPage() {
         resetFormData();
 
         toast({
+          variant: "default",
           title: 'Vertragsgenerierung gestartet',
           description: 'Die Generierung wurde gestartet. Sie werden benachrichtigt, wenn der Vertrag fertig ist.'
         });
@@ -402,6 +418,26 @@ export default function GeneratorPage() {
                           />
                         </div>
                       </div>
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label htmlFor="disclosingPartyAddress">Adresse der offenlegenden Partei *</Label>
+                          <Input
+                            id="disclosingPartyAddress"
+                            placeholder="Vollständige Adresse der offenlegenden Partei"
+                            value={formData.disclosingPartyAddress}
+                            onChange={(e) => handleInputChange('disclosingPartyAddress', e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="receivingPartyAddress">Adresse der empfangenden Partei *</Label>
+                          <Input
+                            id="receivingPartyAddress"
+                            placeholder="Vollständige Adresse der empfangenden Partei"
+                            value={formData.receivingPartyAddress}
+                            onChange={(e) => handleInputChange('receivingPartyAddress', e.target.value)}
+                          />
+                        </div>
+                      </div>
                     </div>
 
                     <div className="space-y-2">
@@ -417,7 +453,7 @@ export default function GeneratorPage() {
 
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                       <div className="space-y-2">
-                        <Label htmlFor="duration">Dauer der Geheimhaltung (Jahre)</Label>
+                        <Label htmlFor="duration">Dauer der Geheimhaltung (Jahre) *</Label>
                         <Input
                           id="duration"
                           type="number"
@@ -426,18 +462,25 @@ export default function GeneratorPage() {
                           onChange={(e) => handleInputChange('duration', parseInt(e.target.value) || 5)}
                         />
                       </div>
-                      <div className="space-y-2 flex items-center">
-                        <input
-                          id="mutualNDA"
-                          type="checkbox"
-                          checked={formData.mutualNDA}
-                          onChange={(e) => handleInputChange('mutualNDA', e.target.checked)}
-                          className="rounded border-gray-300"
+                      <div className="space-y-2">
+                        <Label htmlFor="penalty">Vertragsstrafe *</Label>
+                        <Input
+                          id="penalty"
+                          placeholder="z.B. CHF 50,000"
+                          value={formData.penalty}
+                          onChange={(e) => handleInputChange('penalty', e.target.value)}
                         />
-                        <Label htmlFor="mutualNDA" className="ml-2">
-                          Gegenseitige Geheimhaltung
-                        </Label>
                       </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="jurisdiction">Gerichtsstand *</Label>
+                      <Input
+                        id="jurisdiction"
+                        placeholder="z.B. Zürich"
+                        value={formData.jurisdiction}
+                        onChange={(e) => handleInputChange('jurisdiction', e.target.value)}
+                      />
                     </div>
                   </div>
                 )}

@@ -76,11 +76,25 @@ export class ContractGenerationService {
             description: 'Name der Partei, die Informationen offenlegt'
           },
           {
+            id: 'disclosingPartyAddress',
+            name: 'Adresse der offenlegenden Partei',
+            type: 'text',
+            required: true,
+            description: 'Vollständige Adresse der offenlegenden Partei'
+          },
+          {
             id: 'receivingParty',
             name: 'Empfangende Partei',
             type: 'text',
             required: true,
             description: 'Name der Partei, die Informationen empfängt'
+          },
+          {
+            id: 'receivingPartyAddress',
+            name: 'Adresse der empfangenden Partei',
+            type: 'text',
+            required: true,
+            description: 'Vollständige Adresse der empfangenden Partei'
           },
           {
             id: 'purpose',
@@ -91,19 +105,24 @@ export class ContractGenerationService {
           },
           {
             id: 'duration',
-            name: 'Dauer der Geheimhaltung (Jahre)',
-            type: 'number',
+            name: 'Dauer der Geheimhaltung',
+            type: 'text',
             required: true,
-            description: 'Dauer der Geheimhaltungspflicht in Jahren',
-            defaultValue: 5
+            description: 'Dauer der Geheimhaltungspflicht (z.B. "5 Jahre")'
           },
           {
-            id: 'mutualNDA',
-            name: 'Gegenseitige Geheimhaltung',
-            type: 'boolean',
-            required: false,
-            description: 'Sollen beide Parteien zur Geheimhaltung verpflichtet werden?',
-            defaultValue: false
+            id: 'penalty',
+            name: 'Vertragsstrafe',
+            type: 'text',
+            required: true,
+            description: 'Vertragsstrafe bei Verletzung der Geheimhaltung'
+          },
+          {
+            id: 'jurisdiction',
+            name: 'Gerichtsstand',
+            type: 'text',
+            required: true,
+            description: 'Zuständiger Gerichtsstand'
           }
         ]
       },
@@ -240,9 +259,9 @@ export class ContractGenerationService {
   }
 
   /**
-   * Generate a contract using ChatGPT
+   * Generate a contract document using ChatGPT
    */
-  async generateContract(
+  async generateContractDocument(
     request: ContractGenerationRequest
   ): Promise<{ downloadUrl: string; documentId: string }> {
     const documentId = uuidv4();
@@ -264,16 +283,24 @@ export class ContractGenerationService {
         throw new Error(`Unbekannter Vertragstyp: ${request.contractType}`);
       }
 
-      // Create the prompt for ChatGPT
-      const prompt = this.createContractPrompt(request.parameters);
+      let templateVectorStoreId: string = '';
+      if (contractType.id === 'employment') {
+        templateVectorStoreId = 'vs_68adafe6de688191b7728412c74f57b1';
+      } else if (contractType.id === 'nda') {
+        templateVectorStoreId = 'vs_68b703fa4da48191a55d4e7f7bf2de00';
+      } else {
+        throw new Error(`Keine Vorlage für Vertragstyp: ${request.contractType}`);
+      }
 
-      const response = await this.openai.responses.create({
-        model: env.OPENAI_CHAT_MODEL,
-        service_tier: 'priority',
-        input: [
-          {
-            role: 'system',
-            content: `Du bist ein spezialisierter Schweizer Arbeitsrechtanwalt mit Expertise in OR Art. 319-362. 
+      // Create the prompt for ChatGPT
+      const prompt = this.createContractPrompt(request.contractType, request.parameters);
+
+      // Create system prompt based on contract type
+      let systemPrompt: string;
+      if (contractType.id === 'nda') {
+        systemPrompt = `Du bist ein erfahrener Vertragsgenerator.`;
+      } else if (contractType.id === 'employment') {
+        systemPrompt = `Du bist ein spezialisierter Schweizer Arbeitsrechtanwalt mit Expertise in OR Art. 319-362. 
 Erstelle AUSSCHLIESSLICH rechtsgültige Arbeitsverträge nach schweizerischem Recht.
 
 RECHTLICHE VALIDIERUNG:
@@ -295,7 +322,18 @@ AUSGABE:
 - KEINE Empfehlungen, Hinweise oder Kommentare im Dokument
 - KEINE rechtlichen Bewertungen sichtbar
 - NUR den fertigen Vertrag ausgeben
-- Verwende ausschließlich rechtsgültige OR-konforme Klauseln`
+- Verwende ausschließlich rechtsgültige OR-konforme Klauseln`;
+      } else {
+        throw new Error(`Unbekannter Vertragstyp: ${contractType.id}`);
+      }
+
+      const response = await this.openai.responses.create({
+        model: env.OPENAI_CHAT_MODEL,
+        service_tier: 'priority',
+        input: [
+          {
+            role: 'system',
+            content: systemPrompt
           },
           {
             role: 'user',
@@ -305,7 +343,7 @@ AUSGABE:
         tools: [
           {
             type: 'file_search',
-            vector_store_ids: ['vs_68adafe6de688191b7728412c74f57b1', 'vs_68a726b561888191ab1eeeb15e5c34e8']
+            vector_store_ids: [templateVectorStoreId, 'vs_68a726b561888191ab1eeeb15e5c34e8']
           },
         ],
       });
@@ -319,10 +357,16 @@ AUSGABE:
       }
 
       // Generate PDF from markdown
-      const pdfBuffer = await this.generatePDF(markdownContent, request.parameters, asWord);
+      const pdfBuffer = await this.generatePDF(markdownContent, request.parameters, contractType.id, asWord);
 
       // Create filename for the PDF
-      const fileName = `${contractType.name.replace(/[^a-zA-Z0-9]/g, '_')}_${request.parameters['employerName'].replace(/[^a-zA-Z0-9]/g, '_')}.${asWord ? 'docx' : 'pdf'}`;
+      let fileNameSuffix: string;
+      if (request.contractType === 'nda') {
+        fileNameSuffix = `${request.parameters['disclosingParty']?.replace(/[^a-zA-Z0-9]/g, '_') || 'NDA'}`;
+      } else {
+        fileNameSuffix = `${request.parameters['employerName']?.replace(/[^a-zA-Z0-9]/g, '_') || 'Contract'}`;
+      }
+      const fileName = `${contractType.name.replace(/[^a-zA-Z0-9]/g, '_')}_${fileNameSuffix}.${asWord ? 'docx' : 'pdf'}`;
 
       // Save PDF to Firebase Storage at /users/userId/documents/generated/documentId
       const base64Content = pdfBuffer.toString('base64');
@@ -369,31 +413,15 @@ AUSGABE:
   }
 
   /**
-   * Create a prompt for ChatGPT based on contract type and parameters
+   * Get common HTML formatting instructions for all contract types
    */
-  private createContractPrompt(parameters: Record<string, any>): string {
-    // Format startDate from ISO string (YYYY-MM-DD) to Swiss format (DD.MM.YYYY)
-    let formattedStartDate = parameters['startDate'];
-    if (parameters['startDate']) {
-      const date = new Date(parameters['startDate']);
-      if (!isNaN(date.getTime())) {
-        const day = date.getDate().toString().padStart(2, '0');
-        const month = (date.getMonth() + 1).toString().padStart(2, '0');
-        const year = date.getFullYear();
-        formattedStartDate = `${day}.${month}.${year}`;
-      }
-    }
-
-    let prompt = `Erstelle einen rechtsgültigen Schweizer Arbeitsvertrag nach OR Art. 319-362 mit der angehängten Vertragsvorlage.
-
-WICHTIG: Gib NUR den fertigen Arbeitsvertrag aus - keine Empfehlungen, Hinweise oder Kommentare!
-
-- Gib das Ergebnis als vollständiges HTML-Dokument zurück.
+  private getHtmlFormattingInstructions(): string {
+    return `- Gib das Ergebnis als vollständiges HTML-Dokument zurück.
 - Verwende <!DOCTYPE html>, <html>, <head>, <meta charset="UTF-8">, <style>, <body>.
 - Nutze ein modernes, aber seriöses, SCHLICHTES Layout (keine farbigen Hintergründe, keine Boxen, keine Schatten).
 - Kein Markdown, nur valides HTML.
 - Erwähne nie die Vertragsvorlagen oder die Artikel des OR im Vertragstext.
-- Verwende ausschließlich Abschnitte aus der angeängten Vorlage, die du mit den vorliegenden Vertragsdaten befüllen kannst.
+- Verwende ausschließlich Abschnitte aus der angehängten Vorlage, die du mit den vorliegenden Vertragsdaten befüllen kannst.
 - Abschnitte nummerieren
 - Struktur: Jeder Abschnitt ist ein <section class="section"> mit <h2> und den zugehörigen Inhalten (Absätze, Listen, dl/dt/dd).
 - Abschnitte sollen NICHT über Seiten hinweg getrennt werden. Wenn ein Abschnitt länger als eine Seite ist, soll zumindest die Überschrift mit dem ersten Absatz zusammenbleiben.
@@ -469,7 +497,54 @@ dd { margin-left: 0; }
   .section { page-break-inside: avoid; }
 }
 
-Achte auf juristisch korrekte Formulierungen gemäß OR und keine Platzhaltertexte. Nimm genau die Angaben aus den Vertragsdaten unten. Verwende keine anderen Daten.
+Achte auf juristisch korrekte Formulierungen gemäß OR und keine Platzhaltertexte. Nimm genau die Angaben aus den Vertragsdaten unten. Verwende keine anderen Daten.`;
+  }
+
+  /**
+   * Create a prompt for ChatGPT based on contract type and parameters
+   */
+  private createContractPrompt(contractType: string, parameters: Record<string, any>): string {
+    if (contractType === 'nda') {
+      // NDA-specific prompt
+      return `Du bist ein Vertragsgenerator für Vertraulichkeitsvereinbarungen (NDA) nach schweizerischem Recht (OR ist bekannt aus dem Vector Store)
+Verwende die Standardvorlage (bekannt aus dem Vector Store) und ersetze die Platzhalter durch die folgenden Daten:
+
+- Offenlegende Partei: ${parameters.disclosingParty}
+- Adresse der offenlegenden Partei: ${parameters.disclosingPartyAddress}
+- Empfangende Partei: ${parameters.receivingParty}
+- Adresse der empfangenden Partei: ${parameters.receivingPartyAddress}
+- Zweck: ${parameters.purpose}
+- Dauer der Geheimhaltung: ${parameters.duration}
+- Vertragsstrafe: ${parameters.penalty}
+- Gerichtsstand: ${parameters.jurisdiction}
+
+WICHTIG: 
+- Gib NUR die fertige Vertraulichkeitsvereinbarung aus - keine Empfehlungen, Hinweise oder Kommentare!
+- Erfinde keine zusätzlichen Abschnitte, verwende nur die aus der Vorlage.
+
+${this.getHtmlFormattingInstructions()}
+
+Erstelle eine saubere, professionelle Vertraulichkeitsvereinbarung ohne zusätzliche Kommentare oder Empfehlungen.`;
+    }
+
+    // Employment contract logic (existing)
+    // Format startDate from ISO string (YYYY-MM-DD) to Swiss format (DD.MM.YYYY)
+    let formattedStartDate = parameters['startDate'];
+    if (parameters['startDate']) {
+      const date = new Date(parameters['startDate']);
+      if (!isNaN(date.getTime())) {
+        const day = date.getDate().toString().padStart(2, '0');
+        const month = (date.getMonth() + 1).toString().padStart(2, '0');
+        const year = date.getFullYear();
+        formattedStartDate = `${day}.${month}.${year}`;
+      }
+    }
+
+    let prompt = `Erstelle einen rechtsgültigen Schweizer Arbeitsvertrag nach OR Art. 319-362 mit der angehängten Vertragsvorlage.
+
+WICHTIG: Gib NUR den fertigen Arbeitsvertrag aus - keine Empfehlungen, Hinweise oder Kommentare!
+
+${this.getHtmlFormattingInstructions()}
 
 Vertragsdaten:
 - Arbeitgeber: ${parameters['employerName']}
@@ -483,7 +558,7 @@ Vertragsdaten:
 - Arbeitspensum: ${parameters['workingHours'] || 100}%
 - Ferien: ${parameters['vacationDays'] || 25} Tage
 - Probezeit: ${parameters['probationPeriod'] || 3} Monate
-    
+
 Erstelle einen sauberen, professionellen Arbeitsvertrag ohne zusätzliche Kommentare oder Empfehlungen.`;
 
     return prompt;
@@ -493,7 +568,7 @@ Erstelle einen sauberen, professionellen Arbeitsvertrag ohne zusätzliche Kommen
   /**
    * Generate PDF from markdown content
    */
-  public async generatePDF(content: string, parameters: Record<string, any>, asWord: boolean = false): Promise<Buffer> {
+  public async generatePDF(content: string, parameters: Record<string, any>, contractType: string, asWord: boolean = false): Promise<Buffer> {
     let browser: puppeteer.Browser | null = null;
 
     try {
@@ -531,6 +606,20 @@ Erstelle einen sauberen, professionellen Arbeitsvertrag ohne zusätzliche Kommen
 
         await page.emulateMediaType('print');
 
+        let footerName: string = ''
+        if (contractType === 'nda') {
+          footerName = parameters['disclosingParty'] || '';
+        } else if (contractType === 'employment') {
+          footerName = parameters['employerName'] || '';
+        }
+
+        let footerAddress: string = '';
+        if (contractType === 'nda') {
+          footerAddress = parameters['disclosingPartyAddress'] || '';
+        } else if (contractType === 'employment') {
+          footerAddress = parameters['employerAddress'] || '';
+        }
+
         const pdfUint8Array = await page.pdf({
           format: 'A4',
           printBackground: false,
@@ -540,8 +629,8 @@ Erstelle einen sauberen, professionellen Arbeitsvertrag ohne zusätzliche Kommen
             <div style="width: 100%; font-size: 9px; color: #444; display: flex; justify-content: space-between;  padding: 0 10mm;">
               <div style="display: flex; gap: 15px;">
                 <div>
-                  ${parameters['employerName']}<br>
-                  ${parameters['employerAddress']}
+                  ${footerName}<br>
+                  ${footerAddress}
                 </div>
                 <div>
                   ${parameters['employerPhone'] ? parameters['employerPhone'] : ''}

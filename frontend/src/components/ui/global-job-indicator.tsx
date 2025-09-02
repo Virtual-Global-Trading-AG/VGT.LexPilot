@@ -108,19 +108,21 @@ export function GlobalJobIndicator() {
       <DropdownMenuTrigger asChild>
         <Button
           variant="outline"
-          size="sm"
-          className="relative h-8 px-2 bg-blue-50 border-blue-200 hover:bg-blue-100 text-blue-700"
+          size="default"
+          className="relative h-10 px-4 bg-orange-100 border-orange-300 hover:bg-orange-200 text-orange-800 shadow-lg animate-pulse"
         >
-          <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-          <span className="text-xs font-medium">
+          <Loader2 className="h-4 w-4 mr-2 animate-spin text-orange-600" />
+          <span className="text-sm font-semibold">
             {activeJobs.length} {activeJobs.length === 1 ? getContextLabel() : getContextPluralLabel()}
           </span>
           <Badge 
             variant="secondary" 
-            className="ml-1 h-4 px-1 text-xs bg-blue-100 text-blue-800"
+            className="ml-2 h-5 px-2 text-sm bg-orange-200 text-orange-900 font-bold animate-bounce"
           >
             {activeJobs.length}
           </Badge>
+          {/* Pulsing ring effect */}
+          <div className="absolute -inset-1 bg-orange-400 rounded-md opacity-30 animate-ping"></div>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-80 p-3" align="end">

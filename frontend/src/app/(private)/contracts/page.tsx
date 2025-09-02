@@ -19,6 +19,7 @@ import { SwissObligationAnalysisResult, SwissObligationSectionResult } from '@/t
 import { AlertCircle, CheckCircle, ChevronDown, ChevronRight, Clock, Download, FileSearch, FileText, Filter, MessageSquare, Plus, Scale, Search, Trash2, TrendingUp, Upload, UserCheck, X, } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
 import { ExternalLink } from "lucide-react";
+import { useSearchParams } from 'next/navigation';
 
 
 
@@ -93,6 +94,8 @@ const getStatusText = (status: string) => {
 
 // Inner component that uses the JobMonitor context
 function ContractsPageContent() {
+  const searchParams = useSearchParams();
+  const [activeTab, setActiveTab] = useState('analyzed');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const contractQuestionsFileInputRef = useRef<HTMLInputElement>(null);
   const { uploadDocumentDirect, uploadContractForQuestions, getContractQuestionsDocuments, askDocumentQuestion, uploading, uploadProgress, error, clearError } = useDocumentUpload();
@@ -200,6 +203,16 @@ function ContractsPageContent() {
   const { toast } = useToast();
   const { startJobMonitoring, activeJobs } = useJobMonitor();
   const { userProfile } = useAuthStore();
+
+  // Handle query parameter for tab switching
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab === 'generated') {
+      setActiveTab('all');
+      // Load generated documents when switching to this tab
+      loadAllUserDocuments('generated');
+    }
+  }, [searchParams]);
 
   // Helper functions for managing texts to replace
   const addTextToReplace = () => {
@@ -906,7 +919,7 @@ function ContractsPageContent() {
           </div>
         </div>
 
-        <Tabs defaultValue="analyzed" className="w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-1 sm:grid-cols-3 h-auto p-1 bg-white border border-gray-200 rounded-xl shadow-sm gap-1 sm:gap-0">
             <TabsTrigger 
               value="analyzed" 
@@ -1615,7 +1628,6 @@ function ContractsPageContent() {
                 <div className="space-y-6">
                   {/* Contract Questions Documents List */}
                   <div>
-                    <h3 className="text-lg font-medium mb-4">Hochgeladene Verträge für Fragen</h3>
                     {contractQuestionsLoading ? (
                       <div className="flex items-center justify-center py-8">
                         <div className="text-sm text-muted-foreground">Lade Dokumente...</div>
@@ -1627,82 +1639,84 @@ function ContractsPageContent() {
                             <div className="text-sm text-muted-foreground">Noch keine Verträge für Fragen hochgeladen</div>
                           </div>
                         ) : (
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead>Dateiname</TableHead>
-                                <TableHead>Größe</TableHead>
-                                <TableHead>Hochgeladen</TableHead>
-                                <TableHead>Status</TableHead>
-                                <TableHead className="w-24">Aktionen</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {contractQuestionsDocuments.map((document) => (
-                                <TableRow key={document.documentId}>
-                                  <TableCell>
-                                    <div className="space-y-1">
-                                      <div className="font-medium">{document.documentMetadata.fileName || 'Unbekannt'}</div>
-                                      <div className="text-sm text-muted-foreground">
-                                        {document.documentMetadata.description || 'Vertrag für Fragen'}
-                                      </div>
-                                    </div>
-                                  </TableCell>
-                                  <TableCell>
-                                    <div className="text-sm">
-                                      {document.documentMetadata.size ? `${(document.documentMetadata.size / 1024 / 1024).toFixed(1)} MB` : 'Unbekannt'}
-                                    </div>
-                                  </TableCell>
-                                  <TableCell>
-                                    <div className="text-sm">
-                                      {document.documentMetadata.uploadedAt ? new Date(document.documentMetadata.uploadedAt).toLocaleDateString('de-DE') : 'Unbekannt'}
-                                    </div>
-                                  </TableCell>
-                                  <TableCell>
-                                    <Badge variant="default" className="text-xs">
-                                      {document.documentMetadata.vectorStoreId ? 'Bereit für Fragen' : 'Wird verarbeitet'}
-                                    </Badge>
-                                  </TableCell>
-                                  <TableCell>
-                                    <div className="flex items-center space-x-2">
-                                      {document.downloadUrl && (
-                                        <a
-                                          href={document.downloadUrl}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="inline-flex items-center justify-center w-8 h-8 rounded-md hover:bg-muted transition-colors"
-                                          title="Dokument öffnen"
-                                        >
-                                          <ExternalLink className="h-4 w-4" />
-                                        </a>
-                                      )}
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                                        onClick={() => handleOpenQuestionDialog(document)}
-                                        title="Frage stellen"
-                                        disabled={!document.documentMetadata.vectorStoreId}
-                                      >
-                                        <Search className="h-4 w-4"/>
-                                        <span className="sr-only">Frage stellen</span>
-                                      </Button>
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
-                                        onClick={() => handleDeleteDocument(document.documentId, document.documentMetadata.fileName || 'Unbekannt')}
-                                        title="Dokument löschen"
-                                      >
-                                        <Trash2 className="h-4 w-4"/>
-                                        <span className="sr-only">Dokument löschen</span>
-                                      </Button>
-                                    </div>
-                                  </TableCell>
+                          <div className="space-y-4">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>Dateiname</TableHead>
+                                  <TableHead>Größe</TableHead>
+                                  <TableHead>Hochgeladen</TableHead>
+                                  <TableHead>Status</TableHead>
+                                  <TableHead className="w-24">Aktionen</TableHead>
                                 </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
+                              </TableHeader>
+                              <TableBody>
+                                {contractQuestionsDocuments.map((document) => (
+                                  <TableRow key={document.documentId}>
+                                    <TableCell>
+                                      <div className="space-y-1">
+                                        <div className="font-medium">{document.documentMetadata.fileName || 'Unbekannt'}</div>
+                                        <div className="text-sm text-muted-foreground">
+                                          {document.documentMetadata.description || 'Vertrag für Fragen'}
+                                        </div>
+                                      </div>
+                                    </TableCell>
+                                    <TableCell>
+                                      <div className="text-sm">
+                                        {document.documentMetadata.size ? `${(document.documentMetadata.size / 1024 / 1024).toFixed(1)} MB` : 'Unbekannt'}
+                                      </div>
+                                    </TableCell>
+                                    <TableCell>
+                                      <div className="text-sm">
+                                        {document.documentMetadata.uploadedAt ? new Date(document.documentMetadata.uploadedAt).toLocaleDateString('de-DE') : 'Unbekannt'}
+                                      </div>
+                                    </TableCell>
+                                    <TableCell>
+                                      <Badge variant="default" className="text-xs">
+                                        {document.documentMetadata.vectorStoreId ? 'Bereit für Fragen' : 'Wird verarbeitet'}
+                                      </Badge>
+                                    </TableCell>
+                                    <TableCell>
+                                      <div className="flex items-center space-x-2">
+                                        {document.downloadUrl && (
+                                          <a
+                                            href={document.downloadUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="inline-flex items-center justify-center w-8 h-8 rounded-md hover:bg-muted transition-colors"
+                                            title="Dokument öffnen"
+                                          >
+                                            <ExternalLink className="h-4 w-4" />
+                                          </a>
+                                        )}
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          className="h-9 px-3 text-blue-600 hover:text-blue-700 hover:bg-blue-50 border-blue-200 font-medium"
+                                          onClick={() => handleOpenQuestionDialog(document)}
+                                          title="Frage zu diesem Dokument stellen"
+                                          disabled={!document.documentMetadata.vectorStoreId}
+                                        >
+                                          <MessageSquare className="h-4 w-4 mr-1"/>
+                                          <span className="text-xs">Frage stellen</span>
+                                        </Button>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                          onClick={() => handleDeleteDocument(document.documentId, document.documentMetadata.fileName || 'Unbekannt')}
+                                          title="Dokument löschen"
+                                        >
+                                          <Trash2 className="h-4 w-4"/>
+                                          <span className="sr-only">Dokument löschen</span>
+                                        </Button>
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
                         )}
                       </div>
                     )}

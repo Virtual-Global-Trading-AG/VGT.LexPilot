@@ -66,7 +66,7 @@ export class ContractGenerationController extends BaseController {
         userId
       };
 
-      const result = await this.contractGenerationService.generateContract(request);
+      const result = await this.contractGenerationService.generateContractDocument(request);
 
       this.sendSuccess(res, {
         downloadUrl: result.downloadUrl,
