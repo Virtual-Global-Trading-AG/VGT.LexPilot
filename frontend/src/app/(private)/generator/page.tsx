@@ -270,6 +270,7 @@ export default function GeneratorPage() {
         resetFormData();
 
         toast({
+          variant: "success",
           title: 'Vertragsgenerierung gestartet',
           description: 'Die Generierung wurde gestartet. Sie werden benachrichtigt, wenn der Vertrag fertig ist.'
         });

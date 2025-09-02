@@ -19,6 +19,7 @@ import { SwissObligationAnalysisResult, SwissObligationSectionResult } from '@/t
 import { AlertCircle, CheckCircle, ChevronDown, ChevronRight, Clock, Download, FileSearch, FileText, Filter, MessageSquare, Plus, Scale, Search, Trash2, TrendingUp, Upload, UserCheck, X, } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
 import { ExternalLink } from "lucide-react";
+import { useSearchParams } from 'next/navigation';
 
 
 
@@ -93,6 +94,8 @@ const getStatusText = (status: string) => {
 
 // Inner component that uses the JobMonitor context
 function ContractsPageContent() {
+  const searchParams = useSearchParams();
+  const [activeTab, setActiveTab] = useState('analyzed');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const contractQuestionsFileInputRef = useRef<HTMLInputElement>(null);
   const { uploadDocumentDirect, uploadContractForQuestions, getContractQuestionsDocuments, askDocumentQuestion, uploading, uploadProgress, error, clearError } = useDocumentUpload();
@@ -200,6 +203,16 @@ function ContractsPageContent() {
   const { toast } = useToast();
   const { startJobMonitoring, activeJobs } = useJobMonitor();
   const { userProfile } = useAuthStore();
+
+  // Handle query parameter for tab switching
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab === 'generated') {
+      setActiveTab('all');
+      // Load generated documents when switching to this tab
+      loadAllUserDocuments('generated');
+    }
+  }, [searchParams]);
 
   // Helper functions for managing texts to replace
   const addTextToReplace = () => {
@@ -906,7 +919,7 @@ function ContractsPageContent() {
           </div>
         </div>
 
-        <Tabs defaultValue="analyzed" className="w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-1 sm:grid-cols-3 h-auto p-1 bg-white border border-gray-200 rounded-xl shadow-sm gap-1 sm:gap-0">
             <TabsTrigger 
               value="analyzed" 
@@ -1615,7 +1628,6 @@ function ContractsPageContent() {
                 <div className="space-y-6">
                   {/* Contract Questions Documents List */}
                   <div>
-                    <h3 className="text-lg font-medium mb-4">Hochgeladene Verträge für Fragen</h3>
                     {contractQuestionsLoading ? (
                       <div className="flex items-center justify-center py-8">
                         <div className="text-sm text-muted-foreground">Lade Dokumente...</div>

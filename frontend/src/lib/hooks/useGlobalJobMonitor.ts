@@ -1,9 +1,11 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { useToast } from './use-toast';
 import { useDocuments } from './useApi';
 import { useAuthStore } from '../stores/authStore';
+import { ToastAction } from '@/components/ui/toast';
 
 interface ActiveJob {
   jobId: string;
@@ -19,6 +21,7 @@ export function useGlobalJobMonitor() {
   const { toast } = useToast();
   const { getJobStatus, getUserJobs, getSwissObligationAnalysesByDocumentId } = useDocuments();
   const { isAuthenticated } = useAuthStore();
+  const router = useRouter();
   const [activeJobs, setActiveJobs] = useState<Map<string, ActiveJob>>(new Map());
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastCheckRef = useRef<number>(0);
@@ -123,6 +126,7 @@ export function useGlobalJobMonitor() {
     }
   };
 
+
   const monitorJob = useCallback(async (jobId: string, jobInfo: ActiveJob) => {
     // Clear any existing interval for this job
     const existingInterval = jobMonitoringIntervals.current.get(jobId);
@@ -131,98 +135,7 @@ export function useGlobalJobMonitor() {
     }
 
     let pollCount = 0;
-    let timeoutId: NodeJS.Timeout;
-
-    const pollJob = async () => {
-      try {
-        pollCount++;
-
-        // Update job with poll count for adaptive intervals
-        setActiveJobs(prev => {
-          const newMap = new Map(prev);
-          const job = newMap.get(jobId);
-          if (job) {
-            newMap.set(jobId, { 
-              ...job, 
-              pollCount, 
-              lastPollTime: Date.now() 
-            });
-          }
-          return newMap;
-        });
-
-        const statusResult = await getJobStatus(jobId);
-
-        if (statusResult.success && statusResult.data) {
-          const job = statusResult.data;
-
-          if (job.status === 'completed') {
-            // Job completed successfully - cleanup and notify
-            cleanupJobMonitoring(jobId);
-
-            setActiveJobs(prev => {
-              const newMap = new Map(prev);
-              newMap.delete(jobId);
-              return newMap;
-            });
-
-            // Show success notification
-            toast({
-              title: jobInfo.type === 'contract-generation' ? "Vertrag generiert" : "Analyse abgeschlossen",
-              description: getJobCompletionMessage(jobInfo.type, jobInfo.fileName),
-              duration: 8000,
-            });
-
-            // If it's a Swiss obligation analysis, trigger a refresh of analyses
-            if (jobInfo.type === 'swiss-obligation-analysis' && jobInfo.documentId) {
-              try {
-                await getSwissObligationAnalysesByDocumentId(jobInfo.documentId);
-              } catch (error) {
-                console.error('Error refreshing analyses:', error);
-              }
-            }
-            return; // Stop polling
-
-          } else if (job.status === 'failed') {
-            // Job failed - cleanup and notify
-            cleanupJobMonitoring(jobId);
-
-            setActiveJobs(prev => {
-              const newMap = new Map(prev);
-              newMap.delete(jobId);
-              return newMap;
-            });
-
-            // Show error notification
-            toast({
-              variant: "destructive",
-              title: jobInfo.type === 'contract-generation' ? "Vertragsgenerierung fehlgeschlagen" : "Analyse fehlgeschlagen",
-              description: job.error || getJobFailureMessage(jobInfo.type, jobInfo.fileName),
-              duration: 10000,
-            });
-            return; // Stop polling
-          }
-
-          // Job still pending/processing - schedule next poll with adaptive interval
-          const currentJob = { ...jobInfo, pollCount, lastPollTime: Date.now() };
-          const nextInterval = getJobPollInterval(currentJob);
-
-          const nextPollTimeout = setTimeout(pollJob, nextInterval);
-          jobMonitoringIntervals.current.set(jobId, nextPollTimeout);
-        } else {
-          // API error - retry with exponential backoff
-          const retryInterval = Math.min(30000, 5000 * Math.pow(1.5, pollCount - 1));
-          const retryTimeout = setTimeout(pollJob, retryInterval);
-          jobMonitoringIntervals.current.set(jobId, retryTimeout);
-        }
-      } catch (error) {
-        console.error('Error monitoring job:', jobId, error);
-        // Retry with exponential backoff on error
-        const retryInterval = Math.min(30000, 5000 * Math.pow(1.5, pollCount - 1));
-        const retryTimeout = setTimeout(pollJob, retryInterval);
-        jobMonitoringIntervals.current.set(jobId, retryTimeout);
-      }
-    };
+    let consecutiveProcessingCount = 0; // NEU: Zähle consecutive processing states
 
     const cleanupJobMonitoring = (jobId: string) => {
       const interval = jobMonitoringIntervals.current.get(jobId);
@@ -230,34 +143,99 @@ export function useGlobalJobMonitor() {
         clearTimeout(interval);
         jobMonitoringIntervals.current.delete(jobId);
       }
-      if (timeoutId) {
-        clearTimeout(timeoutId);
+    };
+
+
+    const pollJob = async () => {
+      try {
+        pollCount++;
+
+        const statusResult = await getJobStatus(jobId);
+
+        if (statusResult.success && statusResult.data) {
+          const job = statusResult.data;
+
+          if (job.status === 'completed') {
+            // Job completed - show toast and cleanup
+            cleanupJobMonitoring(jobId);
+            setActiveJobs(prev => {
+              const newMap = new Map(prev);
+              newMap.delete(jobId);
+              return newMap;
+            });
+
+            toast({
+              variant: "success",
+              title: jobInfo.type === 'contract-generation' ? "Vertrag generiert" : "Analyse abgeschlossen",
+              description: getJobCompletionMessage(jobInfo.type, jobInfo.fileName),
+              duration: 8000,
+              action: jobInfo.type === 'contract-generation' 
+                ? React.createElement(ToastAction, {
+                    altText: "Zu generierten Verträgen",
+                    onClick: () => router.push('/contracts?tab=generated')
+                  }, "Anzeigen")
+                : undefined,
+            });
+
+            return; // Stop polling
+
+          } else if (job.status === 'failed') {
+
+            // Job failed - show error toast and cleanup
+            cleanupJobMonitoring(jobId);
+            setActiveJobs(prev => {
+              const newMap = new Map(prev);
+              newMap.delete(jobId);
+              return newMap;
+            });
+
+            toast({
+              variant: "destructive",
+              title: jobInfo.type === 'contract-generation' ? "Vertragsgenerierung fehlgeschlagen" : "Analyse fehlgeschlagen",
+              description: job.error || getJobFailureMessage(jobInfo.type, jobInfo.fileName),
+              duration: 10000,
+            });
+
+            return; // Stop polling
+
+          } else if (job.status === 'processing') {
+            consecutiveProcessingCount++;
+
+            let nextInterval = 2000; // Standard 2 Sekunden
+
+            if (consecutiveProcessingCount > 10) {
+              // Nach 10 processing-Checks (ca. 20 Sekunden), alle 1 Sekunde prüfen
+              nextInterval = 1000;
+            } else if (consecutiveProcessingCount > 5) {
+              // Nach 5 processing-Checks, alle 1.5 Sekunden prüfen
+              nextInterval = 1500;
+            }
+
+            const nextPollTimeout = setTimeout(pollJob, nextInterval);
+            jobMonitoringIntervals.current.set(jobId, nextPollTimeout);
+
+          } else {
+            const nextPollTimeout = setTimeout(pollJob, 3000);
+            jobMonitoringIntervals.current.set(jobId, nextPollTimeout);
+          }
+
+        } else {
+          // API error - retry with exponential backoff
+          const retryInterval = Math.min(10000, 2000 * Math.pow(1.5, pollCount - 1));
+          const retryTimeout = setTimeout(pollJob, retryInterval);
+          jobMonitoringIntervals.current.set(jobId, retryTimeout);
+        }
+      } catch (error) {
+        // Retry with exponential backoff on error
+        const retryInterval = Math.min(10000, 2000 * Math.pow(1.5, pollCount - 1));
+        const retryTimeout = setTimeout(pollJob, retryInterval);
+        jobMonitoringIntervals.current.set(jobId, retryTimeout);
       }
     };
 
     // Start polling immediately
     pollJob();
-
-    // Set up timeout to stop polling after 15 minutes
-    timeoutId = setTimeout(() => {
-      cleanupJobMonitoring(jobId);
-
-      setActiveJobs(prev => {
-        const newMap = new Map(prev);
-        if (newMap.has(jobId)) {
-          newMap.delete(jobId);
-          // Show timeout notification
-          toast({
-            variant: "destructive",
-            title: "Analyse-Timeout",
-            description: "Die Analyse dauert länger als erwartet. Bitte überprüfen Sie später den Status.",
-            duration: 10000,
-          });
-        }
-        return newMap;
-      });
-    }, 15 * 60 * 1000); // 15 minutes
-  }, [getJobStatus, getJobPollInterval, getJobCompletionMessage, getJobFailureMessage, getSwissObligationAnalysesByDocumentId, toast]);
+  }, [getJobStatus, toast, getJobCompletionMessage, getJobFailureMessage]);
 
   const checkForActiveJobs = useCallback(async () => {
     if (!isAuthenticated) return;
