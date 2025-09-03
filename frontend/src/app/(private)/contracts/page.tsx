@@ -1051,17 +1051,17 @@ function ContractsPageContent() {
                                       </a>
                                     )}
                                     <Button
-                                      variant="ghost"
+                                      variant="outline"
                                       size="sm"
-                                      className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50"
+                                      className="h-9 px-3 text-green-600 hover:text-green-700 hover:bg-green-50 border-green-200 font-medium"
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         handleOpenLawyerDecisionModal(analysis);
                                       }}
                                       title="Analyse bewerten"
                                     >
-                                      <UserCheck className="h-4 w-4"/>
-                                      <span className="sr-only">Analyse bewerten</span>
+                                      <UserCheck className="h-4 w-4 mr-1"/>
+                                      <span className="text-xs">Bewerten</span>
                                     </Button>
                                   </div>
                                 </TableCell>
@@ -1114,17 +1114,17 @@ function ContractsPageContent() {
                                       </a>
                                     )}
                                     <Button
-                                      variant="ghost"
+                                      variant="outline"
                                       size="sm"
-                                      className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50"
+                                      className="h-9 px-3 text-green-600 hover:text-green-700 hover:bg-green-50 border-green-200 font-medium"
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         handleOpenLawyerDecisionModal(analysis);
                                       }}
                                       title="Analyse bewerten"
                                     >
-                                      <UserCheck className="h-4 w-4"/>
-                                      <span className="sr-only">Analyse bewerten</span>
+                                      <UserCheck className="h-4 w-4 mr-1"/>
+                                      <span className="text-xs">Bewerten</span>
                                     </Button>
                                   </div>
                                 </div>
