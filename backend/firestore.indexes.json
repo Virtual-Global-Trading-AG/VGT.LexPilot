@@ -5,11 +5,11 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "userId",
+          "fieldPath": "lawyerStatus",
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "createdAt",
+          "fieldPath": "updatedAt",
           "order": "DESCENDING"
         }
       ]
@@ -19,40 +19,18 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "userId",
+          "fieldPath": "lawyerStatus",
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "status",
+          "fieldPath": "sharedUserId",
           "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
         }
       ]
     },
     {
-      "collectionGroup": "documents",
+      "collectionGroup": "contractAnalyses",
       "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "userId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "type",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "analyses",
-      "queryScope": "COLLECTION_GROUP",
       "fields": [
         {
           "fieldPath": "userId",
@@ -65,15 +43,11 @@
       ]
     },
     {
-      "collectionGroup": "analyses",
-      "queryScope": "COLLECTION_GROUP",
+      "collectionGroup": "contractAnalyses",
+      "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "userId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "type",
+          "fieldPath": "sharedUserId",
           "order": "ASCENDING"
         },
         {
@@ -83,65 +57,43 @@
       ]
     },
     {
-      "collectionGroup": "usage",
+      "collectionGroup": "contractAnalyses",
       "queryScope": "COLLECTION",
       "fields": [
+        {
+          "fieldPath": "lawyerStatus",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "contractAnalyses",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "lawyerStatus",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "sharedUserId",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "contractAnalyses",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "documentId",
+          "order": "ASCENDING"
+        },
         {
           "fieldPath": "userId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "timestamp",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "usage",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "userId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "action",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "timestamp",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "legal_database",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "jurisdiction",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "type",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "lastAmended",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "legal_database",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "language",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "isActive",
           "order": "ASCENDING"
         },
         {
@@ -151,26 +103,12 @@
       ]
     },
     {
-      "collectionGroup": "shared_documents",
+      "collectionGroup": "jobs",
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "ownerId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "shared_documents",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "sharedWith",
-          "arrayConfig": "CONTAINS"
         },
         {
           "fieldPath": "createdAt",
@@ -182,41 +120,7 @@
   "fieldOverrides": [
     {
       "collectionGroup": "documents",
-      "fieldPath": "content.extractedEntities",
-      "indexes": [
-        {
-          "order": "ASCENDING",
-          "queryScope": "COLLECTION"
-        },
-        {
-          "arrayConfig": "CONTAINS",
-          "queryScope": "COLLECTION"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "documents",
       "fieldPath": "metadata.tags",
-      "indexes": [
-        {
-          "arrayConfig": "CONTAINS",
-          "queryScope": "COLLECTION"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "legal_database",
-      "fieldPath": "metadata.keywords",
-      "indexes": [
-        {
-          "arrayConfig": "CONTAINS",
-          "queryScope": "COLLECTION"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "legal_database",
-      "fieldPath": "metadata.subjects",
       "indexes": [
         {
           "arrayConfig": "CONTAINS",
