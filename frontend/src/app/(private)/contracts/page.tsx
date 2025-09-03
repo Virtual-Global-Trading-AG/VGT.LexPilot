@@ -103,7 +103,7 @@ function ContractsPageContent() {
     getDocuments,
     deleteDocument,
     getDocumentText,
-    analyzeSwissObligationLaw,
+    analyzeContract,
     getJobStatus,
     getUserJobs,
     getSwissObligationAnalysesByDocumentId,
@@ -249,7 +249,7 @@ function ContractsPageContent() {
   // Helper function to check if a document has an active analysis job
   const isDocumentAnalysisRunning = (documentId: string) => {
     return activeJobs.some(job => 
-      job.type === 'swiss-obligation-analysis' && 
+      job.type === 'contract-analysis' &&
       job.documentId === documentId
     );
   };
@@ -332,7 +332,7 @@ function ContractsPageContent() {
   // Helper function to get analysis status for a document
   const getDocumentAnalysisStatus = (documentId: string) => {
     const runningJob = activeJobs.find(job => 
-      job.type === 'swiss-obligation-analysis' && 
+      job.type === 'contract-analysis' &&
       job.documentId === documentId
     );
     return runningJob ? 'running' : 'idle';
@@ -455,17 +455,17 @@ function ContractsPageContent() {
   // Track previous jobs to detect completed jobs
   const previousJobsRef = useRef<Map<string, { jobId: string; documentId?: string }>>(new Map());
 
-  // Monitor active jobs and update only specific document rows when Swiss obligation analysis completes
+  // Monitor active jobs and update only specific document rows when contract analysis completes
   useEffect(() => {
     // Create a map of current Swiss obligation analysis jobs
     const currentSwissJobs = new Map<string, { jobId: string; documentId?: string }>();
     activeJobs
-      .filter(job => job.type === 'swiss-obligation-analysis')
+      .filter(job => job.type === 'contract-analysis')
       .forEach(job => {
         currentSwissJobs.set(job.jobId, { jobId: job.jobId, documentId: job.documentId });
       });
 
-    // Check if any Swiss obligation analysis jobs have completed (removed from active jobs)
+    // Check if any contract analysis jobs have completed (removed from active jobs)
     const completedJobs: { jobId: string; documentId?: string }[] = [];
     previousJobsRef.current.forEach((jobInfo, jobId) => {
       if (!currentSwissJobs.has(jobId)) {
@@ -537,7 +537,7 @@ function ContractsPageContent() {
         toast({
           variant: 'success',
           title: 'Upload erfolgreich',
-          description: 'Vertrag wurde erfolgreich hochgeladen! Eine Obligationenanalyse wird automatisch gestartet.'
+          description: 'Vertrag wurde erfolgreich hochgeladen! Eine Vertragsanalyse wird automatisch gestartet.'
         });
         // Reset text replacement list
         setAnonymizedKeywords([]);
@@ -816,14 +816,14 @@ function ContractsPageContent() {
     }
   };
 
-  const handleSwissObligationAnalysis = async (documentId: string, fileName: string) => {
+  const handleContractAnalysis = async (documentId: string, fileName: string) => {
     try {
       // Start the analysis job
-      const result = await analyzeSwissObligationLaw(documentId);
+      const result = await analyzeContract(documentId);
 
       if (result.success && result.data?.jobId) {
         // Start monitoring the job immediately for instant feedback
-        startJobMonitoring(result.data.jobId, 'swiss-obligation-analysis', documentId, fileName);
+        startJobMonitoring(result.data.jobId, 'contract-analysis', documentId, fileName);
 
         toast({
           title: 'Analyse gestartet',
@@ -841,7 +841,7 @@ function ContractsPageContent() {
         setSwissAnalysisLoading(null);
       }
     } catch (err: any) {
-      console.error('Swiss obligation analysis error:', err);
+      console.error('Contract analysis error:', err);
       toast({
         variant: 'destructive',
         title: 'Analyse fehlgeschlagen',
@@ -1051,17 +1051,17 @@ function ContractsPageContent() {
                                       </a>
                                     )}
                                     <Button
-                                      variant="ghost"
+                                      variant="outline"
                                       size="sm"
-                                      className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50"
+                                      className="h-9 px-3 text-green-600 hover:text-green-700 hover:bg-green-50 border-green-200 font-medium"
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         handleOpenLawyerDecisionModal(analysis);
                                       }}
                                       title="Analyse bewerten"
                                     >
-                                      <UserCheck className="h-4 w-4"/>
-                                      <span className="sr-only">Analyse bewerten</span>
+                                      <UserCheck className="h-4 w-4 mr-1"/>
+                                      <span className="text-xs">Bewerten</span>
                                     </Button>
                                   </div>
                                 </TableCell>
@@ -1114,17 +1114,17 @@ function ContractsPageContent() {
                                       </a>
                                     )}
                                     <Button
-                                      variant="ghost"
+                                      variant="outline"
                                       size="sm"
-                                      className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50"
+                                      className="h-9 px-3 text-green-600 hover:text-green-700 hover:bg-green-50 border-green-200 font-medium"
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         handleOpenLawyerDecisionModal(analysis);
                                       }}
                                       title="Analyse bewerten"
                                     >
-                                      <UserCheck className="h-4 w-4"/>
-                                      <span className="sr-only">Analyse bewerten</span>
+                                      <UserCheck className="h-4 w-4 mr-1"/>
+                                      <span className="text-xs">Bewerten</span>
                                     </Button>
                                   </div>
                                 </div>
@@ -1206,7 +1206,7 @@ function ContractsPageContent() {
                                               </span>
                                             ) : documentAnalyses[document.documentId] && (
                                               <span className="ml-2">
-                                                • <span className="text-blue-600">Obligationenanalyse: {Math.round((documentAnalyses[document.documentId][0].overallCompliance?.complianceScore || 0) * 100)}% konform</span>
+                                                • <span className="text-blue-600">Vertragsanalyse: {Math.round((documentAnalyses[document.documentId][0].overallCompliance?.complianceScore || 0) * 100)}% konform</span>
                                               </span>
                                             )}
                                           </div>
@@ -1294,15 +1294,15 @@ function ContractsPageContent() {
                                             className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50"
                                             onClick={(e) => {
                                               e.stopPropagation();
-                                              handleSwissObligationAnalysis(document.documentId, document.documentMetadata.fileName || 'Unbekannt');
+                                              handleContractAnalysis(document.documentId, document.documentMetadata.fileName || 'Unbekannt');
                                             }}
                                             disabled={swissAnalysisLoading === document.documentId || isDocumentAnalysisRunning(document.documentId)}
                                             title={
                                               isDocumentAnalysisRunning(document.documentId)
-                                                ? 'Obligationenanalyse läuft bereits - bitte warten Sie bis zum Abschluss'
+                                                ? 'Vertragsanalyse läuft bereits - bitte warten Sie bis zum Abschluss'
                                                 : documentAnalyses[document.documentId]?.length > 0
-                                                ? 'Obligationenanalyse erneut ausführen (überschreibt bestehende Analyse)'
-                                                : 'Schweizer Obligationenrecht-Analyse starten'
+                                                ? 'Vertragsanalyse erneut ausführen (überschreibt bestehende Analyse)'
+                                                : 'Vertragsanalyse starten'
                                             }
                                           >
                                             <Scale className="h-4 w-4"/>
@@ -1387,7 +1387,7 @@ function ContractsPageContent() {
                                       </div>
                                     ) : documentAnalyses[document.documentId] && (
                                       <div className="text-xs text-blue-600">
-                                        Obligationenanalyse: {Math.round((documentAnalyses[document.documentId][0].overallCompliance?.complianceScore || 0) * 100)}% konform
+                                        Vertragsanalyse: {Math.round((documentAnalyses[document.documentId][0].overallCompliance?.complianceScore || 0) * 100)}% konform
                                       </div>
                                     )}
 
@@ -1444,15 +1444,15 @@ function ContractsPageContent() {
                                           className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50"
                                           onClick={(e) => {
                                             e.stopPropagation();
-                                            handleSwissObligationAnalysis(document.documentId, document.documentMetadata.fileName || 'Unbekannt');
+                                            handleContractAnalysis(document.documentId, document.documentMetadata.fileName || 'Unbekannt');
                                           }}
                                           disabled={swissAnalysisLoading === document.documentId || isDocumentAnalysisRunning(document.documentId)}
                                           title={
                                             isDocumentAnalysisRunning(document.documentId)
-                                              ? 'Obligationenanalyse läuft bereits - bitte warten Sie bis zum Abschluss'
+                                              ? 'Vertragsanalyse läuft bereits - bitte warten Sie bis zum Abschluss'
                                               : documentAnalyses[document.documentId]?.length > 0
-                                              ? 'Obligationenanalyse erneut ausführen (überschreibt bestehende Analyse)'
-                                              : 'Schweizer Obligationenrecht-Analyse starten'
+                                              ? 'Vertragsanalyse erneut ausführen (überschreibt bestehende Analyse)'
+                                              : 'Vertragsanalyse starten'
                                           }
                                         >
                                           <Scale className="h-4 w-4"/>
@@ -2067,6 +2067,20 @@ function ContractsPageContent() {
                           <Label className="text-sm font-medium">Geschäftsbereich</Label>
                           <Badge variant="outline" className="text-sm">
                             {selectedAnalysis.documentContext.businessDomain}
+                          </Badge>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 gap-4">
+                        <div className="space-y-2">
+                          <Label className="text-sm font-medium">Vertragsland</Label>
+                          <Badge variant="outline" className="text-sm">
+                            {selectedAnalysis.documentContext.country}
+                          </Badge>
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-sm font-medium">Anwendbares Recht</Label>
+                          <Badge variant="outline" className="text-sm">
+                            {selectedAnalysis.documentContext.legalFramework}
                           </Badge>
                         </div>
                       </div>

@@ -2,7 +2,7 @@
 export { StorageService } from './StorageService';
 export { FirestoreService } from './FirestoreService';
 export { TextExtractionService } from './TextExtractionService';
-export { SwissObligationLawService } from './SwissObligationLawService';
+export { AnalyseLawService } from './AnalyseLawService';
 export { DataProtectionService } from './DataProtectionService';
 export { JobQueueService } from './JobQueueService';
 export { FirebaseInitializer, ensureFirebaseInitialized } from './FirebaseInitializer';
@@ -24,7 +24,7 @@ export type {
   GeneratedQuery,
   SectionAnalysisResult,
   SwissObligationAnalysisResult
-} from './SwissObligationLawService';
+} from './AnalyseLawService';
 
 export type {
   DataProtectionCheckRequest,

@@ -4,7 +4,7 @@ import { UserDocument } from '@models/index';
 import { NextFunction, Request, Response } from 'express';
 import OpenAI from 'openai';
 import { UserRepository } from '../repositories/UserRepository';
-import { DataProtectionCheckRequest, DataProtectionService, DocumentFilters, FirestoreService, JobQueueService, PaginationOptions, SortOptions, StorageService, SwissObligationLawService, TextExtractionService } from '../services';
+import { DataProtectionCheckRequest, DataProtectionService, DocumentFilters, FirestoreService, JobQueueService, PaginationOptions, SortOptions, StorageService, AnalyseLawService, TextExtractionService } from '../services';
 import { BaseController } from './BaseController';
 import { env } from '@config/environment';
 
@@ -24,7 +24,7 @@ export class DocumentController extends BaseController {
   private readonly firestoreService: FirestoreService;
   private readonly userRepository: UserRepository;
   private readonly textExtractionService: TextExtractionService;
-  private readonly swissObligationLawService: SwissObligationLawService;
+  private readonly analyseLawService: AnalyseLawService;
   private readonly dataProtectionService: DataProtectionService;
   private readonly jobQueueService: JobQueueService;
 
@@ -34,7 +34,7 @@ export class DocumentController extends BaseController {
     this.firestoreService = new FirestoreService();
     this.userRepository = new UserRepository();
     this.textExtractionService = new TextExtractionService();
-    this.swissObligationLawService = new SwissObligationLawService(
+    this.analyseLawService = new AnalyseLawService(
       this.firestoreService
     );
     this.dataProtectionService = new DataProtectionService();
@@ -99,27 +99,27 @@ export class DocumentController extends BaseController {
         ...metadata
       });
 
-      // Automatically trigger Swiss obligation analysis after successful upload
+      // Automatically trigger contract analysis after successful upload
       try {
         // Check if analysis already exists for this document
-        const existingAnalyses = await this.swissObligationLawService.getAnalysesByDocumentId(documentId, userId);
+        const existingAnalyses = await this.analyseLawService.getAnalysesByDocumentId(documentId, userId);
 
         if (existingAnalyses.length === 0) {
           // No existing analysis, create background job for analysis
           const jobId = await this.jobQueueService.createJob(
-            'swiss-obligation-analysis',
+            'contract-analysis',
             userId,
             { documentId, userId, fileName }
           );
 
-          this.logger.info('Automatic Swiss obligation law analysis job created after upload', {
+          this.logger.info('Automatic contract analysis job created after upload', {
             userId,
             documentId,
             jobId,
             fileName
           });
         } else {
-          this.logger.info('Swiss obligation law analysis already exists for document, skipping automatic analysis', {
+          this.logger.info('Contract analysis already exists for document, skipping automatic analysis', {
             userId,
             documentId,
             fileName,
@@ -128,7 +128,7 @@ export class DocumentController extends BaseController {
         }
       } catch (analysisError) {
         // Log error but don't fail the upload
-        this.logger.error('Failed to trigger automatic Swiss obligation law analysis', analysisError as Error, {
+        this.logger.error('Failed to trigger automatic contract analysis', analysisError as Error, {
           userId,
           documentId,
           fileName
@@ -268,11 +268,11 @@ export class DocumentController extends BaseController {
         }
       }
 
-      // Delete document from storage, database, and associated Swiss obligation analyses
+      // Delete document from storage, database, and associated contract analyses
       await Promise.all([
         this.storageService.deleteDocument(documentId, userId),
         this.firestoreService.deleteDocument(documentId, userId),
-        this.swissObligationLawService.deleteAnalysesByDocumentId(documentId, userId)
+        this.analyseLawService.deleteAnalysesByDocumentId(documentId, userId)
       ]);
 
       this.sendSuccess(res, {
@@ -342,7 +342,7 @@ export class DocumentController extends BaseController {
       // Get user documents and analyses
       const [documents, analyses] = await Promise.all([
         this.firestoreService.getAllUserDocuments(userId),
-        this.swissObligationLawService.listUserAnalyses(userId)
+        this.analyseLawService.listUserAnalyses(userId)
       ]);
 
       this.logger.info('Retrieved documents and analyses for dashboard stats', {
@@ -407,7 +407,7 @@ export class DocumentController extends BaseController {
       // Get recent documents and analyses
       const [recentDocuments, recentAnalyses] = await Promise.all([
         this.firestoreService.getAllUserDocuments(userId),
-        this.swissObligationLawService.listUserAnalyses(userId, limit)
+        this.analyseLawService.listUserAnalyses(userId, limit)
       ]);
 
       const activities: any[] = [];
@@ -552,7 +552,7 @@ export class DocumentController extends BaseController {
       }
 
       // Add recently completed analyses
-      const recentAnalyses = await this.swissObligationLawService.listUserAnalyses(userId, 5);
+      const recentAnalyses = await this.analyseLawService.listUserAnalyses(userId, 5);
       recentAnalyses.forEach(analysis => {
         const document = documents.find(doc => doc.documentId === analysis.documentId);
         const fileName = document?.documentMetadata?.fileName || 'Unknown Document';
@@ -586,11 +586,11 @@ export class DocumentController extends BaseController {
       const userId = this.getUserId(req);
 
       // Get shared analyses for this lawyer
-      const sharedAnalyses = await this.swissObligationLawService.listSharedAnalyses(userId, 100);
+      const sharedAnalyses = await this.analyseLawService.listSharedAnalyses(userId, 100);
 
       // Get all analyses where this lawyer has made decisions
       const db = this.firestoreService['db'] || require('firebase-admin').firestore();
-      const completedAnalysesQuery = await db.collection('swissObligationAnalyses')
+      const completedAnalysesQuery = await db.collection('contractAnalyses')
       .where('lawyerStatus', 'in', ['APPROVED', 'DECLINE'])
       .get();
 
@@ -608,7 +608,7 @@ export class DocumentController extends BaseController {
       const unreviewedCount = sharedAnalyses.length;
 
       // Calculate pending reviews (CHECK_PENDING status)
-      const pendingReviews = await db.collection('swissObligationAnalyses')
+      const pendingReviews = await db.collection('contractAnalyses')
       .where('lawyerStatus', '==', 'CHECK_PENDING')
       .where('sharedUserId', '==', userId)
       .get();
@@ -656,7 +656,7 @@ export class DocumentController extends BaseController {
 
       // Get recent analyses where this lawyer made decisions
       const db = this.firestoreService['db'] || require('firebase-admin').firestore();
-      const recentDecisionsQuery = await db.collection('swissObligationAnalyses')
+      const recentDecisionsQuery = await db.collection('contractAnalyses')
       .where('lawyerStatus', 'in', ['APPROVED', 'DECLINE'])
       .orderBy('updatedAt', 'desc')
       .limit(limit)
@@ -706,7 +706,7 @@ export class DocumentController extends BaseController {
       }
 
       // Get recent shared analyses (new work) - aligned format
-      const sharedAnalyses = await this.swissObligationLawService.listSharedAnalyses(userId, 3);
+      const sharedAnalyses = await this.analyseLawService.listSharedAnalyses(userId, 3);
 
 
       for (const analysis of sharedAnalyses) {
@@ -798,7 +798,7 @@ export class DocumentController extends BaseController {
       const userId = this.getUserId(req);
 
       // Get shared analyses that need review
-      const sharedAnalyses = await this.swissObligationLawService.listSharedAnalyses(userId, 10);
+      const sharedAnalyses = await this.analyseLawService.listSharedAnalyses(userId, 10);
 
       const progressItems: any[] = [];
 
@@ -822,7 +822,7 @@ export class DocumentController extends BaseController {
 
       // Get recently completed reviews
       const db = this.firestoreService['db'] || require('firebase-admin').firestore();
-      const recentCompletedQuery = await db.collection('swissObligationAnalyses')
+      const recentCompletedQuery = await db.collection('contractAnalyses')
       .where('lawyerStatus', 'in', ['APPROVED', 'DECLINE'])
       .orderBy('updatedAt', 'desc')
       .limit(5)
@@ -1119,10 +1119,10 @@ export class DocumentController extends BaseController {
   }
 
   /**
-   * Analyze document against Swiss obligation law (Background Processing)
-   * POST /api/documents/:documentId/analyze-swiss-obligation-law
+   * Analyze contract against his law (Background Processing)
+   * POST /api/documents/:documentId/analyze-contract
    */
-  public async analyzeSwissObligationLaw(req: Request, res: Response, next: NextFunction): Promise<void> {
+  public async analyzeContract(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const userId = this.getUserId(req);
       const { documentId } = req.params;
@@ -1132,7 +1132,7 @@ export class DocumentController extends BaseController {
         return;
       }
 
-      this.logger.info('Swiss obligation law analysis requested', {
+      this.logger.info('Contract analysis requested', {
         userId,
         documentId
       });
@@ -1146,7 +1146,7 @@ export class DocumentController extends BaseController {
       }
 
       // Check if analysis already exists for this document and delete old ones
-      const existingAnalyses = await this.swissObligationLawService.getAnalysesByDocumentId(documentId, userId);
+      const existingAnalyses = await this.analyseLawService.getAnalysesByDocumentId(documentId, userId);
 
       if (existingAnalyses.length > 0) {
         this.logger.info('Existing analysis found, deleting old analysis before creating new one', {
@@ -1156,7 +1156,7 @@ export class DocumentController extends BaseController {
         });
 
         // Delete existing analyses
-        await this.swissObligationLawService.deleteAnalysesByDocumentId(documentId, userId);
+        await this.analyseLawService.deleteAnalysesByDocumentId(documentId, userId);
 
         this.logger.info('Old analyses deleted successfully', {
           userId,
@@ -1167,12 +1167,12 @@ export class DocumentController extends BaseController {
 
       // Create background job for analysis
       const jobId = await this.jobQueueService.createJob(
-        'swiss-obligation-analysis',
+        'contract-analysis',
         userId,
         { documentId, userId, fileName: document.fileName }
       );
 
-      this.logger.info('Swiss obligation law analysis job created', {
+      this.logger.info('Contract  analysis job created', {
         userId,
         documentId,
         jobId
@@ -1184,10 +1184,10 @@ export class DocumentController extends BaseController {
         documentId,
         status: 'processing',
         message: 'Analysis started in background. You will receive a notification when completed.'
-      }, 'Swiss obligation law analysis started successfully');
+      }, 'Contract analysis started successfully');
 
     } catch (error) {
-      this.logger.error('Swiss obligation law analysis job creation failed', error as Error, {
+      this.logger.error('Contract analysis job creation failed', error as Error, {
         userId: this.getUserId(req),
         documentId: req.params.documentId
       });
@@ -1198,10 +1198,10 @@ export class DocumentController extends BaseController {
         } else if (error.message.includes('Unsupported content type')) {
           this.sendError(res, 400, 'Unsupported file type', error.message);
         } else {
-          this.sendError(res, 500, 'Swiss obligation law analysis failed', error.message);
+          this.sendError(res, 500, 'Contract analysis failed', error.message);
         }
       } else {
-        this.sendError(res, 500, 'Unexpected error during Swiss obligation law analysis');
+        this.sendError(res, 500, 'Unexpected error during contract analysis');
       }
 
       next(error);
@@ -1209,10 +1209,10 @@ export class DocumentController extends BaseController {
   }
 
   /**
-   * Get Swiss obligation law analysis result
-   * GET /api/documents/swiss-obligation-analysis/:analysisId
+   * Get Contract analysis result
+   * GET /api/documents/contract-analysis/:analysisId
    */
-  public async getSwissObligationAnalysis(req: Request, res: Response, next: NextFunction): Promise<void> {
+  public async getContractAnalysis(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const userId = this.getUserId(req);
       const { analysisId } = req.params;
@@ -1222,22 +1222,22 @@ export class DocumentController extends BaseController {
         return;
       }
 
-      this.logger.info('Swiss obligation law analysis result requested', {
+      this.logger.info('Contract analysis result requested', {
         userId,
         analysisId
       });
 
-      const analysisResult = await this.swissObligationLawService.getAnalysisResult(analysisId, userId);
+      const analysisResult = await this.analyseLawService.getAnalysisResult(analysisId, userId);
 
       if (!analysisResult) {
         this.sendError(res, 404, 'Analysis not found', 'Analysis not found or access denied');
         return;
       }
 
-      this.sendSuccess(res, analysisResult, 'Swiss obligation law analysis result retrieved successfully');
+      this.sendSuccess(res, analysisResult, 'Contract analysis result retrieved successfully');
 
     } catch (error) {
-      this.logger.error('Failed to get Swiss obligation law analysis result', error as Error, {
+      this.logger.error('Failed to get contract analysis result', error as Error, {
         userId: this.getUserId(req),
         analysisId: req.params.analysisId
       });
@@ -1248,20 +1248,20 @@ export class DocumentController extends BaseController {
   }
 
   /**
-   * List user's Swiss obligation law analyses
-   * GET /api/documents/swiss-obligation-analyses
+   * List user's contract analyses
+   * GET /api/documents/contract-analyses
    */
-  public async listSwissObligationAnalyses(req: Request, res: Response, next: NextFunction): Promise<void> {
+  public async listContractAnalyses(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const userId = this.getUserId(req);
       const limit = parseInt(req.query.limit as string) || 10;
 
-      this.logger.info('Swiss obligation law analyses list requested', {
+      this.logger.info('contract analyses list requested', {
         userId,
         limit
       });
 
-      const analyses = await this.swissObligationLawService.listUserAnalyses(userId, limit);
+      const analyses = await this.analyseLawService.listUserAnalyses(userId, limit);
 
       this.sendSuccess(res, {
         analyses: analyses.map(analysis => ({
@@ -1277,10 +1277,10 @@ export class DocumentController extends BaseController {
           completedAt: analysis.completedAt?.toISOString()
         })),
         total: analyses.length
-      }, 'Swiss obligation law analyses retrieved successfully');
+      }, 'contract analyses retrieved successfully');
 
     } catch (error) {
-      this.logger.error('Failed to list Swiss obligation law analyses', error as Error, {
+      this.logger.error('Failed to list contract analyses', error as Error, {
         userId: this.getUserId(req)
       });
 
@@ -1311,20 +1311,20 @@ export class DocumentController extends BaseController {
   }
 
   /**
-   * List shared Swiss obligation law analyses for lawyers
-   * GET /api/documents/swiss-obligation-analyses-shared
+   * List shared contract analyses for lawyers
+   * GET /api/documents/contract-analyses-shared
    */
-  public async listSharedSwissObligationAnalyses(req: Request, res: Response, next: NextFunction): Promise<void> {
+  public async listSharedContractAnalyses(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const userId = this.getUserId(req);
       const limit = parseInt(req.query.limit as string) || 10;
 
-      this.logger.info('Shared Swiss obligation law analyses list requested', {
+      this.logger.info('Shared contract analyses list requested', {
         userId,
         limit
       });
 
-      const analyses = await this.swissObligationLawService.listSharedAnalyses(userId, limit);
+      const analyses = await this.analyseLawService.listSharedAnalyses(userId, limit);
 
       // For each analysis, fetch the corresponding document information to get downloadUrl
       const analysesWithDocuments = await Promise.all(
@@ -1410,10 +1410,10 @@ export class DocumentController extends BaseController {
       this.sendSuccess(res, {
         analyses: analysesWithDocuments,
         total: analyses.length
-      }, 'Shared Swiss obligation law analyses retrieved successfully');
+      }, 'Shared contract analyses retrieved successfully');
 
     } catch (error) {
-      this.logger.error('Failed to list shared Swiss obligation law analyses', error as Error, {
+      this.logger.error('Failed to list shared contract analyses', error as Error, {
         userId: this.getUserId(req)
       });
 
@@ -1423,10 +1423,10 @@ export class DocumentController extends BaseController {
   }
 
   /**
-   * Get Swiss obligation law analyses by document ID
-   * GET /api/documents/:documentId/swiss-obligation-analyses
+   * Get contract analyses by document ID
+   * GET /api/documents/:documentId/contract-analyses
    */
-  public async getSwissObligationAnalysesByDocumentId(req: Request, res: Response, next: NextFunction): Promise<void> {
+  public async getContractAnalysesByDocumentId(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const userId = this.getUserId(req);
       const { documentId } = req.params;
@@ -1436,12 +1436,12 @@ export class DocumentController extends BaseController {
         return;
       }
 
-      this.logger.info('Swiss obligation law analyses by document ID requested', {
+      this.logger.info('Contract analyses by document ID requested', {
         userId,
         documentId
       });
 
-      const analyses = await this.swissObligationLawService.getAnalysesByDocumentId(documentId, userId);
+      const analyses = await this.analyseLawService.getAnalysesByDocumentId(documentId, userId);
 
       this.sendSuccess(res, {
         analyses: analyses.map(analysis => ({
@@ -1475,10 +1475,10 @@ export class DocumentController extends BaseController {
           lawyerComment: analysis.lawyerComment
         })),
         total: analyses.length
-      }, 'Swiss obligation law analyses by document ID retrieved successfully');
+      }, 'Contract analyses by document ID retrieved successfully');
 
     } catch (error) {
-      this.logger.error('Failed to get Swiss obligation law analyses by document ID', error as Error, {
+      this.logger.error('Failed to get contract analyses by document ID', error as Error, {
         userId: this.getUserId(req),
         documentId: req.params.documentId
       });
@@ -1589,7 +1589,7 @@ export class DocumentController extends BaseController {
   }
 
   /**
-   * Start lawyer review for Swiss obligation analysis
+   * Start lawyer review for contract analysis
    * POST /api/documents/:documentId/start-lawyer-review
    */
   public async startLawyerReview(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -1616,13 +1616,13 @@ export class DocumentController extends BaseController {
         return;
       }
 
-      // Find and update the linked analysis in swissObligationAnalyses collection
-      const existingAnalyses = await this.swissObligationLawService.getAnalysesByDocumentId(documentId, userId);
+      // Find and update the linked analysis in contractAnalyses collection
+      const existingAnalyses = await this.analyseLawService.getAnalysesByDocumentId(documentId, userId);
 
       if (existingAnalyses.length > 0) {
         // Update the most recent analysis with lawyer review status
         const latestAnalysis = existingAnalyses[0]; // Assuming they are sorted by creation date
-        await this.swissObligationLawService.updateAnalysis(latestAnalysis!.analysisId, fixedLawyerUserUiId, 'CHECK_PENDING');
+        await this.analyseLawService.updateAnalysis(latestAnalysis!.analysisId, fixedLawyerUserUiId, 'CHECK_PENDING');
 
         this.logger.info('Analysis status updated for lawyer review', {
           userId,
@@ -1667,7 +1667,7 @@ export class DocumentController extends BaseController {
 
   /**
    * Submit lawyer analysis result
-   * POST /api/documents/swiss-obligation-analyses/:analysisId/lawyer-result
+   * POST /api/documents/contract-analyses/:analysisId/lawyer-result
    */
   public async submitLawyerAnalysisResult(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
@@ -1698,7 +1698,7 @@ export class DocumentController extends BaseController {
       });
 
       // Submit the lawyer analysis result
-      await this.swissObligationLawService.submitLawyerAnalysisResult(analysisId, decision, comment);
+      await this.analyseLawService.submitLawyerAnalysisResult(analysisId, decision, comment);
 
       this.logger.info('Lawyer analysis result submitted successfully', {
         userId,

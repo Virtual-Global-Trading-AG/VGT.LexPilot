@@ -107,6 +107,8 @@ export interface DocumentContext {
   businessDomain: string;
   keyTerms: string[];
   contextDescription: string;
+  country: string;
+  legalFramework: string;
 }
 
 export interface GeneratedQuery {

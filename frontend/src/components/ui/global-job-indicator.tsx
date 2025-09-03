@@ -9,9 +9,24 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Clock, Loader2, FileText, PenTool } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 export function GlobalJobIndicator() {
   const { activeJobs, hasActiveJobs } = useJobMonitor();
+  const [, forceUpdate] = useState({});
+
+  // Force re-render every second to update elapsed time display
+  useEffect(() => {
+    if (!hasActiveJobs) {
+      return;
+    }
+
+    const interval = setInterval(() => {
+      forceUpdate({});
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [hasActiveJobs]);
 
   if (!hasActiveJobs) {
     return null;
@@ -19,7 +34,7 @@ export function GlobalJobIndicator() {
 
   const getJobTypeIcon = (type: string) => {
     switch (type) {
-      case 'swiss-obligation-analysis':
+      case 'contract-analysis':
         return <FileText className="h-3 w-3" />;
       case 'contract-generation':
         return <PenTool className="h-3 w-3" />;
@@ -30,8 +45,8 @@ export function GlobalJobIndicator() {
 
   const getJobTypeLabel = (type: string) => {
     switch (type) {
-      case 'swiss-obligation-analysis':
-        return 'Obligationenrecht-Analyse';
+      case 'contract-analysis':
+        return 'Vertragsanalyse';
       case 'contract-generation':
         return 'Vertragsgenerierung';
       default:
@@ -40,6 +55,7 @@ export function GlobalJobIndicator() {
   };
 
   const formatTimeElapsed = (startTime: number) => {
+    console.log(startTime);
     const elapsed = Date.now() - startTime;
     const minutes = Math.floor(elapsed / 60000);
     const seconds = Math.floor((elapsed % 60000) / 1000);
@@ -52,7 +68,7 @@ export function GlobalJobIndicator() {
 
   // Helper functions for context-aware labels
   const getContextLabel = () => {
-    const hasAnalysis = activeJobs.some(job => job.type === 'swiss-obligation-analysis');
+    const hasAnalysis = activeJobs.some(job => job.type === 'contract-analysis');
     const hasGeneration = activeJobs.some(job => job.type === 'contract-generation');
 
     if (hasAnalysis && hasGeneration) {
@@ -65,7 +81,7 @@ export function GlobalJobIndicator() {
   };
 
   const getContextPluralLabel = () => {
-    const hasAnalysis = activeJobs.some(job => job.type === 'swiss-obligation-analysis');
+    const hasAnalysis = activeJobs.some(job => job.type === 'contract-analysis');
     const hasGeneration = activeJobs.some(job => job.type === 'contract-generation');
 
     if (hasAnalysis && hasGeneration) {
@@ -78,7 +94,7 @@ export function GlobalJobIndicator() {
   };
 
   const getDropdownTitle = () => {
-    const hasAnalysis = activeJobs.some(job => job.type === 'swiss-obligation-analysis');
+    const hasAnalysis = activeJobs.some(job => job.type === 'contract-analysis');
     const hasGeneration = activeJobs.some(job => job.type === 'contract-generation');
 
     if (hasAnalysis && hasGeneration) {
@@ -91,7 +107,7 @@ export function GlobalJobIndicator() {
   };
 
   const getFooterMessage = () => {
-    const hasAnalysis = activeJobs.some(job => job.type === 'swiss-obligation-analysis');
+    const hasAnalysis = activeJobs.some(job => job.type === 'contract-analysis');
     const hasGeneration = activeJobs.some(job => job.type === 'contract-generation');
 
     if (hasAnalysis && hasGeneration) {

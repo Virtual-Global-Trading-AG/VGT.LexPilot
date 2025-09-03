@@ -564,7 +564,7 @@ export function useDocuments() {
     }
   }, [isAuthenticated]);
 
-  const analyzeSwissObligationLaw = useCallback(async (documentId: string): Promise<{
+  const analyzeContract = useCallback(async (documentId: string): Promise<{
     success: boolean;
     data?: any;
     error?: string;
@@ -577,7 +577,7 @@ export function useDocuments() {
     setError(null);
 
     try {
-      const response = await apiClient.post(`/documents/${documentId}/analyze-swiss-obligation-law`);
+      const response = await apiClient.post(`/documents/${documentId}/analyze-contract`);
 
       if (response.success && response.data) {
         return { success: true, data: response.data };
@@ -661,7 +661,7 @@ export function useDocuments() {
     setError(null);
 
     try {
-      const response = await apiClient.get(`/documents/${documentId}/swiss-obligation-analyses`);
+      const response = await apiClient.get(`/documents/${documentId}/contract-analyses`);
 
       if (response.success && response.data) {
         return { success: true, data: response.data };
@@ -767,7 +767,7 @@ export function useDocuments() {
     setError(null);
 
     try {
-      const response = await apiClient.get(`/documents/swiss-obligation-analyses-shared?limit=${limit}`);
+      const response = await apiClient.get(`/documents/contract-analyses-shared?limit=${limit}`);
 
       if (response.success && response.data) {
         return { success: true, data: response.data };
@@ -798,7 +798,7 @@ export function useDocuments() {
     setError(null);
 
     try {
-      const response = await apiClient.post(`/documents/swiss-obligation-analyses/${analysisId}/lawyer-result`, {
+      const response = await apiClient.post(`/documents/contract-analyses/${analysisId}/lawyer-result`, {
         decision,
         comment
       });
@@ -821,7 +821,7 @@ export function useDocuments() {
     getDocuments,
     deleteDocument,
     getDocumentText,
-    analyzeSwissObligationLaw,
+    analyzeContract,
     getJobStatus,
     getUserJobs,
     getSwissObligationAnalysesByDocumentId,
