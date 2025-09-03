@@ -9,9 +9,24 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Clock, Loader2, FileText, PenTool } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 export function GlobalJobIndicator() {
   const { activeJobs, hasActiveJobs } = useJobMonitor();
+  const [, forceUpdate] = useState({});
+
+  // Force re-render every second to update elapsed time display
+  useEffect(() => {
+    if (!hasActiveJobs) {
+      return;
+    }
+
+    const interval = setInterval(() => {
+      forceUpdate({});
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [hasActiveJobs]);
 
   if (!hasActiveJobs) {
     return null;
@@ -40,6 +55,7 @@ export function GlobalJobIndicator() {
   };
 
   const formatTimeElapsed = (startTime: number) => {
+    console.log(startTime);
     const elapsed = Date.now() - startTime;
     const minutes = Math.floor(elapsed / 60000);
     const seconds = Math.floor((elapsed % 60000) / 1000);
