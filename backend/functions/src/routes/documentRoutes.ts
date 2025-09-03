@@ -190,38 +190,38 @@ router.post('/dsgvo-check-complete',
   documentController.completeDSGVOCheck.bind(documentController)
 );
 
-// Swiss Obligation Law Analysis
+// contract Analysis
 router.post('/:documentId/analyze-contract',
   documentController.analyzeContract.bind(documentController)
 );
 
-// Get Swiss Obligation Law Analysis Result
-router.get('/swiss-obligation-analysis/:analysisId',
-  documentController.getSwissObligationAnalysis.bind(documentController)
+// Get contract analysis result
+router.get('/contract-analysis/:analysisId',
+  documentController.getContractAnalysis.bind(documentController)
 );
 
-// List Swiss Obligation Law Analyses
-router.get('/swiss-obligation-analyses',
-  documentController.listSwissObligationAnalyses.bind(documentController)
+// List contract analyses
+router.get('/contract-analyses',
+  documentController.listContractAnalyses.bind(documentController)
 );
 
-// List Shared Swiss Obligation Law Analyses for Lawyers
-router.get('/swiss-obligation-analyses-shared',
-  documentController.listSharedSwissObligationAnalyses.bind(documentController)
+// List shared contract analyses for lawyers
+router.get('/contract-analyses-shared',
+  documentController.listSharedContractAnalyses.bind(documentController)
 );
 
-// Get Swiss Obligation Law Analyses by Document ID
-router.get('/:documentId/swiss-obligation-analyses',
-  documentController.getSwissObligationAnalysesByDocumentId.bind(documentController)
+// Get contract Analyses by Document ID
+router.get('/:documentId/contract-analyses',
+  documentController.getContractAnalysesByDocumentId.bind(documentController)
 );
 
-// Start Lawyer Review for Swiss Obligation Analysis
+// Start Lawyer Review for contract Analysis
 router.post('/:documentId/start-lawyer-review',
   documentController.startLawyerReview.bind(documentController)
 );
 
 // Submit Lawyer Analysis Result
-router.post('/swiss-obligation-analyses/:analysisId/lawyer-result',
+router.post('/contract-analyses/:analysisId/lawyer-result',
   ValidationMiddleware.validate({ body: lawyerAnalysisResultSchema }),
   documentController.submitLawyerAnalysisResult.bind(documentController)
 );

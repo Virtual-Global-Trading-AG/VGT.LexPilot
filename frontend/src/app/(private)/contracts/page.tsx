@@ -455,7 +455,7 @@ function ContractsPageContent() {
   // Track previous jobs to detect completed jobs
   const previousJobsRef = useRef<Map<string, { jobId: string; documentId?: string }>>(new Map());
 
-  // Monitor active jobs and update only specific document rows when Swiss obligation analysis completes
+  // Monitor active jobs and update only specific document rows when contract analysis completes
   useEffect(() => {
     // Create a map of current Swiss obligation analysis jobs
     const currentSwissJobs = new Map<string, { jobId: string; documentId?: string }>();
@@ -465,7 +465,7 @@ function ContractsPageContent() {
         currentSwissJobs.set(job.jobId, { jobId: job.jobId, documentId: job.documentId });
       });
 
-    // Check if any Swiss obligation analysis jobs have completed (removed from active jobs)
+    // Check if any contract analysis jobs have completed (removed from active jobs)
     const completedJobs: { jobId: string; documentId?: string }[] = [];
     previousJobsRef.current.forEach((jobInfo, jobId) => {
       if (!currentSwissJobs.has(jobId)) {
@@ -841,7 +841,7 @@ function ContractsPageContent() {
         setSwissAnalysisLoading(null);
       }
     } catch (err: any) {
-      console.error('Swiss obligation analysis error:', err);
+      console.error('Contract analysis error:', err);
       toast({
         variant: 'destructive',
         title: 'Analyse fehlgeschlagen',

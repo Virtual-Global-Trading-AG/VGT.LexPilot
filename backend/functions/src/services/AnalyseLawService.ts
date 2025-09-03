@@ -707,11 +707,11 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
       // Prepare batch operations
       const batchOperations = [
         {
-          path: `swissObligationAnalyses/${result.analysisId}`,
+          path: `contractAnalyses/${result.analysisId}`,
           data: mainDocData
         },
         {
-          path: `swissObligationAnalyses/${result.analysisId}/details/items`,
+          path: `contractAnalyses/${result.analysisId}/details/items`,
           data: allDetails
         }
       ];
@@ -747,7 +747,7 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
       }
 
       // Load details from sub-collection
-      const detailsPath = `swissObligationAnalyses/${analysisId}/details/items`;
+      const detailsPath = `contractAnalyses/${analysisId}/details/items`;
       const details = await this.firestoreService.getSubcollectionDocument(detailsPath) as AnalysisDetails | null;
 
       if (!details) {
@@ -818,7 +818,7 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
       this.logger.info('Listing user Swiss obligation analyses', { userId, limit });
 
       const db = this.firestoreService['db'] || require('firebase-admin').firestore();
-      const analysesRef = db.collection('swissObligationAnalyses');
+      const analysesRef = db.collection('contractAnalyses');
 
       let query = analysesRef
       .where('userId', '==', userId)
@@ -837,7 +837,7 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
         const data = doc.data();
 
         // Load details from sub-collection for this analysis
-        const detailsPath = `swissObligationAnalyses/${data.analysisId}/details/items`;
+        const detailsPath = `contractAnalyses/${data.analysisId}/details/items`;
         const details = await this.firestoreService.getSubcollectionDocument(detailsPath) as AnalysisDetails | null;
 
         let fullSections: SectionAnalysisResult[];
@@ -926,7 +926,7 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
       this.logger.info('Listing shared Swiss obligation analyses for lawyer', { userId, limit });
 
       const db = this.firestoreService['db'] || require('firebase-admin').firestore();
-      const analysesRef = db.collection('swissObligationAnalyses');
+      const analysesRef = db.collection('contractAnalyses');
 
       const querySnapshot = await analysesRef
       .where('sharedUserId', '==', userId)
@@ -943,7 +943,7 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
         this.logger.info('Retrieved shared Swiss obligation analysis', { data });
 
         // Load details from sub-collection for this analysis
-        const detailsPath = `swissObligationAnalyses/${data.analysisId}/details/items`;
+        const detailsPath = `contractAnalyses/${data.analysisId}/details/items`;
         const details = await this.firestoreService.getSubcollectionDocument(detailsPath) as AnalysisDetails | null;
 
         let fullSections: SectionAnalysisResult[];
@@ -1033,7 +1033,7 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
 
       // Query Firestore for analyses with the given documentId
       const db = this.firestoreService['db'] || require('firebase-admin').firestore();
-      const analysesRef = db.collection('swissObligationAnalyses');
+      const analysesRef = db.collection('contractAnalyses');
 
       const querySnapshot = await analysesRef
       .where('documentId', '==', documentId)
@@ -1051,7 +1051,7 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
         batch.delete(doc.ref);
 
         // Delete details sub-collection document
-        const detailsRef = db.doc(`swissObligationAnalyses/${data.analysisId}/details/items`);
+        const detailsRef = db.doc(`contractAnalyses/${data.analysisId}/details/items`);
         batch.delete(detailsRef);
 
         deletedCount++;
@@ -1087,7 +1087,7 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
 
       // Query Firestore for analyses with the given documentId
       const db = this.firestoreService['db'] || require('firebase-admin').firestore();
-      const analysesRef = db.collection('swissObligationAnalyses');
+      const analysesRef = db.collection('contractAnalyses');
 
       const querySnapshot = await analysesRef
       .where('documentId', '==', documentId)
@@ -1102,7 +1102,7 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
         const data = doc.data();
 
         // Load details from sub-collection for this analysis
-        const detailsPath = `swissObligationAnalyses/${data.analysisId}/details/items`;
+        const detailsPath = `contractAnalyses/${data.analysisId}/details/items`;
         const details = await this.firestoreService.getSubcollectionDocument(detailsPath) as AnalysisDetails | null;
 
         let fullSections: SectionAnalysisResult[];
@@ -1197,7 +1197,7 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
       this.logger.info('Updating analysis status', { analysisId, lawyerStatus });
 
       const db = this.firestoreService['db'] || require('firebase-admin').firestore();
-      const analysisRef = db.collection('swissObligationAnalyses').doc(analysisId);
+      const analysisRef = db.collection('contractAnalyses').doc(analysisId);
 
       const updateData: any = {
         lawyerStatus,
@@ -1231,7 +1231,7 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
       const admin = require('firebase-admin');
       const db = admin.firestore();
 
-      const analysisRef = db.collection('swissObligationAnalyses').doc(analysisId);
+      const analysisRef = db.collection('contractAnalyses').doc(analysisId);
 
       const updateData: any = {
         lawyerStatus: decision,
