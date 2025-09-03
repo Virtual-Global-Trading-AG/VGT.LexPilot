@@ -19,7 +19,7 @@ export function GlobalJobIndicator() {
 
   const getJobTypeIcon = (type: string) => {
     switch (type) {
-      case 'swiss-obligation-analysis':
+      case 'contract-analysis':
         return <FileText className="h-3 w-3" />;
       case 'contract-generation':
         return <PenTool className="h-3 w-3" />;
@@ -30,8 +30,8 @@ export function GlobalJobIndicator() {
 
   const getJobTypeLabel = (type: string) => {
     switch (type) {
-      case 'swiss-obligation-analysis':
-        return 'Obligationenrecht-Analyse';
+      case 'contract-analysis':
+        return 'Vertragsanalyse';
       case 'contract-generation':
         return 'Vertragsgenerierung';
       default:
@@ -52,7 +52,7 @@ export function GlobalJobIndicator() {
 
   // Helper functions for context-aware labels
   const getContextLabel = () => {
-    const hasAnalysis = activeJobs.some(job => job.type === 'swiss-obligation-analysis');
+    const hasAnalysis = activeJobs.some(job => job.type === 'contract-analysis');
     const hasGeneration = activeJobs.some(job => job.type === 'contract-generation');
 
     if (hasAnalysis && hasGeneration) {
@@ -65,7 +65,7 @@ export function GlobalJobIndicator() {
   };
 
   const getContextPluralLabel = () => {
-    const hasAnalysis = activeJobs.some(job => job.type === 'swiss-obligation-analysis');
+    const hasAnalysis = activeJobs.some(job => job.type === 'contract-analysis');
     const hasGeneration = activeJobs.some(job => job.type === 'contract-generation');
 
     if (hasAnalysis && hasGeneration) {
@@ -78,7 +78,7 @@ export function GlobalJobIndicator() {
   };
 
   const getDropdownTitle = () => {
-    const hasAnalysis = activeJobs.some(job => job.type === 'swiss-obligation-analysis');
+    const hasAnalysis = activeJobs.some(job => job.type === 'contract-analysis');
     const hasGeneration = activeJobs.some(job => job.type === 'contract-generation');
 
     if (hasAnalysis && hasGeneration) {
@@ -91,7 +91,7 @@ export function GlobalJobIndicator() {
   };
 
   const getFooterMessage = () => {
-    const hasAnalysis = activeJobs.some(job => job.type === 'swiss-obligation-analysis');
+    const hasAnalysis = activeJobs.some(job => job.type === 'contract-analysis');
     const hasGeneration = activeJobs.some(job => job.type === 'contract-generation');
 
     if (hasAnalysis && hasGeneration) {

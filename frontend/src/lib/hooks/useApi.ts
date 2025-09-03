@@ -564,7 +564,7 @@ export function useDocuments() {
     }
   }, [isAuthenticated]);
 
-  const analyzeSwissObligationLaw = useCallback(async (documentId: string): Promise<{
+  const analyzeContract = useCallback(async (documentId: string): Promise<{
     success: boolean;
     data?: any;
     error?: string;
@@ -577,7 +577,7 @@ export function useDocuments() {
     setError(null);
 
     try {
-      const response = await apiClient.post(`/documents/${documentId}/analyze-swiss-obligation-law`);
+      const response = await apiClient.post(`/documents/${documentId}/analyze-contract`);
 
       if (response.success && response.data) {
         return { success: true, data: response.data };
@@ -821,7 +821,7 @@ export function useDocuments() {
     getDocuments,
     deleteDocument,
     getDocumentText,
-    analyzeSwissObligationLaw,
+    analyzeContract,
     getJobStatus,
     getUserJobs,
     getSwissObligationAnalysesByDocumentId,

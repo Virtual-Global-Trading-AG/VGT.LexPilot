@@ -235,7 +235,7 @@ export class JobQueueService {
 
       // Process based on job type
       switch (job.type) {
-        case 'swiss-obligation-analysis':
+        case 'contract-analysis':
           await this.processSwissObligationAnalysis(job);
           break;
         case 'contract-generation':
@@ -252,13 +252,13 @@ export class JobQueueService {
    * Process Swiss Obligation Law analysis job
    */
   private async processSwissObligationAnalysis(job: Job): Promise<void> {
-    const { SwissObligationLawService } = await import('./SwissObligationLawService');
+    const { AnalyseLawService } = await import('./AnalyseLawService');
     const { StorageService } = await import('./StorageService');
     const { TextExtractionService } = await import('./TextExtractionService');
 
     const storageService = new StorageService();
     const textExtractionService = new TextExtractionService();
-    const swissObligationLawService = new SwissObligationLawService(
+    const analyseLawService = new AnalyseLawService(
       this.firestoreService
     );
 
@@ -301,7 +301,7 @@ export class JobQueueService {
         await this.updateJobProgress(job.id, progress, message);
       };
 
-      const analysisResult = await swissObligationLawService.analyzeContractWithObligationLaw(
+      const analysisResult = await analyseLawService.analyzeContract(
         '',
         userId,
         // todo: use vector store ID from config or environment
@@ -415,7 +415,7 @@ export class JobQueueService {
       let data: any = { jobId };
 
       switch (job.type) {
-        case 'swiss-obligation-analysis':
+        case 'contract-analysis':
           notificationType = 'analysis_completed';
           title = 'Analyse abgeschlossen';
           message = 'Die Schweizer Obligationenrecht-Analyse wurde erfolgreich abgeschlossen.';
@@ -481,7 +481,7 @@ export class JobQueueService {
       let message: string;
 
       switch (job.type) {
-        case 'swiss-obligation-analysis':
+        case 'contract-analysis':
           notificationType = 'analysis_failed';
           title = 'Analyse fehlgeschlagen';
           message = `Die Schweizer Obligationenrecht-Analyse ist fehlgeschlagen: ${error}`;

@@ -98,10 +98,10 @@ export function useGlobalJobMonitor() {
 
   const getJobCompletionMessage = (jobType: string, fileName?: string): string => {
     switch (jobType) {
-      case 'swiss-obligation-analysis':
+      case 'contract-analysis':
         return fileName 
-          ? `Schweizer Obligationenrecht-Analyse für "${fileName}" wurde erfolgreich abgeschlossen.`
-          : 'Schweizer Obligationenrecht-Analyse wurde erfolgreich abgeschlossen.';
+          ? `Vertragsanalyse für "${fileName}" wurde erfolgreich abgeschlossen.`
+          : 'Vertragsanalyse wurde erfolgreich abgeschlossen.';
       case 'contract-generation':
         return 'Vertrag wurde erfolgreich generiert und gespeichert.';
       default:
@@ -113,10 +113,10 @@ export function useGlobalJobMonitor() {
 
   const getJobFailureMessage = (jobType: string, fileName?: string): string => {
     switch (jobType) {
-      case 'swiss-obligation-analysis':
+      case 'contract-analysis':
         return fileName
-          ? `Schweizer Obligationenrecht-Analyse für "${fileName}" ist fehlgeschlagen.`
-          : 'Schweizer Obligationenrecht-Analyse ist fehlgeschlagen.';
+          ? `Vertragsanalyse für "${fileName}" ist fehlgeschlagen.`
+          : 'Vertragsanalyse ist fehlgeschlagen.';
       case 'contract-generation':
         return 'Vertragsgenerierung ist fehlgeschlagen.';
       default:

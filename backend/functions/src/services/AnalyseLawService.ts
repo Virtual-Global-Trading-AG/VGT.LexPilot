@@ -20,11 +20,34 @@ export interface GeneratedQuery {
   relevanceScore?: number;
 }
 
+export interface ComplianceAnalysis {
+  isCompliant: boolean;
+  confidence: number;
+  reasoning: string;
+  violations: string[];
+  recommendations: string[];
+}
+
+export interface OverallCompliance {
+  isCompliant: boolean;
+  complianceScore: number;
+  summary: string;
+}
+
+export interface CountrySpecificConfiguration {
+  iso2Code: string;
+  country: string;
+  legalFramework: string;
+  systemPrompt: string;
+}
+
 export interface DocumentContext {
   documentType: string;
   businessDomain: string;
   keyTerms: string[];
   contextDescription: string;
+  country: string;
+  legalFramework: string;
 }
 
 export interface SectionAnalysisResult {
@@ -32,13 +55,7 @@ export interface SectionAnalysisResult {
   sectionContent: string;
   queries?: GeneratedQuery[];
   legalContext?: any[];
-  complianceAnalysis: {
-    isCompliant: boolean;
-    confidence: number;
-    reasoning: string;
-    violations: string[];
-    recommendations: string[];
-  };
+  complianceAnalysis: ComplianceAnalysis;
   findings: Finding[];
 }
 
@@ -48,13 +65,7 @@ export interface CompactSectionResult {
   sectionContent: string;
   queries?: GeneratedQuery[];
   legalContext?: any[];
-  complianceAnalysis: {
-    isCompliant: boolean;
-    confidence: number;
-    reasoning: string;
-    violations: string[];
-    recommendations: string[];
-  };
+  complianceAnalysis: ComplianceAnalysis;
   findingIds: string[]; // Only IDs instead of full Finding objects
 }
 
@@ -70,25 +81,26 @@ export interface SwissObligationAnalysisResult {
   userId: string;
   documentContext: DocumentContext;
   sections: SectionAnalysisResult[];
-  overallCompliance: {
-    isCompliant: boolean;
-    complianceScore: number;
-    summary: string;
-  };
+  overallCompliance: OverallCompliance;
   createdAt: Date;
   completedAt?: Date;
   lawyerStatus?: 'UNCHECKED' | 'CHECK_PENDING' | 'APPROVED' | 'DECLINE';
   lawyerComment?: string;
 }
 
-export class SwissObligationLawService {
+export class AnalyseLawService {
   private logger = Logger.getInstance();
   private firestoreService: FirestoreService;
+  private openAi: OpenAI;
 
   constructor(
     firestoreService: FirestoreService
   ) {
     this.firestoreService = firestoreService;
+    // Initialize OpenAI client and uploadedFile variable in broader scope
+    this.openAi = new OpenAI({
+      apiKey: env.OPENAI_API_KEY
+    });
   }
 
   /**
@@ -107,7 +119,7 @@ export class SwissObligationLawService {
    * @return {Promise<SwissObligationAnalysisResult>} A promise that resolves with the compliance analysis results,
    * including structured insights on document context, compliance scores, and violations.
    */
-  public async analyzeContractWithObligationLaw(
+  public async analyzeContract(
     input: string,
     userId: string,
     vectorStoreId: string,
@@ -120,50 +132,180 @@ export class SwissObligationLawService {
     const analysisId = uuidv4();
     const createDate = new Date();
 
-    // Initialize OpenAI client and uploadedFile variable in broader scope
-    const openai = new OpenAI({
-      apiKey: env.OPENAI_API_KEY
+    this.logger.info('Starting contract analysis', {
+      analysisId,
+      documentId,
+      userId,
+      fileName,
+      documentSize: documentFileBuffer.length,
+      hasAnonymizedKeywords: !!(anonymizedKeywords && anonymizedKeywords.length > 0)
     });
+
     let uploadedFile: any = null;
 
     try {
-      this.logger.info('Starting vector database query', {
-        input,
-        userId,
-        vectorStoreId,
+      // Step 1: Prepare document for analysis
+      const base64String = await this.prepareDocumentForAnalysis(documentFileBuffer, analysisId);
+      progressCallback?.(5, 'Document prepared for analysis');
+
+      // Step 2: Get country-specific analysis configuration
+      const countryResponse = await this.getCountrySpecificConfiguration(fileName, base64String, analysisId);
+      progressCallback?.(20, `Analyzing contract (region: ${countryResponse.iso2Code}) with OpenAI...`);
+
+      // Step 3: Perform OpenAI analysis
+      const rawAnalysisData = await this.performOpenAIAnalysis(
+        countryResponse,
         fileName,
-        documentFileBufferSize: documentFileBuffer.length
+        base64String,
+        vectorStoreId,
+        analysisId
+      );
+      progressCallback?.(70, 'Processing OpenAI response...');
+
+      // Step 4: Process and validate response
+      const sanitizedData = await this.processOpenAIResponse(rawAnalysisData, analysisId);
+      progressCallback?.(75, 'Response processed and validated');
+
+      // Step 5: Apply de-anonymization if needed
+      const finalData = await this.applyDeAnonymization(sanitizedData, anonymizedKeywords, analysisId);
+      progressCallback?.(80, 'Creating analysis result...');
+
+      // Step 6: Transform to final result structure
+      const result = await this.transformToAnalysisResult(
+        finalData,
+        countryResponse,
+        analysisId,
+        documentId,
+        userId,
+        createDate
+      );
+      progressCallback?.(85, 'Analysis result created');
+
+      // Step 7: Save results to Firestore
+      await this.saveAnalysisResult(result);
+      progressCallback?.(90, 'Analysis results saved');
+
+      // Step 8: Cleanup
+      await this.cleanupUploadedFile(uploadedFile);
+      progressCallback?.(100, 'Contract analysis completed successfully');
+
+      this.logger.info('Contract analysis completed successfully', {
+        analysisId,
+        documentId,
+        userId,
+        sectionCount: result.sections.length,
+        overallCompliant: result.overallCompliance.isCompliant,
+        processingTimeMs: new Date().getTime() - createDate.getTime()
       });
 
-      progressCallback?.(5, 'Search against vector database started');
+      return result;
+
+    } catch (error) {
+      await this.handleAnalysisError(error as Error, uploadedFile, analysisId, userId, documentFileBuffer.length);
+      throw error;
+    }
+  }
+
+  /**
+   * Prepares the document for analysis by converting to base64 and logging
+   */
+  private async prepareDocumentForAnalysis(documentFileBuffer: Buffer, analysisId: string): Promise<string> {
+    try {
+      this.logger.info('Converting document to base64', {
+        analysisId,
+        originalSize: documentFileBuffer.length
+      });
 
       const base64String = documentFileBuffer.toString('base64');
 
-      this.logger.info('file as base64', {
-        size: base64String.length
+      this.logger.info('Document converted to base64 successfully', {
+        analysisId,
+        base64Size: base64String.length
       });
 
-      const response = await openai.responses.create({
+      return base64String;
+    } catch (error) {
+      this.logger.error('Failed to convert document to base64', error as Error, {
+        analysisId,
+        bufferSize: documentFileBuffer.length
+      });
+      throw new Error(`Document preparation failed: ${(error as Error).message}`);
+    }
+  }
+
+  /**
+   * Gets country-specific configuration for analysis
+   */
+  private async getCountrySpecificConfiguration(
+    fileName: string, 
+    base64String: string, 
+    analysisId: string
+  ): Promise<CountrySpecificConfiguration> {
+    try {
+      this.logger.info('Determining country-specific configuration', {
+        analysisId,
+        fileName
+      });
+
+      const countryResponse = await this.countrySpecificPrompt(fileName, base64String);
+
+      this.logger.info('Country-specific configuration determined', {
+        analysisId,
+        iso2Code: countryResponse.iso2Code,
+        country: countryResponse.country,
+        legalFramework: countryResponse.legalFramework,
+        hasSystemPrompt: !!countryResponse.systemPrompt
+      });
+
+      return countryResponse;
+    } catch (error) {
+      this.logger.error('Failed to get country-specific configuration', error as Error, {
+        analysisId,
+        fileName
+      });
+      throw new Error(`Country configuration failed: ${(error as Error).message}`);
+    }
+  }
+
+  /**
+   * Performs the OpenAI analysis with proper error handling
+   */
+  private async performOpenAIAnalysis(
+    countryResponse: CountrySpecificConfiguration,
+    fileName: string,
+    base64String: string,
+    vectorStoreId: string,
+    analysisId: string
+  ): Promise<string> {
+    try {
+      this.logger.info('Starting OpenAI analysis', {
+        analysisId,
+        country: countryResponse.iso2Code,
+        model: env.OPENAI_CHAT_MODEL,
+        vectorStoreId
+      });
+
+      const response = await this.openAi.responses.create({
         model: env.OPENAI_CHAT_MODEL,
         service_tier: 'priority',
         input: [
           {
             role: 'system',
-            content: 'Du bist ein schweizer Rechtsassistent, spezialisiert auf das Obligationenrecht (OR). Deine Aufgabe ist es, Verträge zu analysieren und deren Übereinstimmung mit dem OR zu bewerten.'
+            content: countryResponse.systemPrompt
           },
           {
-            role: "user",
+            role: 'user',
             content: [
               {
-                type: "input_text",
-                text: `Analysiere den Vertrag nach OR (Art. 1–551), wobei du zuerst den Vertragstext und dann deine Vektordatenbank (OR) berücksichtigst.  
+                type: 'input_text',
+                text: `Analysiere den Vertrag, wobei du zuerst den Vertragstext und dann deine Vektordatenbank berücksichtigst.  
 Konvertierungsfehler (z. B. falsche Zeichen, Umbrüche) korrigierst du stillschweigend nur zur Lesbarkeit, sie dürfen nicht in die Analyse einfliessen.  
 Ignoriere Platzhalter (ANONYM_x).
 
 Analysiere:  
 - Dokumenttyp, Geschäftsbereich, Schlüsselbegriffe  
 - Relevante Klauseln und Vertragstyp  
-- Compliance mit OR (nur relevante Artikel prüfen)  
+- Compliance mit Gesetz (nur relevante Artikel prüfen)  
 - Ungültige/missbräuchliche Klauseln  
 - Transparenz und Verständlichkeit  
 - Strukturierung in logische Abschnitte mit Einzelbewertung  
@@ -202,7 +344,7 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
 }`,
               },
               {
-                type: "input_file",
+                type: 'input_file',
                 filename: fileName,
                 file_data: `data:application/pdf;base64,${base64String}`,
               },
@@ -211,8 +353,13 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
         ],
         tools: [
           {
-            type: "file_search",
-            vector_store_ids: [vectorStoreId ?? '']
+            type: 'file_search',
+            vector_store_ids: [vectorStoreId ?? ''],
+            filters: {
+              key: 'region',
+              type: 'eq',
+              value: countryResponse.iso2Code.toUpperCase()
+            }
           },
         ],
         text: {
@@ -222,129 +369,180 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
         }
       });
 
-      progressCallback?.(70, 'Processing OpenAI response...');
-
       const responseContent = response.output_text;
 
       if (!responseContent) {
-        throw new Error('No response from OpenAI');
+        throw new Error('No response content received from OpenAI');
       }
 
-      // Parse the JSON response
-      let sanitizedData;
-      try {
-        // Log the raw response for debugging
-        this.logger.info('Raw OpenAI response received', {
-          analysisId,
-          responseLength: responseContent.length,
-          responsePreview: responseContent.substring(0, 200) + '...'
-        });
+      this.logger.info('OpenAI analysis completed', {
+        analysisId,
+        responseLength: responseContent.length,
+        responsePreview: responseContent.substring(0, 200) + '...'
+      });
 
-        // Since we're using response_format: json_object, the response should be pure JSON
-        // But let's still try to extract JSON in case there's any wrapper text
-        let jsonString = responseContent.trim();
+      return responseContent;
+    } catch (error) {
+      this.logger.error('OpenAI analysis failed', error as Error, {
+        analysisId,
+        country: countryResponse.iso2Code,
+        model: env.OPENAI_CHAT_MODEL
+      });
+      throw new Error(`OpenAI analysis failed: ${(error as Error).message}`);
+    }
+  }
 
-        // Try to extract JSON if there's additional text
-        const jsonMatch = responseContent.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          jsonString = jsonMatch[0];
+  /**
+   * Processes and validates the OpenAI response
+   */
+  private async processOpenAIResponse(responseContent: string, analysisId: string): Promise<any> {
+    try {
+      this.logger.info('Processing OpenAI response', {
+        analysisId,
+        responseLength: responseContent.length
+      });
+
+      // Extract JSON from response
+      let jsonString = responseContent.trim();
+      const jsonMatch = responseContent.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        jsonString = jsonMatch[0];
+      }
+
+      // Parse and sanitize the JSON
+      const analysisData = JSON.parse(jsonString);
+      const sanitizedData = this.sanitizeAnalysisData(analysisData);
+
+      // Validate required structure
+      if (!sanitizedData.documentContext || !sanitizedData.sections || !sanitizedData.overallCompliance) {
+        throw new Error('Invalid OpenAI response structure - missing required fields');
+      }
+
+      this.logger.info('OpenAI response processed successfully', {
+        analysisId,
+        sectionsCount: sanitizedData.sections?.length || 0,
+        overallCompliant: sanitizedData.overallCompliance?.isCompliant
+      });
+
+      return sanitizedData;
+    } catch (error) {
+      this.logger.error('Failed to process OpenAI response', error as Error, {
+        analysisId,
+        responseContent: responseContent.substring(0, 1000),
+        responseLength: responseContent.length
+      });
+      throw new Error(`Response processing failed: ${(error as Error).message}`);
+    }
+  }
+
+  /**
+   * Applies de-anonymization to the analysis data if anonymized keywords are provided
+   */
+  private async applyDeAnonymization(
+    sanitizedData: any,
+    anonymizedKeywords?: AnonymizedKeyword[],
+    analysisId?: string
+  ): Promise<any> {
+    if (!anonymizedKeywords || anonymizedKeywords.length === 0) {
+      this.logger.debug('No anonymized keywords provided, skipping de-anonymization', { analysisId });
+      return sanitizedData;
+    }
+
+    try {
+      this.logger.info('Starting de-anonymization process', {
+        analysisId,
+        keywordsCount: anonymizedKeywords.length
+      });
+
+      const textExtractionService = new TextExtractionService();
+
+      // De-anonymize document context
+      if (sanitizedData.documentContext) {
+        if (sanitizedData.documentContext.contextDescription) {
+          sanitizedData.documentContext.contextDescription = textExtractionService.reverseAnonymization(
+            sanitizedData.documentContext.contextDescription,
+            anonymizedKeywords
+          );
         }
-
-        // Parse the JSON
-        const analysisData = JSON.parse(jsonString);
-
-        sanitizedData = this.sanitizeAnalysisData(analysisData);
-
-        if (!sanitizedData.documentContext || !sanitizedData.sections || !sanitizedData.overallCompliance) {
-          throw new Error('Invalid OpenAI response structure');
+        if (Array.isArray(sanitizedData.documentContext.keyTerms)) {
+          sanitizedData.documentContext.keyTerms = sanitizedData.documentContext.keyTerms.map((term: string) =>
+            textExtractionService.reverseAnonymization(term, anonymizedKeywords)
+          );
         }
+      }
 
-        this.logger.info('Successfully parsed and validated OpenAI JSON response', {
-          analysisId,
-          sectionsCount: sanitizedData.sections?.length || 0,
-          overallCompliant: sanitizedData.overallCompliance?.isCompliant
-        });
-
-        // Apply de-anonymization if anonymized keywords were provided
-        if (anonymizedKeywords && anonymizedKeywords.length > 0) {
-          this.logger.info('Starting de-anonymization of analysis results', {
-            analysisId,
-            keywordsCount: anonymizedKeywords.length
-          });
-
-          const textExtractionService = new TextExtractionService();
-
-          // De-anonymize document context
-          if (sanitizedData.documentContext) {
-            if (sanitizedData.documentContext.contextDescription) {
-              sanitizedData.documentContext.contextDescription = textExtractionService.reverseAnonymization(
-                sanitizedData.documentContext.contextDescription,
-                anonymizedKeywords
-              );
-            }
-            if (Array.isArray(sanitizedData.documentContext.keyTerms)) {
-              sanitizedData.documentContext.keyTerms = sanitizedData.documentContext.keyTerms.map((term: string) =>
-                textExtractionService.reverseAnonymization(term, anonymizedKeywords)
-              );
-            }
-          }
-
-          // De-anonymize sections
-          if (Array.isArray(sanitizedData.sections)) {
-            sanitizedData.sections.forEach((section: any, index: number) => {
-              if (section.sectionContent) {
-                section.sectionContent = textExtractionService.reverseAnonymization(
-                  section.sectionContent,
-                  anonymizedKeywords
-                );
-              }
-              if (section.complianceAnalysis && section.complianceAnalysis.reasoning) {
-                section.complianceAnalysis.reasoning = textExtractionService.reverseAnonymization(
-                  section.complianceAnalysis.reasoning,
-                  anonymizedKeywords
-                );
-              }
-              if (section.complianceAnalysis && Array.isArray(section.complianceAnalysis.violations)) {
-                section.complianceAnalysis.violations = section.complianceAnalysis.violations.map((violation: string) =>
-                  textExtractionService.reverseAnonymization(violation, anonymizedKeywords)
-                );
-              }
-              if (section.complianceAnalysis && Array.isArray(section.complianceAnalysis.recommendations)) {
-                section.complianceAnalysis.recommendations = section.complianceAnalysis.recommendations.map((recommondation: string) =>
-                  textExtractionService.reverseAnonymization(recommondation, anonymizedKeywords)
-                );
-              }
-            });
-          }
-
-          // De-anonymize overall compliance summary
-          if (sanitizedData.overallCompliance && sanitizedData.overallCompliance.summary) {
-            sanitizedData.overallCompliance.summary = textExtractionService.reverseAnonymization(
-              sanitizedData.overallCompliance.summary,
+      // De-anonymize sections
+      if (Array.isArray(sanitizedData.sections)) {
+        sanitizedData.sections.forEach((section: any) => {
+          if (section.sectionContent) {
+            section.sectionContent = textExtractionService.reverseAnonymization(
+              section.sectionContent,
               anonymizedKeywords
             );
           }
-
-          this.logger.info('De-anonymization completed', {
-            analysisId,
-            keywordsCount: anonymizedKeywords.length
-          });
-        }
-
-      } catch (parseError) {
-        this.logger.error('Failed to parse OpenAI response as JSON', parseError as Error, {
-          analysisId,
-          responseContent: responseContent.substring(0, 1000), // Log first 1000 chars for debugging
-          responseLength: responseContent.length,
-          errorMessage: (parseError as Error).message
+          if (section.complianceAnalysis) {
+            if (section.complianceAnalysis.reasoning) {
+              section.complianceAnalysis.reasoning = textExtractionService.reverseAnonymization(
+                section.complianceAnalysis.reasoning,
+                anonymizedKeywords
+              );
+            }
+            if (Array.isArray(section.complianceAnalysis.violations)) {
+              section.complianceAnalysis.violations = section.complianceAnalysis.violations.map((violation: string) =>
+                textExtractionService.reverseAnonymization(violation, anonymizedKeywords)
+              );
+            }
+            if (Array.isArray(section.complianceAnalysis.recommendations)) {
+              section.complianceAnalysis.recommendations = section.complianceAnalysis.recommendations.map((recommendation: string) =>
+                textExtractionService.reverseAnonymization(recommendation, anonymizedKeywords)
+              );
+            }
+          }
         });
-        throw new Error(`Invalid response format from OpenAI: ${(parseError as Error).message}`);
       }
 
-      progressCallback?.(80, 'Creating analysis result...');
+      // De-anonymize overall compliance summary
+      if (sanitizedData.overallCompliance && sanitizedData.overallCompliance.summary) {
+        sanitizedData.overallCompliance.summary = textExtractionService.reverseAnonymization(
+          sanitizedData.overallCompliance.summary,
+          anonymizedKeywords
+        );
+      }
 
-      // Transform the response to match our expected structure
-      const sectionResults: SectionAnalysisResult[] = sanitizedData.sections.map((section: any) => ({
+      this.logger.info('De-anonymization completed successfully', {
+        analysisId,
+        keywordsCount: anonymizedKeywords.length
+      });
+
+      return sanitizedData;
+    } catch (error) {
+      this.logger.error('De-anonymization failed', error as Error, {
+        analysisId,
+        keywordsCount: anonymizedKeywords?.length || 0
+      });
+      throw new Error(`De-anonymization failed: ${(error as Error).message}`);
+    }
+  }
+
+  /**
+   * Transforms the processed data to the final analysis result structure
+   */
+  private async transformToAnalysisResult(
+    finalData: any,
+    countrySpecificConfig: CountrySpecificConfiguration,
+    analysisId: string,
+    documentId: string,
+    userId: string,
+    createDate: Date
+  ): Promise<SwissObligationAnalysisResult> {
+    try {
+      this.logger.info('Transforming data to analysis result', {
+        analysisId,
+        sectionsCount: finalData.sections?.length || 0
+      });
+
+      // Transform sections
+      const sectionResults: SectionAnalysisResult[] = finalData.sections.map((section: any) => ({
         sectionId: section.sectionId || uuidv4(),
         sectionContent: section.sectionContent || '',
         complianceAnalysis: {
@@ -363,65 +561,81 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
         documentId,
         userId,
         documentContext: {
-          documentType: sanitizedData.documentContext?.documentType || 'Unbekannter Vertragstyp',
-          businessDomain: sanitizedData.documentContext?.businessDomain || 'Unbekannte Domäne',
-          keyTerms: sanitizedData.documentContext?.keyTerms || [],
-          contextDescription: sanitizedData.documentContext?.contextDescription || 'Kontextanalyse nicht verfügbar'
+          documentType: finalData.documentContext?.documentType || 'Unbekannter Vertragstyp',
+          businessDomain: finalData.documentContext?.businessDomain || 'Unbekannte Domäne',
+          keyTerms: finalData.documentContext?.keyTerms || [],
+          contextDescription: finalData.documentContext?.contextDescription || 'Kontextanalyse nicht verfügbar',
+          country: countrySpecificConfig.country,
+          legalFramework: countrySpecificConfig.legalFramework
         },
         sections: sectionResults,
         overallCompliance: {
-          isCompliant: sanitizedData.overallCompliance?.isCompliant || false,
-          complianceScore: sanitizedData.overallCompliance?.complianceScore || 0,
-          summary: sanitizedData.overallCompliance?.summary || 'Keine Zusammenfassung verfügbar'
+          isCompliant: finalData.overallCompliance?.isCompliant || false,
+          complianceScore: finalData.overallCompliance?.complianceScore || 0,
+          summary: finalData.overallCompliance?.summary || 'Keine Zusammenfassung verfügbar'
         },
         createdAt: createDate,
         completedAt: new Date()
       };
 
-      // Save results to Firestore
-      progressCallback?.(90, 'Saving analysis results...');
-      await this.saveAnalysisResult(result);
-
-      progressCallback?.(100, 'Direct PDF analysis completed successfully');
-
-      this.logger.info('Direct PDF analysis against Swiss obligation law completed', {
+      this.logger.info('Analysis result transformation completed', {
         analysisId,
-        documentId,
-        userId,
         sectionCount: sectionResults.length,
         overallCompliant: result.overallCompliance.isCompliant
       });
 
-      // Clean up uploaded file from OpenAI
-      if (uploadedFile) {
-        try {
-          await openai.files.delete(uploadedFile.id);
-          this.logger.debug('Cleaned up uploaded file from OpenAI', { fileId: uploadedFile.id });
-        } catch (cleanupError) {
-          this.logger.warn('Failed to cleanup uploaded file from OpenAI', cleanupError as Error);
-        }
-      }
-
       return result;
-
     } catch (error) {
-      // Clean up uploaded file from OpenAI in case of error
-      if (uploadedFile) {
-        try {
-          await openai.files.delete(uploadedFile.id);
-          this.logger.debug('Cleaned up uploaded file from OpenAI after error', { fileId: uploadedFile.id });
-        } catch (cleanupError) {
-          this.logger.warn('Failed to cleanup uploaded file from OpenAI after error', cleanupError as Error);
-        }
-      }
-
-      this.logger.error('Error in vector analysis against Swiss obligation law', error as Error, {
+      this.logger.error('Failed to transform analysis result', error as Error, {
         analysisId,
-        documentFileBufferSize: documentFileBuffer.length,
+        documentId,
         userId
       });
-      throw error;
+      throw new Error(`Result transformation failed: ${(error as Error).message}`);
     }
+  }
+
+  /**
+   * Cleans up uploaded files from OpenAI
+   */
+  private async cleanupUploadedFile(uploadedFile: any): Promise<void> {
+    if (!uploadedFile) {
+      return;
+    }
+
+    try {
+      await this.openAi.files.delete(uploadedFile.id);
+      this.logger.debug('Successfully cleaned up uploaded file from OpenAI', { 
+        fileId: uploadedFile.id 
+      });
+    } catch (error) {
+      this.logger.error('Failed to cleanup uploaded file from OpenAI', error as Error, {
+        fileId: uploadedFile.id
+      });
+    }
+  }
+
+  /**
+   * Handles analysis errors with proper logging and cleanup
+   */
+  private async handleAnalysisError(
+    error: Error,
+    uploadedFile: any,
+    analysisId: string,
+    userId: string,
+    documentSize: number
+  ): Promise<void> {
+    // Cleanup uploaded file
+    await this.cleanupUploadedFile(uploadedFile);
+
+    // Log the error with context
+    this.logger.error('Contract analysis failed', error, {
+      analysisId,
+      userId,
+      documentSize,
+      errorMessage: error.message,
+      errorStack: error.stack
+    });
   }
 
   private sanitizeAnalysisData(data: any): any {
@@ -715,10 +929,10 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
       const analysesRef = db.collection('swissObligationAnalyses');
 
       const querySnapshot = await analysesRef
-        .where('sharedUserId', '==', userId)
-        .orderBy('createdAt', 'desc')
-        .limit(limit)
-        .get();
+      .where('sharedUserId', '==', userId)
+      .orderBy('createdAt', 'desc')
+      .limit(limit)
+      .get();
 
       const analyses: SwissObligationAnalysisResult[] = [];
 
@@ -822,9 +1036,9 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
       const analysesRef = db.collection('swissObligationAnalyses');
 
       const querySnapshot = await analysesRef
-        .where('documentId', '==', documentId)
-        .where('userId', '==', userId)
-        .get();
+      .where('documentId', '==', documentId)
+      .where('userId', '==', userId)
+      .get();
 
       // Delete each analysis and its details
       const batch = db.batch();
@@ -1033,9 +1247,9 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
       await analysisRef.update(updateData);
 
       this.logger.info('Lawyer analysis result submitted successfully', {
-        analysisId, 
-        decision, 
-        hasComment: !!comment 
+        analysisId,
+        decision,
+        hasComment: !!comment
       });
     } catch (error) {
       this.logger.error('Error submitting lawyer analysis result', error as Error, {
@@ -1044,6 +1258,92 @@ Antwort **ausschließlich** als gültiges JSON-Objekt:
         hasComment: !!comment
       });
       throw error;
+    }
+  }
+
+  private async countrySpecificPrompt(fileName: string, base64String: string): Promise<CountrySpecificConfiguration>{
+    // Prompt für Modell
+    const prompt = `Analysiere den folgenden Vertragstext und liefere ein JSON-Objekt:
+      {
+        "iso2Code": string,
+        "country": string 
+        "legalFramework": string,
+        "systemPrompt": string
+      }
+
+      - iso2Code: ISO-2 Code des anwendbaren Rechts (CH, DE, AT, FR, GB, etc.). Wenn nicht ermittelbar, "NA".
+      - country: Land ausgeschrieben welches dem ISO-2 Code entspricht
+      - legalFramework: Relevanter Rechtsrahmen --> nur Hauptgesetz
+      - "systemPrompt": Formuliere nach folgendem Muster einen Satz, in dem du das Land und den dort relevanten Rechtsrahmen einsetzt:
+      Beispiel:
+      "Du bist ein Schweizer Rechtsassistent, spezialisiert auf das Obligationenrecht (OR). Deine Aufgabe ist es, Verträge zu analysieren und deren Übereinstimmung mit dem OR zu bewerten."
+
+      Passe Land und Rechtsrahmen dynamisch an:
+        - Deutschland → Bürgerliches Gesetzbuch (BGB)
+        - Österreich → Allgemeines Bürgerliches Gesetzbuch (ABGB)
+        - Wenn Land unbekannt: "Du bist ein Rechtsassistent ohne spezifische Länderbindung. Deine Aufgabe ist es, Verträge zu analysieren."`;
+
+    const response = await this.openAi.responses.create({
+      model: env.OPENAI_CHAT_MODEL,
+      service_tier: 'priority',
+      input: [
+        {
+          role: 'system',
+          content: 'Du bist ein Vertragsanalyst.'
+        },
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'input_text',
+              text: prompt
+            },
+            {
+              type: 'input_file',
+              filename: fileName,
+              file_data: `data:application/pdf;base64,${base64String}`,
+            },
+          ]
+        }
+      ],
+      text: {
+        format: {
+          type: 'json_object'
+        }
+      }
+    });
+
+    const responseContent = response.output_text;
+
+    if (!responseContent) {
+      throw new Error('No response from OpenAI');
+    }
+
+    try {
+      // Log the raw response for debugging
+      this.logger.info('Raw OpenAI response received', {
+        responseLength: responseContent.length,
+        responsePreview: responseContent.substring(0, 200) + '...'
+      });
+
+      let jsonString = responseContent.trim();
+
+      // Try to extract JSON if there's additional text
+      const jsonMatch = responseContent.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        jsonString = jsonMatch[0];
+      }
+
+      // Parse the JSON
+      return JSON.parse(jsonString);
+
+    } catch (parseError) {
+      this.logger.error('Failed to parse OpenAI response as JSON', parseError as Error, {
+        responseContent: responseContent.substring(0, 1000), // Log first 1000 chars for debugging
+        responseLength: responseContent.length,
+        errorMessage: (parseError as Error).message
+      });
+      throw new Error(`Invalid response format from OpenAI: ${(parseError as Error).message}`);
     }
   }
 }

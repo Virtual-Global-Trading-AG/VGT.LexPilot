@@ -191,8 +191,8 @@ router.post('/dsgvo-check-complete',
 );
 
 // Swiss Obligation Law Analysis
-router.post('/:documentId/analyze-swiss-obligation-law',
-  documentController.analyzeSwissObligationLaw.bind(documentController)
+router.post('/:documentId/analyze-contract',
+  documentController.analyzeContract.bind(documentController)
 );
 
 // Get Swiss Obligation Law Analysis Result
